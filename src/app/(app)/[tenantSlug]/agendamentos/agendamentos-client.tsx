@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
 import { listAppointmentsAction } from "@/modules/agenda/appointment-actions";
+import { formatDateTimeShortLabel } from "@/components/lib/format-date";
 import { NovoAgendamentoDialog, type AgendaProfessional, type AgendaService } from "@/components/agenda/novo-agendamento-dialog";
 import { DetalheAgendamentoDialog, type AppointmentDetail } from "@/components/agenda/detalhe-agendamento-dialog";
 import type { ProfessionalRow } from "../profissionais/profissionais-client";
@@ -54,10 +55,12 @@ function addDaysISO(dateISO: string, days: number): string {
 
 export function AgendamentosClient({
   tenantSlug,
+  timezone,
   professionals,
   services,
 }: {
   tenantSlug: string;
+  timezone: string;
   professionals: ProfessionalRow[];
   services: ServiceRow[];
 }) {
@@ -174,7 +177,7 @@ export function AgendamentosClient({
             <TableBody>
               {filtered.map((a) => (
                 <TableRow key={a.id} className="cursor-pointer" onClick={() => openDetail(a)}>
-                  <TableCell>{new Date(a.startsAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</TableCell>
+                  <TableCell className="tabular-nums">{formatDateTimeShortLabel(a.startsAt, timezone)}</TableCell>
                   <TableCell>{a.contact.name ?? "Sem nome"}</TableCell>
                   <TableCell>{a.service.name}</TableCell>
                   <TableCell>{a.professional.name}</TableCell>
@@ -192,6 +195,7 @@ export function AgendamentosClient({
         tenantSlug={tenantSlug}
         services={services as AgendaService[]}
         professionals={professionals as AgendaProfessional[]}
+        timezone={timezone}
         open={novoOpen}
         onOpenChange={setNovoOpen}
         onCreated={() => load()}
@@ -199,6 +203,7 @@ export function AgendamentosClient({
       <DetalheAgendamentoDialog
         tenantSlug={tenantSlug}
         appointment={detail}
+        timezone={timezone}
         onOpenChange={(open) => !open && setDetail(null)}
         onUpdated={() => load()}
       />

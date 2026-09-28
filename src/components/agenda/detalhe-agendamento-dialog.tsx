@@ -8,6 +8,7 @@ import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cancelAppointmentAction, rescheduleAppointmentAction } from "@/modules/agenda/appointment-actions";
+import { formatDateTimeLabel, formatTimeLabel } from "@/components/lib/format-date";
 
 export type AppointmentDetail = {
   id: string;
@@ -36,6 +37,8 @@ const STATUS_VARIANT: Record<AppointmentDetail["status"], "success" | "danger" |
 type Props = {
   tenantSlug: string;
   appointment: AppointmentDetail | null;
+  /** Fuso do tenant — sem isso as horas exibidas seriam as do navegador de quem está vendo, não as da empresa. */
+  timezone: string;
   onOpenChange: (open: boolean) => void;
   onUpdated: (appointment: unknown) => void;
 };
@@ -46,7 +49,7 @@ function toDateTimeLocal(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function DetalheAgendamentoDialog({ tenantSlug, appointment, onOpenChange, onUpdated }: Props) {
+export function DetalheAgendamentoDialog({ tenantSlug, appointment, timezone, onOpenChange, onUpdated }: Props) {
   const [mode, setMode] = useState<"view" | "reschedule" | "cancel">("view");
   const [newStartsAt, setNewStartsAt] = useState("");
   const [cancelNote, setCancelNote] = useState("");
@@ -127,9 +130,8 @@ export function DetalheAgendamentoDialog({ tenantSlug, appointment, onOpenChange
           ) : null}
           <div className="flex items-center justify-between">
             <p className="text-sm text-text-secondary">Horário</p>
-            <p className="text-sm text-text">
-              {new Date(appointment.startsAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} –{" "}
-              {new Date(appointment.endsAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+            <p className="text-sm tabular-nums text-text">
+              {formatDateTimeLabel(appointment.startsAt, timezone)} – {formatTimeLabel(appointment.endsAt, timezone)}
             </p>
           </div>
 

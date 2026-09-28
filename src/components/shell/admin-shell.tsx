@@ -1,6 +1,7 @@
 import { AdminSidebarNav } from "./sidebar-nav";
 import { MobileNav } from "./mobile-nav";
 import { LogoutButton } from "./logout-button";
+import { AdminSectionLabel } from "./section-label";
 
 type AdminShellProps = {
   userEmail: string;
@@ -42,6 +43,7 @@ export function AdminShell({ userEmail, children }: AdminShellProps) {
               footer={<LogoutButton className="w-full justify-start gap-2 text-sidebar-text hover:bg-sidebar-hover" />}
             />
             <span className="font-display text-sm font-bold text-text lg:hidden">Plataforma</span>
+            <AdminSectionLabel />
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden max-w-[14rem] truncate text-sm text-text-secondary sm:inline">

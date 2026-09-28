@@ -11,6 +11,7 @@ import { Alert } from "@/components/ui/alert";
 import { cn } from "@/components/lib/cn";
 import { createAppointmentAction } from "@/modules/agenda/appointment-actions";
 import { listAvailableSlotsAction } from "@/modules/agenda/availability-actions";
+import { formatDateTimeLabel, formatTimeLabel } from "@/components/lib/format-date";
 
 export type AgendaService = { id: string; name: string; durationMin: number; active: boolean };
 export type AgendaProfessional = { id: string; name: string; active: boolean };
@@ -32,15 +33,13 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   prefill?: NovoAgendamentoPrefill;
   onCreated: (appointment: unknown) => void;
+  /** Fuso do tenant — os horários livres vêm do servidor em UTC, precisam exibir na hora local da empresa. */
+  timezone: string;
 };
 
 function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function formatSlotLabel(iso: string): string {
-  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
 /**
@@ -57,6 +56,7 @@ export function NovoAgendamentoDialog({
   onOpenChange,
   prefill,
   onCreated,
+  timezone,
 }: Props) {
   const activeServices = services.filter((s) => s.active);
   const activeProfessionals = professionals.filter((p) => p.active);
@@ -195,9 +195,7 @@ export function NovoAgendamentoDialog({
             <div className="rounded-card border border-border bg-bg p-3 text-sm">
               <p className="text-text">
                 Horário escolhido:{" "}
-                <strong>
-                  {new Date(lockedStartsAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}
-                </strong>
+                <strong className="tabular-nums">{formatDateTimeLabel(lockedStartsAt, timezone)}</strong>
               </p>
               <button type="button" onClick={reloadSlots} className="mt-1 text-xs text-primary underline-offset-4 hover:underline">
                 Escolher outro horário
@@ -233,7 +231,7 @@ export function NovoAgendamentoDialog({
                         )}
                         aria-pressed={selectedSlot === slot}
                       >
-                        {formatSlotLabel(slot)}
+                        <span className="tabular-nums">{formatTimeLabel(slot, timezone)}</span>
                       </button>
                     ))}
                   </div>

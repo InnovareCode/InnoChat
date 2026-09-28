@@ -1,6 +1,7 @@
 import { TenantSidebarNav } from "./sidebar-nav";
 import { MobileNav } from "./mobile-nav";
 import { LogoutButton } from "./logout-button";
+import { TenantSectionLabel } from "./section-label";
 
 type PanelShellProps = {
   tenantName: string;
@@ -54,6 +55,7 @@ export function PanelShell({ tenantName, tenantSlug, userEmail, children }: Pane
               footer={<LogoutButton className="w-full justify-start gap-2 text-sidebar-text hover:bg-sidebar-hover" />}
             />
             <span className="font-display text-sm font-bold text-text lg:hidden">{tenantName}</span>
+            <TenantSectionLabel tenantSlug={tenantSlug} />
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden max-w-[14rem] truncate text-sm text-text-secondary sm:inline">
