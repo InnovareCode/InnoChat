@@ -6,7 +6,7 @@ import { runAction, type Result } from "@/lib/result";
 import { DomainError } from "@/lib/errors";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/http/client-ip";
-import { acceptInvite, inviteTeamMember, requestPasswordReset, resetPassword, signUp, verifyEmail } from "./service";
+import { acceptInvite, inviteTeamMember, requestPasswordReset, resendVerificationEmail, resetPassword, signUp, verifyEmail } from "./service";
 
 /**
  * Server Actions do cadastro público e fluxos de conta (docs/contratos.md). Rate limit por IP
@@ -68,6 +68,18 @@ export async function verifyEmailAction(input: unknown): Promise<Result<{ tenant
 const requestPasswordResetSchema = z.object({ email: z.string().trim().email() });
 const RESET_REQUEST_LIMIT = 5;
 const RESET_REQUEST_WINDOW_MS = 60 * 60 * 1000;
+
+const RESEND_VERIFICATION_LIMIT = 3;
+const RESEND_VERIFICATION_WINDOW_MS = 60 * 60 * 1000; // 3 reenvios/hora por usuário
+
+/** Reenvia o e-mail de confirmação para o usuário logado (docs/contratos.md, "Fase 7"). */
+export async function resendVerificationEmailAction(): Promise<Result<{ alreadyVerified: boolean }>> {
+  return runAction(async () => {
+    const user = await requireSessionUser();
+    assertRateLimit("resend-verification", user.id, RESEND_VERIFICATION_LIMIT, RESEND_VERIFICATION_WINDOW_MS);
+    return resendVerificationEmail(user.id);
+  });
+}
 
 export async function requestPasswordResetAction(input: unknown): Promise<Result<{ requested: true }>> {
   return runAction(async () => {

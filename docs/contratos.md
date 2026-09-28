@@ -1110,3 +1110,10 @@ interna do Easypanel.
 - Rate limit distribuído (Redis/Postgres) — o rate limit de login herda a mesma limitação já
   documentada em `src/lib/rate-limit.ts` (processo único, zera em restart).
 Aplicada em `innochat` e `innochat_test`; `DOWN.sql` presente.
+
+### `resendVerificationEmailAction()` (adicionado pelo Atlas, 2026-09-28)
+
+`src/modules/signup/actions.ts`. Usuário logado; sem entrada. Rate limit de 3 por hora por usuário (`RATE_LIMITED`).
+Saída: `Result<{ alreadyVerified: boolean }>`. Se já verificado, não envia nada e devolve `alreadyVerified: true`
+(a UI deve parar de oferecer o botão). Falha de SMTP só é logada, como no cadastro. Coberto em
+`tests/integration/billing-signup.integration.test.ts`.

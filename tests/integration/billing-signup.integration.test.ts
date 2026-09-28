@@ -22,7 +22,7 @@ vi.mock("@/lib/email", async () => {
   };
 });
 
-const { signUp, verifyEmail } = await import("@/modules/signup/service");
+const { signUp, verifyEmail, resendVerificationEmail } = await import("@/modules/signup/service");
 const { createMockMercadoPagoGateway } = await import("@/modules/billing/mercadopago.mock");
 
 const prisma = getPrisma();
@@ -147,5 +147,26 @@ describe("signUp — cadastro público completo", () => {
     const invoice = await prisma.invoice.findFirstOrThrow({ where: { subscriptionId: subscription.id } });
     expect(invoice.status).toBe("OPEN");
     expect(invoice.pixCopyPaste).toBeNull();
+  });
+});
+
+describe("resendVerificationEmail — reenvio pelo usuário logado", () => {
+  it("usuário não verificado recebe um novo link; depois de verificado, não envia mais", async () => {
+    const result = await signUp(signupInput(), createMockMercadoPagoGateway());
+    createdTenantIds.push((await prisma.tenant.findUniqueOrThrow({ where: { slug: result.tenantSlug } })).id);
+    createdUserIds.push(result.userId);
+    sentEmails.length = 0;
+
+    const first = await resendVerificationEmail(result.userId);
+    expect(first).toEqual({ alreadyVerified: false });
+    expect(sentEmails).toHaveLength(1);
+    const token = sentEmails[0].text.match(/verificar-email\?token=([A-Za-z0-9_-]+)/)?.[1];
+    expect(token).toBeTruthy();
+
+    await verifyEmail(token!);
+    sentEmails.length = 0;
+    const second = await resendVerificationEmail(result.userId);
+    expect(second).toEqual({ alreadyVerified: true });
+    expect(sentEmails).toHaveLength(0);
   });
 });

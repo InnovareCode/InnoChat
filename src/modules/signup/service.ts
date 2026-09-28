@@ -200,16 +200,33 @@ export async function signUp(input: SignUpInput, gateway?: MercadoPagoGateway): 
     timezone: created.tenant.timezone,
   });
 
-  const { rawToken } = await createAuthToken(created.user.id, "VERIFY_EMAIL", VERIFY_EMAIL_TTL_MS);
+  await sendVerificationEmail(created.user.id, email);
+
+  logger.info("signup.completed", { tenantId: created.tenant.id });
+
+  return { tenantSlug: created.tenant.slug, userId: created.user.id };
+}
+
+/** Gera um token novo de verificação e envia o e-mail. Falha de SMTP só loga: nunca desfaz o fluxo. */
+async function sendVerificationEmail(userId: string, email: string): Promise<void> {
+  const { rawToken } = await createAuthToken(userId, "VERIFY_EMAIL", VERIFY_EMAIL_TTL_MS);
   const verifyUrl = `${await getPublicBaseUrl()}/verificar-email?token=${rawToken}`;
   const { subject, html, text } = verificationEmail({ verifyUrl });
   await sendMail({ to: email, subject, html, text }).catch((error) => {
     logger.error("signup.verification_email.failed", { errorMessage: error instanceof Error ? error.message : String(error) });
   });
+}
 
-  logger.info("signup.completed", { tenantId: created.tenant.id });
-
-  return { tenantSlug: created.tenant.slug, userId: created.user.id };
+/**
+ * Reenvio pedido pelo próprio usuário logado (tela WhatsApp/onboarding, quando falta confirmar o
+ * e-mail). Já verificado → não envia nada e informa, para a tela parar de oferecer o botão.
+ */
+export async function resendVerificationEmail(userId: string): Promise<{ alreadyVerified: boolean }> {
+  const user = await getPrisma().user.findUnique({ where: { id: userId }, select: { email: true, emailVerifiedAt: true } });
+  if (!user) throw new DomainError("NOT_FOUND", "Usuário não encontrado.");
+  if (user.emailVerifiedAt) return { alreadyVerified: true };
+  await sendVerificationEmail(userId, user.email);
+  return { alreadyVerified: false };
 }
 
 export async function verifyEmail(rawToken: string): Promise<{ tenantSlug: string | null }> {
