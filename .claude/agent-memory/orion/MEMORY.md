@@ -1,0 +1,4 @@
+- [Padrão de isolamento multiempresa](tenant_isolation_pattern.md) — forTenant/guards/API interna; roteiro para auditar Server Actions novas
+- [Login sem rate limit](login_sem_rate_limit.md) — achado Alta 2026-09-28, checar se já foi corrigido antes de reauditar
+- [Headers de segurança ausentes](headers_seguranca_ausentes.md) — achado Alta 2026-09-28, checar se next.config.ts/middleware já ganhou headers()
+- [Padrão de mascaramento de segredos](secrets_masking_pattern.md) — referência PlatformSettings, dívida de cifragem em repouso ainda proposta, não implementada
