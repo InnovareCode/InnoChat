@@ -1,8 +1,33 @@
+# Next.js
+/.next/
+/out/
+/build/
+next-env.d.ts
+
+# Dependências
+/node_modules/
+/.pnp
+.pnp.js
+
+# Ambiente
+.env
+.env*.local
+
+# Testes
+/coverage/
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Estado de sessão da squad (nunca versionado)
 .missao-atual
 .missoes-quadro.json
-node_modules/
-.env
-.env.*
-!.env.example
-.next/
-dist/
