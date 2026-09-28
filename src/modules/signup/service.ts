@@ -241,7 +241,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
   }
 
   const { rawToken } = await createAuthToken(user.id, "RESET_PASSWORD", RESET_PASSWORD_TTL_MS);
-  const resetUrl = `${await getPublicBaseUrl()}/recuperar-senha/confirmar?token=${rawToken}`;
+  const resetUrl = `${await getPublicBaseUrl()}/redefinir-senha?token=${rawToken}`;
   const { subject, html, text } = passwordResetEmail({ resetUrl });
   await sendMail({ to: normalized, subject, html, text }).catch((error) => {
     logger.error("password_reset.email.failed", { errorMessage: error instanceof Error ? error.message : String(error) });

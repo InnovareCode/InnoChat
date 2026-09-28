@@ -13,6 +13,13 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./tests/e2e",
+  // `instalacao.spec.ts` sobe seu PRÓPRIO `next dev` (porta 3101, contra `innochat_test`) num
+  // `beforeAll` — dois `next dev` da MESMA pasta de projeto disputam o mesmo lock de instância
+  // única do Turbopack, mesmo em portas diferentes ("Another next dev server is already
+  // running."), incluindo o `webServer` desta config. Por isso esse arquivo roda numa config
+  // separada (`playwright.instalacao.config.ts`, sem `webServer` nenhum) — nunca junto com o
+  // resto da suíte na mesma invocação.
+  testIgnore: "**/instalacao.spec.ts",
   timeout: 30_000,
   expect: { timeout: 8_000 },
   fullyParallel: false, // várias specs escrevem no MESMO tenant de seed — evita corrida de dados

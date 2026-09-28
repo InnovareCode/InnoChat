@@ -24,9 +24,32 @@ metadata:
   `slot-taken.spec.ts` (dois `browser.newContext()` disputando o mesmo slot), `themes.spec.ts`
   (troca de tema + overflow 1440/390 + screenshots), `admin-secrets.spec.ts`,
   `dates-timezone.spec.ts`.
-- Rodar: `npm run test:e2e` (script adicionado ao `package.json`), ou
-  `npx playwright test <arquivo>` para uma spec isolada durante desenvolvimento.
+- **Rodada 2026-09-28 (2ª sessão) acrescentou**: `admin-configuracoes.spec.ts` (checklist,
+  testar conexão, sincronizar n8n contra fake, ativar/desativar bot),
+  `bloqueios-empresa.spec.ts` (feriado da empresa inteira pela tela nova, bloqueia clique),
+  `assinatura.spec.ts` (upgrade/downgrade/STAFF — ativa planos Essencial/Profissional
+  temporariamente, ver `[[seed_tenant_plan_limit_e2e]]`), `suspensao.spec.ts` (tenant dedicado
+  forçado SUSPENDED via truque de `currentPeriodEnd` no passado), `cadastro.spec.ts` (ponta a
+  ponta com SMTP fake, achou o bug do link de redefinir senha), `csp.spec.ts` (violações de CSP
+  via `securitypolicyviolation`), `whatsapp.spec.ts` (Evolution fake própria,
+  `fixtures/fake-evolution-server.ts` — achou o bug do diálogo de sucesso sumindo na 1ª conexão).
+  `instalacao.spec.ts` é a EXCEÇÃO: roda numa config separada
+  (`playwright.instalacao.config.ts`, sem `webServer`) — ver
+  `[[next_dev_single_instance_lock]]`. Fixtures novas em `tests/e2e/fixtures/`:
+  `fake-http-server.ts` (mock HTTP genérico, usado por n8n/Evolution), `fake-smtp-server.ts`
+  (captura e-mail real via SMTP cru), `fake-evolution-server.ts`, `csp.ts`, `test-db-url.ts`
+  (deriva `innochat_test` do `.env` sem nunca imprimir a string).
+- Rodar: `npm run test:e2e` (script adicionado ao `package.json`, NÃO inclui `instalacao.spec.ts`
+  — `testIgnore` no `playwright.config.ts`), `npx playwright test <arquivo>` para uma spec
+  isolada, ou `npx playwright test --config=playwright.instalacao.config.ts` só para
+  `/instalacao`.
+- Specs com muitos testes usando o MESMO usuário devem reusar cookie de sessão em vez de logar de
+  novo a cada teste — ver `[[login_rate_limit_e2e]]` (8 logins/15min por e-mail).
+- Todo `getByLabel(..., { exact: true })` num campo `required` precisa do `" *"` no texto — ver
+  `[[playwright_required_field_asterisk_label]]`.
 - Screenshots de evidência ficam em `docs/design/screens/qa/` (Agenda dia/semana × 3 temas ×
   1440/390, + agenda com bloqueio) — commitadas, não são artefato de execução (diferente de
   `test-results/`/`playwright-report/`, esses sim no `.gitignore`).
-- 25 testes, suíte inteira roda em ~90s contra `npm run dev` (não testado contra `next build && next start`, mais fiel a produção mas mais lento — considerar para CI).
+- 25 testes na 1ª rodada, +~40 na 2ª (excluindo `instalacao.spec.ts`, 4 testes à parte); suíte
+  principal roda em ~5-6min contra `npm run dev` (cresceu bastante com os fakes de rede/SMTP —
+  ainda não testado contra `next build && next start`).

@@ -5,3 +5,7 @@
 - [Plano do tenant de seed já está no limite de profissionais](seed_tenant_plan_limit_e2e.md) — E2E precisa de override temporário.
 - [Suíte E2E do painel: onde está e como rodar](e2e_suite_layout.md) — playwright.config.ts, tests/e2e/**, screenshots.
 - [Log de bugs/gaps encontrados 2026-09-28](bugs_found_log.md) — Prisma Client desatualizado, gap de UI (bloqueio empresa inteira), investigação do flaky de concorrência.
+- [Log de bugs 2ª rodada 2026-09-28](bugs_found_log_round2.md) — link de redefinir senha quebrado, diálogo de sucesso do WhatsApp some na 1ª conexão, causa raiz do teste de integração "cancelar fora do prazo" (bug do teste, não do produto).
+- [getByLabel exact em campo required precisa do " *"](playwright_required_field_asterisk_label.md) — `Field` acrescenta asterisco ao label; `exact:true` sem ele nunca casa.
+- [next dev: lock de instância única por pasta, não por porta](next_dev_single_instance_lock.md) — por que `/instalacao` (banco `innochat_test`) precisa de `playwright.instalacao.config.ts` sem `webServer`.
+- [Rate limit de login (8/15min por e-mail) quebra specs com muitos re-logins](login_rate_limit_e2e.md) — reusar cookie de sessão em vez de logar de novo a cada teste.

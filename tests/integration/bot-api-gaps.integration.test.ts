@@ -393,7 +393,15 @@ describe("TOO_LATE em cancelar/remarcar pelo bot (§6.5)", () => {
 
   it("cancelar fora do prazo mínimo funciona normalmente (controle negativo)", async () => {
     const { ctx, service, professional, contact } = await setupBookableSoon("ok-cancel", 5); // só 5 min de prazo mínimo
-    const startsAt = new Date(Date.now() + 60 * 60_000); // 1h à frente, bem fora da janela de 5 min
+    // 90 min à frente — NUNCA exatos 60 min. `Tenant.minLeadTimeMin` (checado por
+    // `createAppointmentManual`) tem `@default(60)` no schema, e este tenant não o sobrescreve
+    // (só `cancelMinLeadMin`, um campo diferente). Um `startsAt` de exatos "+60min" cai bem em
+    // cima do limiar: entre este `Date.now()` e o `now` que o SERVIDOR recaptura minutos depois
+    // (após as idas ao banco de `createAppointmentBot`), alguns milissegundos já passaram —
+    // `start < addMinutes(nowServidor, 60)` vira verdadeiro e o create falha com
+    // `RULE_VIOLATION`/`LEAD_TIME`, mesmo a intenção do teste sendo "bem fora da janela de
+    // prazo". Bug do TESTE (limiar sem margem), não do produto — corrigido aqui com folga real.
+    const startsAt = new Date(Date.now() + 90 * 60_000);
     const created = await createAppointmentBot(ctx, { contactId: contact.id, serviceId: service.id, professionalId: professional.id, startsAt, idempotencyKey: "ok-cancel-1" });
 
     const cancelled = await cancelAppointmentBot(ctx, created.appointment.id, contact.id);

@@ -1,0 +1,139 @@
+import { test, expect } from "@playwright/test";
+import { loginAndWaitForPanel } from "./fixtures/auth";
+import { prisma } from "./fixtures/db";
+import type { SubscriptionStatus } from "@/core/billing/types";
+import {
+  SEED_TENANT_SLUG,
+  SEED_OWNER_EMAIL,
+  SEED_OWNER_PASSWORD,
+  STAFF_PASSWORD,
+  E2E_RUN_PREFIX,
+  loadRunFixtures,
+} from "./fixtures/test-data";
+
+/**
+ * Assinatura → trocar plano (docs/contratos.md §7.2): upgrade imediato, downgrade bloqueado
+ * mostrando o que remover, downgrade agendado ("próximo ciclo"), e STAFF não troca.
+ *
+ * Achado ao montar este teste: os 3 planos do seed nascem `active: false` (preço ainda não
+ * definido pelo dono, decisão registrada em docs/contratos.md) — `listActivePlansAction` só
+ * devolve planos `active: true`, então a tela "Planos disponíveis" fica VAZIA com os dados de
+ * seed puros. Sem isso, nenhum destes 4 cenários é alcançável pela UI. Ativa temporariamente
+ * Essencial e Profissional (preço continua R$0, só o flag `active`) e restaura tudo no
+ * `afterAll` — mesmo padrão de "override temporário" já usado para `maxProfessionalsOverride`
+ * (ver [[seed_tenant_plan_limit_e2e]] na memória).
+ *
+ * Também usa (e devolve) o override de profissionais que o `global-setup.ts` já sobe para 10
+ * durante toda a suíte — o cenário de "downgrade bloqueado" precisa dele voltando a `null`
+ * momentaneamente para o limite do PLANO (3, Essencial) valer de verdade.
+ */
+test.describe.configure({ mode: "serial" });
+
+test.describe("Assinatura: trocar plano", () => {
+  let essencialId: string;
+  let profissionalId: string;
+  let originalSubscription: { planId: string; status: SubscriptionStatus; pendingPlanId: string | null; currentPeriodEnd: Date };
+  let extraProfessionalId: string | null = null;
+
+  test.beforeAll(async () => {
+    const [essencial, profissional] = await Promise.all([
+      prisma.plan.findUniqueOrThrow({ where: { code: "essencial" } }),
+      prisma.plan.findUniqueOrThrow({ where: { code: "profissional" } }),
+    ]);
+    essencialId = essencial.id;
+    profissionalId = profissional.id;
+    await prisma.plan.updateMany({ where: { id: { in: [essencialId, profissionalId] } }, data: { active: true } });
+
+    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { slug: SEED_TENANT_SLUG } });
+    const subscription = await prisma.subscription.findUniqueOrThrow({ where: { tenantId: tenant.id } });
+    originalSubscription = {
+      planId: subscription.planId,
+      status: subscription.status,
+      pendingPlanId: subscription.pendingPlanId,
+      currentPeriodEnd: subscription.currentPeriodEnd,
+    };
+  });
+
+  test.afterAll(async () => {
+    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { slug: SEED_TENANT_SLUG } });
+    await prisma.subscription.update({ where: { tenantId: tenant.id }, data: originalSubscription });
+    await prisma.plan.updateMany({ where: { id: { in: [essencialId, profissionalId] } }, data: { active: false } });
+    await prisma.tenant.update({ where: { id: tenant.id }, data: { maxProfessionalsOverride: 10 } });
+    if (extraProfessionalId) {
+      await prisma.professional.deleteMany({ where: { id: extraProfessionalId } });
+    }
+  });
+
+  test("STAFF não vê o botão de troca de plano habilitado", async ({ page }) => {
+    const fixtures = loadRunFixtures();
+    await loginAndWaitForPanel(page, fixtures.staffEmail, STAFF_PASSWORD, SEED_TENANT_SLUG);
+    await page.goto(`/${SEED_TENANT_SLUG}/assinatura`);
+
+    await expect(page.getByText("Só o proprietário da empresa pode trocar de plano.")).toBeVisible();
+    const upgradeButton = page.getByRole("button", { name: /Fazer upgrade|Fazer downgrade/ }).first();
+    await expect(upgradeButton).toBeDisabled();
+  });
+
+  test("Upgrade (Essencial → Profissional) aplica imediatamente", async ({ page }) => {
+    await loginAndWaitForPanel(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD, SEED_TENANT_SLUG);
+    await page.goto(`/${SEED_TENANT_SLUG}/assinatura`);
+
+    await page.getByRole("button", { name: "Fazer upgrade" }).click();
+    const dialog = page.getByRole("dialog").filter({ hasText: "Trocar de plano" });
+    await expect(dialog).toContainText(/já está em vigor|próxima fatura/);
+    await dialog.getByRole("button", { name: "Confirmar" }).click();
+
+    await expect(page.getByText("Plano trocado.").first()).toBeVisible();
+    await expect(page.getByText("O novo plano já está em vigor.").first()).toBeVisible();
+    await page.waitForFunction(
+      () => document.body.textContent?.includes("Plano atual") && document.body.textContent?.includes("Profissional"),
+    );
+  });
+
+  test("Downgrade (Profissional → Essencial) é bloqueado quando o uso atual não cabe, e mostra o que remover", async ({ page }) => {
+    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { slug: SEED_TENANT_SLUG } });
+
+    // Some 1 profissional extra (total 4: Ana + Bruna + "Profissional QA" + este) e remove o
+    // override temporariamente — sem isso, `changePlan` usa o override (10) em vez do limite do
+    // plano Essencial (3), e o downgrade nunca seria bloqueado neste ambiente de seed.
+    const extra = await prisma.professional.create({
+      data: { tenantId: tenant.id, name: `${E2E_RUN_PREFIX} profissional extra`, sortOrder: 99 },
+    });
+    extraProfessionalId = extra.id;
+    await prisma.tenant.update({ where: { id: tenant.id }, data: { maxProfessionalsOverride: null } });
+
+    await loginAndWaitForPanel(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD, SEED_TENANT_SLUG);
+    await page.goto(`/${SEED_TENANT_SLUG}/assinatura`);
+
+    await page.getByRole("button", { name: "Fazer downgrade" }).click();
+    await page.getByRole("dialog").filter({ hasText: "Trocar de plano" }).getByRole("button", { name: "Confirmar" }).click();
+
+    const blockedDialog = page.getByRole("dialog").filter({ hasText: "Não é possível fazer esse downgrade ainda" });
+    await expect(blockedDialog).toBeVisible();
+    await expect(blockedDialog).toContainText("até 3 profissionais cadastrados");
+    await expect(blockedDialog).toContainText("empresa tem 4 hoje");
+    await expect(blockedDialog).toContainText("Remova 1");
+    await blockedDialog.getByRole("button", { name: "Entendi" }).click();
+
+    // Devolve o cenário para o próximo teste (downgrade que CABE): remove o extra e o override
+    // volta a 10 (default da suíte).
+    await prisma.professional.delete({ where: { id: extra.id } });
+    extraProfessionalId = null;
+    await prisma.tenant.update({ where: { id: tenant.id }, data: { maxProfessionalsOverride: 10 } });
+  });
+
+  test("Downgrade (Profissional → Essencial) que cabe fica agendado para o próximo ciclo", async ({ page }) => {
+    await loginAndWaitForPanel(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD, SEED_TENANT_SLUG);
+    await page.goto(`/${SEED_TENANT_SLUG}/assinatura`);
+
+    await page.getByRole("button", { name: "Fazer downgrade" }).click();
+    const dialog = page.getByRole("dialog").filter({ hasText: "Trocar de plano" });
+    await expect(dialog).toContainText("vale a partir do próximo ciclo");
+    await dialog.getByRole("button", { name: "Confirmar" }).click();
+
+    await expect(page.getByText("Troca agendada.").first()).toBeVisible();
+    await expect(page.getByText("A mudança entra em vigor no próximo ciclo de cobrança.").first()).toBeVisible();
+    await expect(page.getByText("Mudança para o plano")).toBeVisible();
+    await expect(page.getByText("Agendado", { exact: true })).toBeVisible();
+  });
+});
