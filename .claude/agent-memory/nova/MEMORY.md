@@ -1,0 +1,3 @@
+- [Arquitetura v1](project_arquitetura_v1.md) — dono decidiu menu no n8n; painel guarda garantias via claim/lease/EXCLUDE; Pix MP
+- [Limites Evolution/Baileys](project_evolution_baileys_limites.md) — sem botões/listas/enquete; @lid quebra resposta
+- [Lições InnoAtendente](reference_innoatendente_licoes.md) — onde achar adaptador Evolution real, deploy e decisões
