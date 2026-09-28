@@ -1,7 +1,4 @@
-// InnoChat — schema Fases 1, 2 e 4 (docs/arquitetura.md).
-// Cobrança (Plan/Subscription/Invoice/ProviderEvent/TrialClaim) fica para a Fase 7 — de propósito,
-// não está aqui. Ver PARA O PRÓXIMO / PENDÊNCIAS no handoff do Cronos para o que foi decidido
-// agora e pode custar uma migração extra na Fase 7.
+// InnoChat — schema Fases 1, 2, 4 e 7 (docs/arquitetura.md).
 
 generator client {
   provider = "prisma-client-js"
@@ -93,6 +90,8 @@ model Tenant {
   appointments       Appointment[]
   whatsappInstances  WhatsappInstance[]
   botTexts           BotText[]
+  subscription       Subscription?
+  trialClaims        TrialClaim[]
 
   @@map("tenants")
 }
@@ -493,4 +492,183 @@ model BotText {
 
   @@unique([tenantId, key])
   @@map("bot_texts")
+}
+
+// ---------------------------------------------------------------------------
+// Fase 7 — Cadastro público, planos e cobrança (§7, §15)
+// ---------------------------------------------------------------------------
+
+// Catálogo de planos, editado pelo admin da plataforma (tela "Planos", §9). Global, não
+// tenant-scoped.
+//
+// Preço (decisão do dono, 2026-09-28): ainda não definido. Em vez de gravar um valor "provisório"
+// que alguém pode esquecer de trocar antes do lançamento, o seed cria os 3 planos com
+// `priceCents = 0` e `active = false` — mais seguro que um preço chutado: com `active = false`
+// eles não aparecem no cadastro público nem podem ser escolhidos, então é estruturalmente
+// impossível vender por engano a um preço errado. O admin edita o preço e ativa quando o dono
+// decidir (tela "Planos", §9). Ver PENDÊNCIAS no handoff.
+model Plan {
+  id   String @id @default(cuid())
+  code String @unique
+  name String
+
+  priceCents Int
+
+  maxWhatsappNumbers Int
+  // null = ilimitado (plano Clínica, §7.2). maxWhatsappNumbers nunca é ilimitado nos 3 planos
+  // aprovados, por isso não é nullable — só maxProfessionals precisa do null.
+  maxProfessionals   Int?
+
+  active    Boolean @default(false)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscriptions        Subscription[] @relation("SubscriptionPlan")
+  pendingSubscriptions Subscription[] @relation("SubscriptionPendingPlan")
+
+  @@map("plans")
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELED
+}
+
+// Uma assinatura por tenant (§5: "Subscription (1 por tenant)") — `tenantId` é @unique, não só
+// indexado, e é isso que a constraint de banco reforça: nunca existem duas linhas de Subscription
+// para o mesmo tenant, nem uma "segunda assinatura ativa" nem histórico de assinaturas antigas.
+// Trocar de plano reescreve esta mesma linha (`planId`/`pendingPlanId`); cancelar e reativar
+// também (`status` volta a ACTIVE, §7.4). Se algum dia precisar de histórico de assinaturas
+// (ex.: auditoria de troca de plano), isso é tabela nova, não a remoção deste unique.
+//
+// Overrides de limite (`maxWhatsappNumbersOverride`/`maxProfessionalsOverride`) já existem em
+// `Tenant` desde a Fase 1 (§5) — decisão: não duplicar aqui. Um valor só, sem duas fontes que
+// podem divergir sobre "qual limite vale". Ver PARA O PRÓXIMO no handoff.
+model Subscription {
+  id       String @id @default(cuid())
+  tenantId String @unique
+
+  planId        String
+  pendingPlanId String?
+  status        SubscriptionStatus @default(TRIALING)
+
+  // Trial de 1 dia (decisão do dono, 2026-09-28): preenchido no cadastro como `createdAt + 24h`.
+  // Nulo depois que a assinatura sai de TRIALING (não volta a preencher em downgrade/reativação).
+  trialEndsAt DateTime?
+  // Fim do período pago corrente. No cadastro, já nasce igual a `trialEndsAt` (o trial É o
+  // primeiro período, e a primeira fatura — §7.3 — cobre esse mesmo ciclo). Avança em +1 mês a
+  // cada pagamento confirmado (§7.1), mantendo o dia-âncora.
+  currentPeriodEnd DateTime
+
+  canceledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan        Plan      @relation("SubscriptionPlan", fields: [planId], references: [id])
+  pendingPlan Plan?     @relation("SubscriptionPendingPlan", fields: [pendingPlanId], references: [id])
+  invoices    Invoice[]
+
+  // billing/tick (§6.8) roda a cada hora e precisa achar, sem varrer a tabela inteira:
+  // - quem está perto de vencer (gerar fatura 5 dias antes / expirar trial) → (status, currentPeriodEnd)
+  // - quem ainda está no trial de 1 dia, para fechar TRIALING → PAST_DUE → (status, trialEndsAt)
+  @@index([status, currentPeriodEnd])
+  @@index([status, trialEndsAt])
+  @@map("subscriptions")
+}
+
+enum InvoiceStatus {
+  OPEN
+  PAID
+  EXPIRED
+  VOID
+}
+
+// Pendurada em Subscription, não em Tenant direto (§5, diagrama) — segue o padrão já usado em
+// AppointmentEvent/ChatSession/InboundEvent (models tenant-scoped SEM coluna tenantId própria,
+// isolados por relação até o pai que tem `tenantId`). Ver PARA O PRÓXIMO no handoff: Invoice NÃO
+// entra em TENANT_SCOPED_MODELS por não ter `tenantId` próprio — quem ler Invoice precisa
+// carregar a Subscription (já escopada por tenant) primeiro.
+model Invoice {
+  id             String @id @default(cuid())
+  subscriptionId String
+
+  amountCents Int
+  periodStart DateTime
+  periodEnd   DateTime
+  dueAt       DateTime
+
+  status InvoiceStatus @default(OPEN)
+
+  // Pix (Mercado Pago, §7.1). `pixExpiresAt` = geração + 3 dias; se expirar, o `billing/tick`
+  // marca EXPIRED (não paga) e o Pix é regerado sob demanda pela tela de Assinatura, na MESMA
+  // fatura (não cria outra linha — só reescreve mpPaymentId/pixQrCode/pixCopyPaste/pixExpiresAt).
+  mpPaymentId  String?
+  pixQrCode    String?
+  pixCopyPaste String?
+  pixExpiresAt DateTime?
+  paidAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  // Uma fatura por ciclo de cobrança (§5): impede o billing/tick gerar duas faturas para o mesmo
+  // período se rodar em cima da hora (idempotência "por desenho", não só pelo `{ invoicesCreated }`
+  // da resposta).
+  @@unique([subscriptionId, periodStart])
+  // billing/tick: faturas OPEN vencendo (lembrete + baixa de PAST_DUE) e Pix OPEN a expirar.
+  @@index([status, dueAt])
+  @@index([status, pixExpiresAt])
+  // Webhook do Mercado Pago (§6.10): acha a fatura pelo id do pagamento antes de reconsultar a API.
+  @@index([mpPaymentId])
+  @@map("invoices")
+}
+
+// Idempotência do webhook do Mercado Pago (§6.10, §11): `provider` + `providerEventId` são a
+// dedupe de verdade — o mesmo evento reentregue (retry do MP) não reprocessa. `payload` guarda o
+// corpo bruto para auditoria; `processedAt` nulo = recebido mas ainda não aplicado (o handler
+// sempre reconsulta `GET /v1/payments/{id}` antes de dar baixa, nunca confia neste payload).
+// Global (não tenant-scoped): o evento chega sem tenant resolvido até o handler achar a fatura
+// pelo `mpPaymentId`.
+model ProviderEvent {
+  id              String @id @default(cuid())
+  provider        String
+  providerEventId String
+
+  payload     Json
+  processedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([provider, providerEventId])
+  @@map("provider_events")
+}
+
+// Anti-abuso de trial em série (§7.3 regra 4): um número de WhatsApp só entra em trial uma vez,
+// em qualquer empresa. Por isso `phoneE164` é @unique sozinho (não composto com tenantId) — a
+// verificação precisa ser CROSS-tenant por desenho, o oposto de todo o resto do isolamento por
+// tenant do sistema. `tenantId` aqui é só "qual empresa consumiu o trial deste número", para a
+// mensagem de erro/auditoria — nunca use este campo para escopo de leitura.
+// NÃO entra em TENANT_SCOPED_MODELS mesmo tendo `tenantId` próprio (ver PARA O PRÓXIMO no
+// handoff): `forTenant()` filtraria por tenant e quebraria exatamente a checagem cross-tenant que
+// este model existe para fazer.
+model TrialClaim {
+  id          String  @id @default(cuid())
+  phoneE164   String  @unique
+  emailDomain String?
+  tenantId    String
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("trial_claims")
 }

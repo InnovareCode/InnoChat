@@ -152,7 +152,86 @@ async function main() {
     },
   });
 
-  console.log(`Seed ok: tenant "${tenant.slug}" (${tenant.id}) — login de dev: ${DEV_USER_EMAIL} / ${DEV_USER_PASSWORD}`);
+  // Fase 7 — os 3 planos aprovados (docs/arquitetura.md §7.2), com preço ainda não definido pelo
+  // dono: nascem com priceCents = 0 e active = false de propósito (ver comentário no schema, model
+  // Plan). Ativar e definir o preço é tarefa do admin da plataforma, não do seed.
+  const [essencial, profissional, clinica] = await Promise.all([
+    prisma.plan.upsert({
+      where: { code: "essencial" },
+      update: {},
+      create: {
+        code: "essencial",
+        name: "Essencial",
+        priceCents: 0,
+        maxWhatsappNumbers: 1,
+        maxProfessionals: 3,
+        active: false,
+        sortOrder: 1,
+      },
+    }),
+    prisma.plan.upsert({
+      where: { code: "profissional" },
+      update: {},
+      create: {
+        code: "profissional",
+        name: "Profissional",
+        priceCents: 0,
+        maxWhatsappNumbers: 2,
+        maxProfessionals: 10,
+        active: false,
+        sortOrder: 2,
+      },
+    }),
+    prisma.plan.upsert({
+      where: { code: "clinica" },
+      update: {},
+      create: {
+        code: "clinica",
+        name: "Clínica",
+        priceCents: 0,
+        maxWhatsappNumbers: 3,
+        maxProfessionals: null, // ilimitado
+        active: false,
+        sortOrder: 3,
+      },
+    }),
+  ]);
+
+  // Assinatura ACTIVE de exemplo para o tenant demo, no plano Essencial, ciclo mensal iniciado
+  // hoje (dado de dev — em produção nasce TRIALING via cadastro público, §7.3).
+  const periodStart = new Date();
+  const currentPeriodEnd = new Date(periodStart);
+  currentPeriodEnd.setMonth(currentPeriodEnd.getMonth() + 1);
+
+  const subscription = await prisma.subscription.upsert({
+    where: { tenantId: tenant.id },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      planId: essencial.id,
+      status: "ACTIVE",
+      trialEndsAt: null,
+      currentPeriodEnd,
+    },
+  });
+
+  await prisma.invoice.upsert({
+    where: { subscriptionId_periodStart: { subscriptionId: subscription.id, periodStart } },
+    update: {},
+    create: {
+      subscriptionId: subscription.id,
+      amountCents: essencial.priceCents,
+      periodStart,
+      periodEnd: currentPeriodEnd,
+      dueAt: periodStart,
+      status: "PAID",
+      paidAt: periodStart,
+    },
+  });
+
+  console.log(
+    `Seed ok: tenant "${tenant.slug}" (${tenant.id}) — planos: ${essencial.code}/${profissional.code}/${clinica.code} — login de dev: ${DEV_USER_EMAIL} / ${DEV_USER_PASSWORD}`,
+  );
 }
 
 main()
