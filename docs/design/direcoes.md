@@ -106,3 +106,15 @@ A Vega segue com o esqueleto do painel em paralelo; a direção escolhida pelo
 dono deve ser repassada a ela e à Lyra antes da Fase 2 (Catálogo e agenda),
 que é quando as telas reais de Agenda/WhatsApp entram em construção
 (`docs/arquitetura.md` §13).
+
+## Decisão do dono (2026-09-28): tema por empresa
+
+As três direções **não competem mais entre si**: viram **temas prontos** que cada empresa escolhe em
+**Configurações → Aparência**. Toda a equipe da empresa vê o mesmo tema.
+
+- Escopo: **por empresa** (`Tenant.theme`, enum `PanelTheme`), não por usuário.
+- Opções: **só os 3 temas prontos**. Sem cor personalizada, sem modo escuro e sem logo na v1.
+- Padrão para empresa nova: `INDIGO_CLINICO`. Telas públicas (login, cadastro) também usam o Índigo Clínico.
+- Implementação: tokens em variáveis CSS (`[data-theme="..."]` no `<html>`) consumidos pelo Tailwind v4 via `@theme`.
+  Nenhum componente usa hex ou fonte fixa; cada tema redefine cores, par tipográfico, raio, sombra e densidade.
+  O tema é resolvido no servidor (layout do tenant), sem "flash" do tema errado.
