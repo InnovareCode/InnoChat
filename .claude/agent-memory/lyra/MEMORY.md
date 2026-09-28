@@ -8,3 +8,4 @@
 - [eslint react-hooks/set-state-in-effect bloqueia fetch-on-mount direto](react-hooks-set-state-in-effect.md) — envolver em `setTimeout(fn, 0)` + `clearTimeout` no cleanup.
 - [Bug: `capitalize` do Tailwind em data por extenso](bug-tailwind-capitalize-em-data-por-extenso.md) — maiuscula CADA palavra, não a frase; capitalizar em JS. Util central: `src/components/lib/format-date.ts`.
 - [Fase 7 — cobrança e cadastro público](fase7-cobranca-e-cadastro-publico.md) — leitura direta em Server Component, `router.refresh()` como polling, QR Pix gerado no cliente com `qrcode`, nav condicional por booleano.
+- [Fase 3 — WhatsApp QR](fase3-whatsapp-qr.md) — componente único de conexão reaproveitado no onboarding; timer de longa duração precisa de `ref`, não `state`, para ler o valor mais recente.
