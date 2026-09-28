@@ -1,0 +1,8 @@
+.missao-atual
+.missoes-quadro.json
+node_modules/
+.env
+.env.*
+!.env.example
+.next/
+dist/
