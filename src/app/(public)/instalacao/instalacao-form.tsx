@@ -50,7 +50,7 @@ export function InstalacaoForm() {
 
       if (!result.ok) {
         if (result.error.code === "INSTALL_CODE_INVALID") {
-          setFieldErrors((prev) => ({ ...prev, code: "Código inválido ou expirado. Confira o log do servidor." }));
+          setFieldErrors((prev) => ({ ...prev, code: result.error.message }));
           return;
         }
         if (result.error.code === "EMAIL_TAKEN") {
@@ -70,15 +70,21 @@ export function InstalacaoForm() {
       <CardHeader>
         <CardTitle>Instalar o InnoChat</CardTitle>
         <CardDescription>
-          Crie a conta de administrador da plataforma. O código de instalação foi impresso no log do servidor
-          quando ele subiu pela primeira vez.
+          Crie a conta de administrador da plataforma. O código de instalação aparece no log do container do
+          painel no Easypanel (procure por &ldquo;InnoChat: código de instalação&rdquo;) e vale por 24 horas.
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           {formError ? <Alert variant="danger">{formError}</Alert> : null}
 
-          <Field label="Código de instalação" htmlFor="code" required error={fieldErrors.code}>
+          <Field
+            label="Código de instalação"
+            htmlFor="code"
+            required
+            error={fieldErrors.code}
+            hint={!fieldErrors.code ? "Log do container do painel no Easypanel, impresso quando ele sobe." : undefined}
+          >
             {(fieldProps) => (
               <Input
                 {...fieldProps}

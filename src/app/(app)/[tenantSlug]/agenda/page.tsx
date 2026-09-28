@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getPrisma } from "@/lib/db/prisma";
 import { listProfessionalsAction, listServicesAction } from "@/modules/agenda/catalog-actions";
+import { isTenantWriteBlocked } from "../_lib/write-blocked";
 import { AgendaClient } from "./agenda-client";
 import type { ProfessionalRow } from "../profissionais/profissionais-client";
 import type { ServiceRow } from "../servicos/servicos-client";
@@ -15,10 +16,11 @@ export default async function AgendaPage({
 }) {
   const { tenantSlug } = await params;
 
-  const tenant = await getPrisma().tenant.findUnique({ where: { slug: tenantSlug }, select: { timezone: true } });
+  const tenant = await getPrisma().tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true, timezone: true } });
   if (!tenant) {
     notFound();
   }
+  const writeBlocked = await isTenantWriteBlocked(tenant.id);
 
   const [professionalsResult, servicesResult] = await Promise.all([
     listProfessionalsAction(tenantSlug),
@@ -47,6 +49,7 @@ export default async function AgendaPage({
       timezone={tenant.timezone}
       professionals={professionals}
       services={services}
+      writeBlocked={writeBlocked}
     />
   );
 }

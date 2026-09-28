@@ -1,25 +1,32 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
-import { Check, Copy } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Copy } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/toast";
 import { formatDateTimeLabel } from "@/components/lib/format-date";
+import { changePlanAction, type PlanListItem } from "@/modules/billing/actions";
 
 export type BillingStatus = "TRIALING" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELED";
 
 export type BillingSnapshot = {
+  planId: string;
   planName: string;
+  planSortOrder: number;
   priceCents: number;
   status: BillingStatus;
   trialEndsAt: string | null;
   currentPeriodEnd: string;
   timezone: string;
+  pendingPlanId: string | null;
+  pendingPlanName: string | null;
   invoice: {
     amountCents: number;
     dueAt: string;
@@ -147,7 +154,176 @@ function PixCard({ invoice, timezone }: { invoice: NonNullable<BillingSnapshot["
   );
 }
 
-export function AssinaturaClient({ snapshot }: { snapshot: BillingSnapshot }) {
+type DowngradeBlockedDetails = { rule: "maxProfessionals" | "maxWhatsappNumbers"; limit: number; current: number };
+
+const RULE_LABEL: Record<DowngradeBlockedDetails["rule"], string> = {
+  maxProfessionals: "profissionais cadastrados",
+  maxWhatsappNumbers: "números de WhatsApp conectados",
+};
+
+function PlanosCard({
+  tenantSlug,
+  snapshot,
+  plans,
+  isOwner,
+}: {
+  tenantSlug: string;
+  snapshot: BillingSnapshot;
+  plans: PlanListItem[];
+  isOwner: boolean;
+}) {
+  const { notify } = useToast();
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [pendingPlanTarget, setPendingPlanTarget] = useState<PlanListItem | null>(null);
+  const [blockedDetails, setBlockedDetails] = useState<DowngradeBlockedDetails | null>(null);
+
+  const canChangePlan = isOwner && snapshot.status !== "CANCELED";
+
+  function requestChange(plan: PlanListItem) {
+    setPendingPlanTarget(plan);
+  }
+
+  function confirmChange() {
+    if (!pendingPlanTarget) return;
+    const target = pendingPlanTarget;
+    startTransition(async () => {
+      const result = await changePlanAction(tenantSlug, { planId: target.id });
+      if (!result.ok) {
+        if (result.error.code === "PLAN_DOWNGRADE_BLOCKED") {
+          setBlockedDetails(result.error.details as DowngradeBlockedDetails);
+          setPendingPlanTarget(null);
+          return;
+        }
+        notify({ variant: "error", title: "Não foi possível trocar de plano", description: result.error.message });
+        setPendingPlanTarget(null);
+        return;
+      }
+      setPendingPlanTarget(null);
+      notify({
+        variant: "success",
+        title: result.data.appliedImmediately ? "Plano trocado." : "Troca agendada.",
+        description: result.data.appliedImmediately
+          ? "O novo plano já está em vigor."
+          : "A mudança entra em vigor no próximo ciclo de cobrança.",
+      });
+      router.refresh();
+    });
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Planos disponíveis</CardTitle>
+          <CardDescription>
+            {isOwner
+              ? "Upgrade entra em vigor imediatamente. Downgrade só é aplicado se o uso atual couber no plano novo, e vale a partir do próximo ciclo."
+              : "Só o proprietário da empresa pode trocar de plano."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {snapshot.pendingPlanId && snapshot.pendingPlanName ? (
+            <Alert variant="info">
+              Mudança para o plano <strong>{snapshot.pendingPlanName}</strong> agendada para o próximo ciclo.
+            </Alert>
+          ) : null}
+          {plans.map((plan) => {
+            const isCurrent = plan.id === snapshot.planId;
+            const isPendingTarget = plan.id === snapshot.pendingPlanId;
+            const isUpgrade = plan.sortOrder >= snapshot.planSortOrder;
+            return (
+              <div
+                key={plan.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border p-3"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-text">{plan.name}</p>
+                    {isCurrent ? <Badge variant="primary">Plano atual</Badge> : null}
+                    {isPendingTarget ? <Badge variant="warning">Agendado</Badge> : null}
+                  </div>
+                  <p className="mt-1 text-sm text-text-secondary">
+                    {plan.priceCents > 0 ? formatBRL(plan.priceCents) : "Grátis"} por mês ·{" "}
+                    {plan.maxProfessionals === null ? "Profissionais ilimitados" : `Até ${plan.maxProfessionals} profissional(is)`} ·{" "}
+                    Até {plan.maxWhatsappNumbers} número(s) de WhatsApp
+                  </p>
+                </div>
+                {isCurrent || isPendingTarget ? null : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => requestChange(plan)}
+                    disabled={!canChangePlan || isPending}
+                    title={!isOwner ? "Só o proprietário pode trocar de plano." : undefined}
+                  >
+                    {isUpgrade ? (
+                      <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+                    ) : (
+                      <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                    {isUpgrade ? "Fazer upgrade" : "Fazer downgrade"}
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      <Dialog open={!!pendingPlanTarget} onOpenChange={(open) => !open && setPendingPlanTarget(null)}>
+        <DialogContent>
+          <DialogTitle>Trocar de plano</DialogTitle>
+          <DialogDescription>
+            {pendingPlanTarget && pendingPlanTarget.sortOrder >= snapshot.planSortOrder
+              ? `Trocar agora para o plano "${pendingPlanTarget?.name}"? A diferença de preço aparece na próxima fatura.`
+              : `Trocar para o plano "${pendingPlanTarget?.name}"? Se o uso atual couber, a troca vale a partir do próximo ciclo.`}
+          </DialogDescription>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setPendingPlanTarget(null)}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={confirmChange} isLoading={isPending}>
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!blockedDetails} onOpenChange={(open) => !open && setBlockedDetails(null)}>
+        <DialogContent>
+          <DialogTitle>Não é possível fazer esse downgrade ainda</DialogTitle>
+          <DialogDescription>
+            {blockedDetails ? (
+              <>
+                O plano novo permite até <strong>{blockedDetails.limit}</strong> {RULE_LABEL[blockedDetails.rule]}, e a
+                empresa tem <strong>{blockedDetails.current}</strong> hoje. Remova{" "}
+                {blockedDetails.current - blockedDetails.limit} antes de tentar de novo.
+              </>
+            ) : null}
+          </DialogDescription>
+          <DialogFooter>
+            <Button type="button" onClick={() => setBlockedDetails(null)}>
+              Entendi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+export function AssinaturaClient({
+  tenantSlug,
+  snapshot,
+  plans,
+  isOwner,
+}: {
+  tenantSlug: string;
+  snapshot: BillingSnapshot;
+  plans: PlanListItem[];
+  isOwner: boolean;
+}) {
   const stillWaitingPayment = snapshot.invoice !== null && !snapshot.invoice.paidAt;
   useStatusPolling(stillWaitingPayment);
 
@@ -195,6 +371,8 @@ export function AssinaturaClient({ snapshot }: { snapshot: BillingSnapshot }) {
       </Card>
 
       {snapshot.invoice ? <PixCard invoice={snapshot.invoice} timezone={snapshot.timezone} /> : null}
+
+      <PlanosCard tenantSlug={tenantSlug} snapshot={snapshot} plans={plans} isOwner={isOwner} />
     </div>
   );
 }

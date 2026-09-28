@@ -2,8 +2,10 @@ import { notFound } from "next/navigation";
 import { UserRound } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { getPrisma } from "@/lib/db/prisma";
 import { listProfessionalsAction, listServicesAction } from "@/modules/agenda/catalog-actions";
 import { listScheduleExceptionsAction } from "@/modules/agenda/catalog-actions";
+import { isTenantWriteBlocked } from "../../_lib/write-blocked";
 import { ProfessionalDetailClient } from "./professional-detail-client";
 import type { ProfessionalRow } from "../profissionais-client";
 import type { ServiceRow } from "../../servicos/servicos-client";
@@ -47,11 +49,15 @@ export default async function ProfessionalDetailPage({
       }[]).filter((exc) => exc.professionalId === professionalId)
     : [];
 
+  const tenant = await getPrisma().tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
+  const writeBlocked = tenant ? await isTenantWriteBlocked(tenant.id) : false;
+
   return (
     <ProfessionalDetailClient
       tenantSlug={tenantSlug}
       professional={professional}
       allServices={services}
+      writeBlocked={writeBlocked}
       initialExceptions={exceptions.map((exc) => ({
         ...exc,
         startsAt: new Date(exc.startsAt).toISOString(),

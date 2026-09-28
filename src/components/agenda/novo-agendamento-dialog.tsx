@@ -35,6 +35,8 @@ type Props = {
   onCreated: (appointment: unknown) => void;
   /** Fuso do tenant — os horários livres vêm do servidor em UTC, precisam exibir na hora local da empresa. */
   timezone: string;
+  /** Assinatura suspensa/cancelada (refinamento de UX — o servidor já bloqueia). */
+  disabled?: boolean;
 };
 
 function todayISO(): string {
@@ -57,6 +59,7 @@ export function NovoAgendamentoDialog({
   prefill,
   onCreated,
   timezone,
+  disabled = false,
 }: Props) {
   const activeServices = services.filter((s) => s.active);
   const activeProfessionals = professionals.filter((p) => p.active);
@@ -167,7 +170,11 @@ export function NovoAgendamentoDialog({
 
         <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
           {error ? <Alert variant="danger">{error}</Alert> : null}
+          {disabled ? (
+            <Alert variant="danger">Assinatura suspensa — não é possível criar agendamentos até o pagamento.</Alert>
+          ) : null}
 
+          <fieldset disabled={disabled} className="flex flex-col gap-4">
           <div>
             <Label htmlFor="na-service">Serviço</Label>
             <Select id="na-service" value={serviceId} onChange={(e) => setServiceId(e.target.value)} required>
@@ -256,12 +263,13 @@ export function NovoAgendamentoDialog({
               />
             )}
           </Field>
+          </fieldset>
 
           <DialogFooter>
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" isLoading={isPending}>
+            <Button type="submit" isLoading={isPending} disabled={disabled}>
               Agendar
             </Button>
           </DialogFooter>

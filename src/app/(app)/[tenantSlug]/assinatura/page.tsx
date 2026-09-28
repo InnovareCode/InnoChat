@@ -3,7 +3,9 @@ import { CreditCard } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getPrisma } from "@/lib/db/prisma";
+import { auth } from "@/lib/auth";
 import { effectiveStatus } from "@/core/billing";
+import { listActivePlansAction, type PlanListItem } from "@/modules/billing/actions";
 import { AssinaturaClient, type BillingSnapshot } from "./assinatura-client";
 
 export default async function AssinaturaPage({
@@ -35,18 +37,38 @@ export default async function AssinaturaPage({
   const now = new Date();
   const status = effectiveStatus(subscription, now);
 
-  const openInvoice = await getPrisma().invoice.findFirst({
-    where: { subscriptionId: subscription.id, status: "OPEN" },
-    orderBy: { periodStart: "desc" },
-  });
+  const [openInvoice, pendingPlan, session] = await Promise.all([
+    getPrisma().invoice.findFirst({
+      where: { subscriptionId: subscription.id, status: "OPEN" },
+      orderBy: { periodStart: "desc" },
+    }),
+    subscription.pendingPlanId
+      ? getPrisma().plan.findUnique({ where: { id: subscription.pendingPlanId }, select: { name: true } })
+      : Promise.resolve(null),
+    auth(),
+  ]);
+
+  const membership = session?.user?.id
+    ? await getPrisma().membership.findFirst({
+        where: { userId: session.user.id, tenant: { slug: tenantSlug } },
+        select: { role: true },
+      })
+    : null;
+
+  const plansResult = await listActivePlansAction(tenantSlug);
+  const plans: PlanListItem[] = plansResult.ok ? plansResult.data : [];
 
   const snapshot: BillingSnapshot = {
+    planId: subscription.planId,
     planName: subscription.plan.name,
+    planSortOrder: subscription.plan.sortOrder,
     priceCents: subscription.plan.priceCents,
     status,
     trialEndsAt: subscription.trialEndsAt?.toISOString() ?? null,
     currentPeriodEnd: subscription.currentPeriodEnd.toISOString(),
     timezone: tenant.timezone,
+    pendingPlanId: subscription.pendingPlanId,
+    pendingPlanName: pendingPlan?.name ?? null,
     invoice: openInvoice
       ? {
           amountCents: openInvoice.amountCents,
@@ -58,5 +80,5 @@ export default async function AssinaturaPage({
       : null,
   };
 
-  return <AssinaturaClient snapshot={snapshot} />;
+  return <AssinaturaClient tenantSlug={tenantSlug} snapshot={snapshot} plans={plans} isOwner={membership?.role === "OWNER"} />;
 }

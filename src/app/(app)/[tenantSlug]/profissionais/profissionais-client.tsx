@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
@@ -28,12 +29,16 @@ export type ProfessionalRow = {
   workingHours: { id: string; weekday: number; startTime: string; endTime: string }[];
 };
 
+const WRITE_BLOCKED_HINT = "Assinatura suspensa — ação bloqueada até o pagamento.";
+
 export function ProfissionaisClient({
   tenantSlug,
   initialProfessionals,
+  writeBlocked = false,
 }: {
   tenantSlug: string;
   initialProfessionals: ProfessionalRow[];
+  writeBlocked?: boolean;
 }) {
   const [professionals, setProfessionals] = useState<ProfessionalRow[]>(initialProfessionals);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -113,19 +118,32 @@ export function ProfissionaisClient({
         title="Profissionais"
         description="Expediente semanal e serviços de cada um."
         action={
-          <Button onClick={openCreate}>
+          <Button onClick={openCreate} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             Novo profissional
           </Button>
         }
       />
 
+      {writeBlocked ? (
+        <Alert variant="danger" className="mb-4">
+          {WRITE_BLOCKED_HINT}{" "}
+          <Link href={`/${tenantSlug}/assinatura`} className="font-medium underline">
+            Ver assinatura
+          </Link>
+        </Alert>
+      ) : null}
+
       {professionals.length === 0 ? (
         <EmptyState
           icon={UserRound}
           title="Nenhum profissional cadastrado ainda"
           description="Crie o primeiro profissional para definir expediente e serviços."
-          action={<Button onClick={openCreate}>Novo profissional</Button>}
+          action={
+            <Button onClick={openCreate} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}>
+              Novo profissional
+            </Button>
+          }
         />
       ) : (
         <Card>
@@ -160,8 +178,9 @@ export function ProfissionaisClient({
                     <button
                       type="button"
                       onClick={() => toggleActive(professional)}
-                      disabled={isPending}
-                      className="cursor-pointer"
+                      disabled={isPending || writeBlocked}
+                      className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                      title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
                       aria-label={professional.active ? `Desativar ${professional.name}` : `Ativar ${professional.name}`}
                     >
                       <Badge variant={professional.active ? "success" : "neutral"}>
@@ -179,6 +198,8 @@ export function ProfissionaisClient({
                         size="icon"
                         aria-label={`Excluir ${professional.name}`}
                         onClick={() => setConfirmDelete(professional)}
+                        disabled={writeBlocked}
+                        title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
                       >
                         <Trash2 className="h-4 w-4" aria-hidden="true" />
                       </Button>

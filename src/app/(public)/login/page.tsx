@@ -9,9 +9,9 @@ export const metadata: Metadata = { title: "Entrar — InnoChat" };
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; redefinida?: string }>;
+  searchParams: Promise<{ erro?: string; redefinida?: string; instalado?: string }>;
 }) {
-  const { erro, redefinida } = await searchParams;
+  const { erro, redefinida, instalado } = await searchParams;
 
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
@@ -33,6 +33,11 @@ export default async function LoginPage({
             {redefinida === "1" ? (
               <Alert variant="success" title="Senha redefinida">
                 Já pode entrar com a nova senha.
+              </Alert>
+            ) : null}
+            {instalado === "1" ? (
+              <Alert variant="success" title="Instalação concluída">
+                A conta de administrador da plataforma foi criada. Entre com o e-mail e a senha que você definiu.
               </Alert>
             ) : null}
             <LoginForm />

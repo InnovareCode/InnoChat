@@ -124,11 +124,13 @@ export function AgendaClient({
   timezone,
   professionals,
   services,
+  writeBlocked = false,
 }: {
   tenantSlug: string;
   timezone: string;
   professionals: ProfessionalRow[];
   services: ServiceRow[];
+  writeBlocked?: boolean;
 }) {
   const [view, setView] = useState<"day" | "week">("day");
   const [dateISO, setDateISO] = useState(() => formatInTimeZone(new Date(), timezone, "yyyy-MM-dd"));
@@ -231,7 +233,11 @@ export function AgendaClient({
         title="Agenda"
         description={friendlyTimezoneLabel(timezone)}
         action={
-          <Button onClick={() => openNovoBlank()}>
+          <Button
+            onClick={() => openNovoBlank()}
+            disabled={writeBlocked}
+            title={writeBlocked ? "Assinatura suspensa — ação bloqueada até o pagamento." : undefined}
+          >
             <Plus className="h-4 w-4" aria-hidden="true" />
             Novo agendamento
           </Button>
@@ -350,6 +356,7 @@ export function AgendaClient({
         onOpenChange={setNovoOpen}
         prefill={novoPrefill}
         onCreated={() => load()}
+        disabled={writeBlocked}
       />
       <DetalheAgendamentoDialog
         tenantSlug={tenantSlug}
@@ -357,6 +364,7 @@ export function AgendaClient({
         timezone={timezone}
         onOpenChange={(open) => !open && setDetail(null)}
         onUpdated={() => load()}
+        disabled={writeBlocked}
       />
     </div>
   );

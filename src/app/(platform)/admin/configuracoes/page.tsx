@@ -10,7 +10,7 @@ export default async function AdminConfiguracoesPage() {
   if (!result.ok) {
     return (
       <div>
-        <PageHeader title="Configurações da plataforma" description="Evolution, e-mail e segredo da API interna." />
+        <PageHeader title="Configurações da plataforma" description="Evolution, n8n, e-mail, Mercado Pago e segredo da API interna." />
         <EmptyState icon={Settings} title="Não deu para carregar" description={result.error.message} />
       </div>
     );

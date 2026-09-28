@@ -11,6 +11,7 @@ import { Select } from "@/components/ui/select";
 import { Field } from "@/components/ui/field";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -35,16 +36,20 @@ type ExceptionRow = {
   reason: string | null;
 };
 
+const WRITE_BLOCKED_HINT = "Assinatura suspensa — ação bloqueada até o pagamento.";
+
 export function ProfessionalDetailClient({
   tenantSlug,
   professional,
   allServices,
   initialExceptions,
+  writeBlocked = false,
 }: {
   tenantSlug: string;
   professional: ProfessionalRow;
   allServices: ServiceRow[];
   initialExceptions: ExceptionRow[];
+  writeBlocked?: boolean;
 }) {
   const { notify } = useToast();
   const [isPending, startTransition] = useTransition();
@@ -191,6 +196,15 @@ export function ProfessionalDetailClient({
         }
       />
 
+      {writeBlocked ? (
+        <Alert variant="danger">
+          {WRITE_BLOCKED_HINT}{" "}
+          <Link href={`/${tenantSlug}/assinatura`} className="font-medium underline">
+            Ver assinatura
+          </Link>
+        </Alert>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle>Dados</CardTitle>
@@ -199,7 +213,9 @@ export function ProfessionalDetailClient({
           <form onSubmit={saveBasics} className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-4">
             <div className="flex-1">
               <Field label="Nome" required>
-                {(fieldProps) => <Input {...fieldProps} value={name} onChange={(e) => setName(e.target.value)} required />}
+                {(fieldProps) => (
+                  <Input {...fieldProps} value={name} onChange={(e) => setName(e.target.value)} required disabled={writeBlocked} />
+                )}
               </Field>
             </div>
             <label className="flex items-center gap-2 pb-2.5 text-sm text-text">
@@ -207,11 +223,12 @@ export function ProfessionalDetailClient({
                 type="checkbox"
                 checked={active}
                 onChange={(e) => setActive(e.target.checked)}
+                disabled={writeBlocked}
                 className="h-4 w-4 rounded border-border accent-primary"
               />
               Ativo
             </label>
-            <Button type="submit" isLoading={isPending}>
+            <Button type="submit" isLoading={isPending} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}>
               Salvar
             </Button>
           </form>
@@ -234,6 +251,7 @@ export function ProfessionalDetailClient({
                     type="checkbox"
                     checked={serviceIds.has(service.id)}
                     onChange={() => toggleService(service.id)}
+                    disabled={writeBlocked}
                     className="h-4 w-4 rounded border-border accent-primary"
                   />
                   {service.name}
@@ -243,7 +261,12 @@ export function ProfessionalDetailClient({
           )}
         </CardContent>
         <CardFooter>
-          <Button onClick={saveServices} isLoading={isPending} disabled={allServices.length === 0}>
+          <Button
+            onClick={saveServices}
+            isLoading={isPending}
+            disabled={allServices.length === 0 || writeBlocked}
+            title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+          >
             Salvar serviços
           </Button>
         </CardFooter>
@@ -261,7 +284,13 @@ export function ProfessionalDetailClient({
               <div key={weekday} className="flex flex-col gap-2 border-b border-border pb-4 last:border-0 last:pb-0">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-text">{label}</p>
-                  <Button variant="ghost" size="sm" onClick={() => addHourRange(weekday)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => addHourRange(weekday)}
+                    disabled={writeBlocked}
+                    title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+                  >
                     <Plus className="h-3.5 w-3.5" aria-hidden="true" />
                     Adicionar intervalo
                   </Button>
@@ -277,6 +306,7 @@ export function ProfessionalDetailClient({
                         onChange={(e) => updateHour(h.id, "startTime", e.target.value)}
                         className="w-32"
                         aria-label={`Início, ${label}`}
+                        disabled={writeBlocked}
                       />
                       <span className="text-sm text-text-secondary">até</span>
                       <Input
@@ -285,6 +315,7 @@ export function ProfessionalDetailClient({
                         onChange={(e) => updateHour(h.id, "endTime", e.target.value)}
                         className="w-32"
                         aria-label={`Fim, ${label}`}
+                        disabled={writeBlocked}
                       />
                       <Button
                         type="button"
@@ -292,6 +323,8 @@ export function ProfessionalDetailClient({
                         size="icon"
                         aria-label="Remover intervalo"
                         onClick={() => removeHour(h.id)}
+                        disabled={writeBlocked}
+                        title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
                       >
                         <Trash2 className="h-4 w-4" aria-hidden="true" />
                       </Button>
@@ -303,7 +336,7 @@ export function ProfessionalDetailClient({
           })}
         </CardContent>
         <CardFooter>
-          <Button onClick={saveHours} isLoading={isPending}>
+          <Button onClick={saveHours} isLoading={isPending} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}>
             Salvar expediente
           </Button>
         </CardFooter>
@@ -331,7 +364,14 @@ export function ProfessionalDetailClient({
                   </div>
                   {exc.reason ? <p className="mt-1 text-xs text-text-secondary">{exc.reason}</p> : null}
                 </div>
-                <Button variant="ghost" size="icon" aria-label="Excluir bloqueio" onClick={() => handleDeleteBlock(exc.id)}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Excluir bloqueio"
+                  onClick={() => handleDeleteBlock(exc.id)}
+                  disabled={writeBlocked}
+                  title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+                >
                   <Trash2 className="h-4 w-4" aria-hidden="true" />
                 </Button>
               </div>
@@ -339,7 +379,7 @@ export function ProfessionalDetailClient({
           )}
         </CardContent>
         <CardFooter>
-          <Button variant="secondary" onClick={openBlockDialog}>
+          <Button variant="secondary" onClick={openBlockDialog} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             Novo bloqueio
           </Button>

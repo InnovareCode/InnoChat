@@ -41,6 +41,8 @@ type Props = {
   timezone: string;
   onOpenChange: (open: boolean) => void;
   onUpdated: (appointment: unknown) => void;
+  /** Assinatura suspensa/cancelada (refinamento de UX — o servidor já bloqueia). */
+  disabled?: boolean;
 };
 
 function toDateTimeLocal(iso: string): string {
@@ -49,7 +51,14 @@ function toDateTimeLocal(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function DetalheAgendamentoDialog({ tenantSlug, appointment, timezone, onOpenChange, onUpdated }: Props) {
+export function DetalheAgendamentoDialog({
+  tenantSlug,
+  appointment,
+  timezone,
+  onOpenChange,
+  onUpdated,
+  disabled = false,
+}: Props) {
   const [mode, setMode] = useState<"view" | "reschedule" | "cancel">("view");
   const [newStartsAt, setNewStartsAt] = useState("");
   const [cancelNote, setCancelNote] = useState("");
@@ -175,19 +184,25 @@ export function DetalheAgendamentoDialog({ tenantSlug, appointment, timezone, on
 
         {mode === "view" && appointment.status === "SCHEDULED" ? (
           <DialogFooter>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => {
-                setNewStartsAt(toDateTimeLocal(appointment.startsAt));
-                setMode("reschedule");
-              }}
-            >
-              Remarcar
-            </Button>
-            <Button type="button" variant="danger" onClick={() => setMode("cancel")}>
-              Cancelar agendamento
-            </Button>
+            {disabled ? (
+              <p className="text-sm text-danger">Assinatura suspensa — remarcação e cancelamento bloqueados até o pagamento.</p>
+            ) : (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setNewStartsAt(toDateTimeLocal(appointment.startsAt));
+                    setMode("reschedule");
+                  }}
+                >
+                  Remarcar
+                </Button>
+                <Button type="button" variant="danger" onClick={() => setMode("cancel")}>
+                  Cancelar agendamento
+                </Button>
+              </>
+            )}
           </DialogFooter>
         ) : null}
       </DialogContent>

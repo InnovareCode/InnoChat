@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Pencil, Plus, Scissors, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -7,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
 import {
   Dialog,
@@ -57,7 +59,17 @@ const EMPTY_FORM: FormState = {
   sortOrder: "0",
 };
 
-export function ServicosClient({ tenantSlug, initialServices }: { tenantSlug: string; initialServices: ServiceRow[] }) {
+const WRITE_BLOCKED_HINT = "Assinatura suspensa — ação bloqueada até o pagamento.";
+
+export function ServicosClient({
+  tenantSlug,
+  initialServices,
+  writeBlocked = false,
+}: {
+  tenantSlug: string;
+  initialServices: ServiceRow[];
+  writeBlocked?: boolean;
+}) {
   const [services, setServices] = useState<ServiceRow[]>(initialServices);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ServiceRow | null>(null);
@@ -169,19 +181,32 @@ export function ServicosClient({ tenantSlug, initialServices }: { tenantSlug: st
         title="Serviços"
         description="Nome, duração, intervalo, preço opcional e ordem."
         action={
-          <Button onClick={openCreate}>
+          <Button onClick={openCreate} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}>
             <Plus className="h-4 w-4" aria-hidden="true" />
             Novo serviço
           </Button>
         }
       />
 
+      {writeBlocked ? (
+        <Alert variant="danger" className="mb-4">
+          {WRITE_BLOCKED_HINT}{" "}
+          <Link href={`/${tenantSlug}/assinatura`} className="font-medium underline">
+            Ver assinatura
+          </Link>
+        </Alert>
+      ) : null}
+
       {services.length === 0 ? (
         <EmptyState
           icon={Scissors}
           title="Nenhum serviço cadastrado ainda"
           description="Crie o primeiro serviço para começar a montar a agenda."
-          action={<Button onClick={openCreate}>Novo serviço</Button>}
+          action={
+            <Button onClick={openCreate} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}>
+              Novo serviço
+            </Button>
+          }
         />
       ) : (
         <Card>
@@ -207,8 +232,9 @@ export function ServicosClient({ tenantSlug, initialServices }: { tenantSlug: st
                     <button
                       type="button"
                       onClick={() => toggleActive(service)}
-                      disabled={isPending}
-                      className="cursor-pointer"
+                      disabled={isPending || writeBlocked}
+                      className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                      title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
                       aria-label={service.active ? `Desativar ${service.name}` : `Ativar ${service.name}`}
                     >
                       <Badge variant={service.active ? "success" : "neutral"}>
@@ -218,7 +244,14 @@ export function ServicosClient({ tenantSlug, initialServices }: { tenantSlug: st
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" aria-label={`Editar ${service.name}`} onClick={() => openEdit(service)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Editar ${service.name}`}
+                        onClick={() => openEdit(service)}
+                        disabled={writeBlocked}
+                        title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+                      >
                         <Pencil className="h-4 w-4" aria-hidden="true" />
                       </Button>
                       <Button
@@ -226,6 +259,8 @@ export function ServicosClient({ tenantSlug, initialServices }: { tenantSlug: st
                         size="icon"
                         aria-label={`Excluir ${service.name}`}
                         onClick={() => setConfirmDelete(service)}
+                        disabled={writeBlocked}
+                        title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
                       >
                         <Trash2 className="h-4 w-4" aria-hidden="true" />
                       </Button>

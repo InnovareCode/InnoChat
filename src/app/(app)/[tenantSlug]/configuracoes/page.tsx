@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Palette, Building2, Clock, Users2 } from "lucide-react";
+import { Palette, Building2, Clock, Users2, CalendarOff } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -24,6 +24,13 @@ const SECTIONS = [
     title: "Regras de agenda e do bot",
     description: "Antecedência mínima, horizonte máximo, timeout da sessão.",
     ready: false,
+  },
+  {
+    href: "bloqueios",
+    icon: CalendarOff,
+    title: "Bloqueios e feriados",
+    description: "Períodos em que a empresa inteira não atende, para todos os profissionais.",
+    ready: true,
   },
   {
     href: "equipe",

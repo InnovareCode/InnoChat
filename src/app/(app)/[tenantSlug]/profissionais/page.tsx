@@ -1,7 +1,9 @@
 import { UserRound } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { getPrisma } from "@/lib/db/prisma";
 import { listProfessionalsAction } from "@/modules/agenda/catalog-actions";
+import { isTenantWriteBlocked } from "../_lib/write-blocked";
 import { ProfissionaisClient, type ProfessionalRow } from "./profissionais-client";
 
 export default async function ProfissionaisPage({
@@ -25,7 +27,14 @@ export default async function ProfissionaisPage({
     );
   }
 
+  const tenant = await getPrisma().tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
+  const writeBlocked = tenant ? await isTenantWriteBlocked(tenant.id) : false;
+
   return (
-    <ProfissionaisClient tenantSlug={tenantSlug} initialProfessionals={result.data as ProfessionalRow[]} />
+    <ProfissionaisClient
+      tenantSlug={tenantSlug}
+      initialProfessionals={result.data as ProfessionalRow[]}
+      writeBlocked={writeBlocked}
+    />
   );
 }

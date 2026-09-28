@@ -1,7 +1,9 @@
 import { Scissors } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { getPrisma } from "@/lib/db/prisma";
 import { listServicesAction } from "@/modules/agenda/catalog-actions";
+import { isTenantWriteBlocked } from "../_lib/write-blocked";
 import { ServicosClient, type ServiceRow } from "./servicos-client";
 
 export default async function ServicosPage({
@@ -25,7 +27,10 @@ export default async function ServicosPage({
     );
   }
 
+  const tenant = await getPrisma().tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true } });
+  const writeBlocked = tenant ? await isTenantWriteBlocked(tenant.id) : false;
+
   return (
-    <ServicosClient tenantSlug={tenantSlug} initialServices={result.data as ServiceRow[]} />
+    <ServicosClient tenantSlug={tenantSlug} initialServices={result.data as ServiceRow[]} writeBlocked={writeBlocked} />
   );
 }
