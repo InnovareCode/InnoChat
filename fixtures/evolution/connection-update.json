@@ -1,0 +1,8 @@
+{
+  "_source": "não capturado do servidor real — baseado na documentação pública da Evolution API v2, Fase 4. Ver fixtures/evolution/README.md.",
+  "event": "connection.update",
+  "instance": "innochat-studio-bela-x7k2",
+  "data": { "state": "open", "statusReason": 200 },
+  "date_time": "2026-09-28T14:07:00.000Z",
+  "apikey": "REDACTED"
+}

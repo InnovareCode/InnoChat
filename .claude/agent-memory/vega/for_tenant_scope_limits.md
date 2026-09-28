@@ -8,8 +8,10 @@ metadata:
 `src/lib/db/tenant-scope.ts` (InnoChat) injeta `tenantId` automaticamente só
 nos models que têm **coluna `tenantId` própria** no schema:
 `Membership`, `Service`, `Professional`, `ScheduleException`, `Contact`,
-`Appointment`, `WhatsappInstance`, `BotText` (confirmado contra
-`prisma/schema.prisma` do Cronos, Fase 1).
+`Appointment`, `WhatsappInstance`, `BotText`, `Subscription` (confirmado contra
+`prisma/schema.prisma`, Fases 1/2/4/7). `TrialClaim` TEM `tenantId` próprio mas fica DE FORA
+de propósito — a checagem de trial por número precisa ser cross-tenant (ver comentário no
+model e em `tenant-scope.ts`).
 
 **Por quê:** vários models tenant-scoped do domínio NÃO têm `tenantId`
 próprio — o isolamento é por relação até o pai que tem a coluna:

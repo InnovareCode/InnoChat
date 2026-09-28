@@ -1,0 +1,5 @@
+{
+  "_source": "payload deliberadamente malformado, para provar que /messages/claim nunca devolve 5xx (docs/arquitetura.md §6.2).",
+  "hello": "world",
+  "event": "something.unexpected"
+}

@@ -1,0 +1,20 @@
+{
+  "_source": "não capturado do servidor real — baseado na documentação pública da Evolution API v2, Fase 4. Ver fixtures/evolution/README.md.",
+  "event": "messages.upsert",
+  "instance": "innochat-studio-bela-x7k2",
+  "data": {
+    "key": {
+      "remoteJid": "184926574839201@lid",
+      "remoteJidAlt": "5511977776666@s.whatsapp.net",
+      "fromMe": false,
+      "id": "3EB0C767D26A1D2F1236"
+    },
+    "senderPn": "5511977776666@s.whatsapp.net",
+    "pushName": "Carlos",
+    "message": { "conversation": "1" },
+    "messageType": "conversation",
+    "messageTimestamp": 1759020120
+  },
+  "date_time": "2026-09-28T14:02:00.000Z",
+  "apikey": "REDACTED"
+}

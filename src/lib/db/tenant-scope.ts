@@ -17,14 +17,22 @@
  *
  * NÃO estão aqui, de propósito:
  * - Globais (arquitetura.md §5, §11), sempre via `getPrisma()`: `User`,
- *   `PlatformSettings`, `AuthToken`. (`Plan`/`ProviderEvent`/`TrialClaim` da
- *   Fase 7 ainda não estão no schema desta fase.)
+ *   `PlatformSettings`, `AuthToken`, `Plan` (catálogo de planos, cross-tenant
+ *   por natureza).
+ * - `ProviderEvent`: global (dedupe de webhook de pagamento por provedor, sem
+ *   noção de tenant).
+ * - `TrialClaim`: TEM `tenantId` próprio, mas fica de fora DE PROPÓSITO — a
+ *   verificação de "este número já usou trial" (Fase 7, §7.3 regra 4) precisa
+ *   ser CROSS-tenant. Colocar aqui faria `forTenant()` filtrar por tenant e
+ *   quebrar exatamente a checagem que este model existe para fazer (ver
+ *   comentário em `prisma/schema.prisma` no model `TrialClaim`).
  * - Tenant-scoped SEM coluna `tenantId` própria — o isolamento é por relação
  *   (join até o pai que tem `tenantId`), então este mecanismo genérico não
  *   serve: `ProfessionalService` (via `professionalId` → `Professional`),
  *   `WorkingHour` (via `professionalId` → `Professional`),
  *   `AppointmentEvent` (via `appointmentId` → `Appointment`), `ChatSession`
- *   (via `whatsappInstanceId` → `WhatsappInstance`), `InboundEvent` (idem).
+ *   (via `whatsappInstanceId` → `WhatsappInstance`), `InboundEvent` (idem),
+ *   `Invoice` (via `subscriptionId` → `Subscription`).
  *   Quem consultar esses models precisa filtrar pelo pai já resolvido para o
  *   tenant certo (ex.: carregar o `Professional` com `forTenant()` primeiro),
  *   nunca confiar em um filtro direto por essas tabelas.
@@ -38,6 +46,7 @@ export const TENANT_SCOPED_MODELS = [
   "Appointment",
   "WhatsappInstance",
   "BotText",
+  "Subscription",
 ] as const;
 
 export type TenantScopedModel = (typeof TENANT_SCOPED_MODELS)[number];

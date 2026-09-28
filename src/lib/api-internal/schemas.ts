@@ -1,0 +1,171 @@
+import { z } from "zod";
+
+/**
+ * Contratos zod da API interna do bot (docs/arquitetura.md §6.1–6.5, §6.8). Fonte única para:
+ * 1) validação de entrada nas rotas (`src/app/api/internal/v1/**`);
+ * 2) geração do OpenAPI (`scripts/generate-openapi.mjs` → `docs/api-interna.openapi.json`).
+ *
+ * Nomes exportados terminam em `Schema` (request) ou `ResponseSchema` (response) — o gerador
+ * varre este módulo por convenção de nome, então mudar o padrão aqui exige atualizar o script.
+ */
+
+const isoDateOnly = /^\d{4}-\d{2}-\d{2}$/;
+
+// ---------------------------------------------------------------------------
+// POST /messages/claim (§6.2)
+// ---------------------------------------------------------------------------
+
+export const ClaimRequestSchema = z
+  .object({ payload: z.unknown().describe("Corpo bruto do webhook da Evolution API v2 (messages.upsert ou connection.update).") })
+  .describe("Corpo de POST /messages/claim");
+
+const optionSchema = z.object({ id: z.string(), label: z.string() });
+
+export const ClaimProcessResponseSchema = z
+  .object({
+    action: z.literal("process"),
+    inboundEventId: z.string(),
+    instance: z.object({ name: z.string(), sandbox: z.boolean() }),
+    to: z.string().describe("Dígitos do JID exatamente como recebidos (§6.9)."),
+    message: z.union([z.object({ type: z.literal("text"), text: z.string() }), z.object({ type: z.literal("media") })]),
+    contact: z.object({ id: z.string(), name: z.string().nullable(), pushName: z.string().nullable() }),
+    session: z.object({
+      id: z.string(),
+      state: z.string(),
+      context: z.record(z.string(), z.unknown()),
+      invalidCount: z.number().int(),
+      version: z.number().int(),
+      lockToken: z.string(),
+      expired: z.boolean(),
+    }),
+    tenant: z.object({ name: z.string(), askProfessional: z.boolean() }),
+    texts: z.record(z.string(), z.string()),
+  })
+  .describe("200 — processar (§6.2)");
+
+export const ClaimBusyResponseSchema = z.object({ action: z.literal("busy"), retryAfterMs: z.number().int() }).describe("200 — tentar de novo (§6.2)");
+
+export const ClaimIgnoreResponseSchema = z
+  .object({
+    action: z.literal("ignore"),
+    reason: z.enum([
+      "DUPLICATE",
+      "STALE",
+      "GROUP",
+      "UNSUPPORTED_EVENT",
+      "FROM_ME_ECHO",
+      "HUMAN_TOOK_OVER",
+      "HUMAN_MODE",
+      "BOT_PAUSED",
+      "TENANT_SUSPENDED",
+      "UNRESOLVABLE_SENDER",
+    ]),
+  })
+  .describe("200 — nada a fazer (§6.2)");
+
+// ---------------------------------------------------------------------------
+// Sessão (§6.3)
+// ---------------------------------------------------------------------------
+
+export const UpdateSessionRequestSchema = z
+  .object({
+    lockToken: z.string().min(1),
+    version: z.number().int().min(0),
+    state: z.string().min(1).max(64),
+    context: z.record(z.string(), z.unknown()).default({}),
+    invalidCount: z.number().int().min(0).default(0),
+    outbound: z.array(z.string()).max(10),
+    handoff: z.boolean().default(false),
+  })
+  .describe("Corpo de PUT /sessions/{id}");
+
+export const UpdateSessionResponseSchema = z.object({ version: z.number().int() }).describe("200 (§6.3)");
+
+export const ReleaseSessionRequestSchema = z.object({ lockToken: z.string().min(1) }).describe("Corpo de POST /sessions/{id}/release");
+export const ReleaseSessionResponseSchema = z.object({ released: z.literal(true) }).describe("200, sempre idempotente (§6.3)");
+
+// ---------------------------------------------------------------------------
+// Catálogo e disponibilidade (§6.4) — todas GET, sem corpo.
+// ---------------------------------------------------------------------------
+
+export const CatalogServicesResponseSchema = z
+  .object({ options: z.array(optionSchema.extend({ durationMin: z.number().int() })) })
+  .describe("200 GET /catalog/services");
+
+export const CatalogProfessionalsResponseSchema = z
+  .object({ options: z.array(optionSchema), skip: z.boolean() })
+  .describe("200 GET /catalog/services/{serviceId}/professionals");
+
+export const AvailabilityDaysQuerySchema = z.object({
+  serviceId: z.string().min(1),
+  professionalId: z.string().min(1).optional(),
+  from: z.string().regex(isoDateOnly, "from precisa estar no formato YYYY-MM-DD"),
+  limit: z.coerce.number().int().min(1).max(7).default(7),
+});
+export const AvailabilityDaysResponseSchema = z
+  .object({ options: z.array(optionSchema), hasMore: z.boolean(), nextFrom: z.string().nullable() })
+  .describe("200 GET /availability/days");
+
+export const AvailabilitySlotsQuerySchema = z.object({
+  serviceId: z.string().min(1),
+  professionalId: z.string().min(1).optional(),
+  date: z.string().regex(isoDateOnly, "date precisa estar no formato YYYY-MM-DD"),
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(8).default(8),
+});
+export const AvailabilitySlotsResponseSchema = z.object({ options: z.array(optionSchema), hasMore: z.boolean() }).describe("200 GET /availability/slots");
+
+// ---------------------------------------------------------------------------
+// Escrita: contato e agendamento (§6.5)
+// ---------------------------------------------------------------------------
+
+export const UpdateContactRequestSchema = z.object({ name: z.string().min(1).max(60) }).describe("Corpo de PATCH /contacts/{contactId}");
+
+export const ContactAppointmentsQuerySchema = z.object({ upcoming: z.coerce.boolean().default(true) });
+export const ContactAppointmentsResponseSchema = z
+  .object({ options: z.array(optionSchema) })
+  .describe("200 GET /contacts/{contactId}/appointments");
+
+export const CreateAppointmentRequestSchema = z
+  .object({
+    contactId: z.string().min(1),
+    serviceId: z.string().min(1),
+    professionalId: z.string().min(1).nullable(),
+    startsAt: z.coerce.date().describe("ISO 8601 (ex.: 2026-09-30T17:30:00Z)"),
+    idempotencyKey: z.string().min(1).max(190),
+    instanceName: z.string().min(1).optional(),
+  })
+  .describe("Corpo de POST /appointments");
+
+const alternativesSchema = z.object({ date: z.string(), options: z.array(optionSchema) });
+
+export const AppointmentSummarySchema = z.object({
+  id: z.string(),
+  summary: z.object({ servico: z.string(), profissional: z.string(), data: z.string(), hora: z.string() }),
+});
+export const CreateAppointmentResponseSchema = z.object({ appointment: AppointmentSummarySchema }).describe("201/200 (§6.5)");
+export const SlotTakenResponseSchema = z.object({ alternatives: alternativesSchema }).describe("409 SLOT_TAKEN (§6.5)");
+
+export const CancelAppointmentRequestSchema = z
+  .object({ contactId: z.string().min(1), idempotencyKey: z.string().min(1).max(190).optional() })
+  .describe("Corpo de POST /appointments/{id}/cancel");
+
+export const RescheduleAppointmentRequestSchema = z
+  .object({ contactId: z.string().min(1), startsAt: z.coerce.date().describe("ISO 8601 (ex.: 2026-09-30T17:30:00Z)"), idempotencyKey: z.string().min(1).max(190).optional() })
+  .describe("Corpo de POST /appointments/{id}/reschedule");
+
+// ---------------------------------------------------------------------------
+// Outros (§6.8)
+// ---------------------------------------------------------------------------
+
+export const ConnectionEventRequestSchema = z.object({ payload: z.unknown() }).describe("Corpo de POST /connection-events");
+export const ConnectionEventResponseSchema = z.object({ applied: z.boolean() }).describe("200 sempre (§6.8)");
+
+export const SandboxOutboxRequestSchema = z
+  .object({ sessionId: z.string().min(1), messages: z.array(z.string()).min(1).max(3) })
+  .describe("Corpo de POST /sandbox/outbox");
+export const SandboxOutboxResponseSchema = z.object({ accepted: z.number().int() });
+
+export const ErrorResponseSchema = z
+  .object({ error: z.object({ code: z.string(), message: z.string(), details: z.unknown().optional() }) })
+  .describe("Envelope de erro único de toda a API interna (§6.1)");

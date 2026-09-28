@@ -1,0 +1,2947 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "InnoChat — API interna (n8n → painel)",
+    "version": "1.0.0",
+    "description": "Contrato consumido pelo workflow innochat-bot no n8n (docs/arquitetura.md §6). Gerado a partir dos schemas zod em src/lib/api-internal/schemas.ts — rode `node scripts/generate-openapi.mjs` depois de qualquer mudança nesses schemas."
+  },
+  "servers": [
+    {
+      "url": "https://<painel>/api/internal/v1",
+      "description": "Base da API interna (§6.1)"
+    }
+  ],
+  "paths": {
+    "/messages/claim": {
+      "post": {
+        "summary": "Normaliza, deduplica, trava e carrega a sessão (§6.2)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "payload": {
+                    "description": "Corpo bruto do webhook da Evolution API v2 (messages.upsert ou connection.update)."
+                  }
+                },
+                "required": [
+                  "payload"
+                ],
+                "additionalProperties": false,
+                "description": "Corpo de POST /messages/claim"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "process | busy | ignore — nunca 5xx para payload irreconhecível.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "type": "string",
+                          "enum": [
+                            "process"
+                          ]
+                        },
+                        "inboundEventId": {
+                          "type": "string"
+                        },
+                        "instance": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "sandbox": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "sandbox"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "to": {
+                          "type": "string",
+                          "description": "Dígitos do JID exatamente como recebidos (§6.9)."
+                        },
+                        "message": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "text"
+                                  ]
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "media"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "contact": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "name": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "pushName": {
+                              "nullable": true,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "name",
+                            "pushName"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "session": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "type": "string"
+                            },
+                            "context": {
+                              "type": "object",
+                              "additionalProperties": {}
+                            },
+                            "invalidCount": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            },
+                            "lockToken": {
+                              "type": "string"
+                            },
+                            "expired": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "state",
+                            "context",
+                            "invalidCount",
+                            "version",
+                            "lockToken",
+                            "expired"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "tenant": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "askProfessional": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "askProfessional"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "texts": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "action",
+                        "inboundEventId",
+                        "instance",
+                        "to",
+                        "message",
+                        "contact",
+                        "session",
+                        "tenant",
+                        "texts"
+                      ],
+                      "additionalProperties": false,
+                      "description": "200 — processar (§6.2)"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "type": "string",
+                          "enum": [
+                            "busy"
+                          ]
+                        },
+                        "retryAfterMs": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "action",
+                        "retryAfterMs"
+                      ],
+                      "additionalProperties": false,
+                      "description": "200 — tentar de novo (§6.2)"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "type": "string",
+                          "enum": [
+                            "ignore"
+                          ]
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "DUPLICATE",
+                            "STALE",
+                            "GROUP",
+                            "UNSUPPORTED_EVENT",
+                            "FROM_ME_ECHO",
+                            "HUMAN_TOOK_OVER",
+                            "HUMAN_MODE",
+                            "BOT_PAUSED",
+                            "TENANT_SUSPENDED",
+                            "UNRESOLVABLE_SENDER"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "action",
+                        "reason"
+                      ],
+                      "additionalProperties": false,
+                      "description": "200 — nada a fazer (§6.2)"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Corpo/query inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "INVALID_PAYLOAD",
+                    "message": "Dados inválidos."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}": {
+      "put": {
+        "summary": "Grava e libera a trava da sessão (§6.3)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "lockToken": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "context": {
+                    "default": {},
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
+                  "invalidCount": {
+                    "default": 0,
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "outbound": {
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "handoff": {
+                    "default": false,
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "lockToken",
+                  "version",
+                  "state",
+                  "context",
+                  "invalidCount",
+                  "outbound",
+                  "handoff"
+                ],
+                "additionalProperties": false,
+                "description": "Corpo de PUT /sessions/{id}"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "version"
+                  ],
+                  "additionalProperties": false,
+                  "description": "200 (§6.3)"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Id não pertence ao tenant da instância (§6.1) — nunca 403.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Recurso não encontrado."
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Trava vencida ou versão divergente — o n8n não envia e encerra.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "LOCK_LOST",
+                    "message": "A trava da sessão venceu ou a versão está desatualizada."
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Corpo/query inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "INVALID_PAYLOAD",
+                    "message": "Dados inválidos."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}/release": {
+      "post": {
+        "summary": "Libera a trava sem gravar — sempre idempotente (§6.3)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "lockToken": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "lockToken"
+                ],
+                "additionalProperties": false,
+                "description": "Corpo de POST /sessions/{id}/release"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK, sempre idempotente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "released": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "released"
+                  ],
+                  "additionalProperties": false,
+                  "description": "200, sempre idempotente (§6.3)"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Id não pertence ao tenant da instância (§6.1) — nunca 403.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Recurso não encontrado."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/catalog/services": {
+      "get": {
+        "summary": "Catálogo de serviços ativos (§6.4)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "durationMin": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label",
+                          "durationMin"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "options"
+                  ],
+                  "additionalProperties": false,
+                  "description": "200 GET /catalog/services"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/catalog/services/{serviceId}/professionals": {
+      "get": {
+        "summary": "Profissionais aptos para o serviço (§6.4)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          },
+          {
+            "name": "serviceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "skip": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "options",
+                    "skip"
+                  ],
+                  "additionalProperties": false,
+                  "description": "200 GET /catalog/services/{serviceId}/professionals"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Id não pertence ao tenant da instância (§6.1) — nunca 403.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Recurso não encontrado."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/availability/days": {
+      "get": {
+        "summary": "Dias com vaga (§6.4)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          },
+          {
+            "name": "serviceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": ""
+          },
+          {
+            "name": "professionalId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ausente = qualquer profissional"
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "YYYY-MM-DD"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "padrão 7, máx. 7"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    },
+                    "nextFrom": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "options",
+                    "hasMore",
+                    "nextFrom"
+                  ],
+                  "additionalProperties": false,
+                  "description": "200 GET /availability/days"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Id não pertence ao tenant da instância (§6.1) — nunca 403.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Recurso não encontrado."
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Corpo/query inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "INVALID_PAYLOAD",
+                    "message": "Dados inválidos."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/availability/slots": {
+      "get": {
+        "summary": "Horários livres num dia (§6.4)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          },
+          {
+            "name": "serviceId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": ""
+          },
+          {
+            "name": "professionalId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "ausente = qualquer profissional"
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "YYYY-MM-DD"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "padrão 0"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "padrão 8, máx. 8"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "hasMore": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "options",
+                    "hasMore"
+                  ],
+                  "additionalProperties": false,
+                  "description": "200 GET /availability/slots"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Id não pertence ao tenant da instância (§6.1) — nunca 403.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Recurso não encontrado."
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Corpo/query inválidos.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "INVALID_PAYLOAD",
+                    "message": "Dados inválidos."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contacts/{contactId}": {
+      "patch": {
+        "summary": "Atualiza o nome do contato (§6.5, ASK_NAME)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          },
+          {
+            "name": "contactId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "additionalProperties": false,
+                "description": "Corpo de PATCH /contacts/{contactId}"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Id não pertence ao tenant da instância (§6.1) — nunca 403.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Recurso não encontrado."
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Nome fora de 2–60 caracteres.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "INVALID_NAME",
+                    "message": "O nome precisa ter entre 2 e 60 caracteres."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contacts/{contactId}/appointments": {
+      "get": {
+        "summary": "\"Meus agendamentos\" do contato (§6.5)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          },
+          {
+            "name": "contactId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "upcoming",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "padrão true"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "label"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "options"
+                  ],
+                  "additionalProperties": false,
+                  "description": "200 GET /contacts/{contactId}/appointments"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Id não pertence ao tenant da instância (§6.1) — nunca 403.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Recurso não encontrado."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/appointments": {
+      "post": {
+        "summary": "Cria um agendamento (idempotente) (§6.5)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "contactId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "serviceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "professionalId": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "startsAt": {
+                    "description": "ISO 8601 (ex.: 2026-09-30T17:30:00Z)"
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 190
+                  },
+                  "instanceName": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "contactId",
+                  "serviceId",
+                  "professionalId",
+                  "startsAt",
+                  "idempotencyKey"
+                ],
+                "additionalProperties": false,
+                "description": "Corpo de POST /appointments"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Repetição — mesmo corpo do 201",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "appointment": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "summary": {
+                          "type": "object",
+                          "properties": {
+                            "servico": {
+                              "type": "string"
+                            },
+                            "profissional": {
+                              "type": "string"
+                            },
+                            "data": {
+                              "type": "string"
+                            },
+                            "hora": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "servico",
+                            "profissional",
+                            "data",
+                            "hora"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "summary"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "appointment"
+                  ],
+                  "additionalProperties": false,
+                  "description": "201/200 (§6.5)"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Criado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "appointment": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "summary": {
+                          "type": "object",
+                          "properties": {
+                            "servico": {
+                              "type": "string"
+                            },
+                            "profissional": {
+                              "type": "string"
+                            },
+                            "data": {
+                              "type": "string"
+                            },
+                            "hora": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "servico",
+                            "profissional",
+                            "data",
+                            "hora"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "summary"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "appointment"
+                  ],
+                  "additionalProperties": false,
+                  "description": "201/200 (§6.5)"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Id não pertence ao tenant da instância (§6.1) — nunca 403.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Recurso não encontrado."
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Horário ocupado, com alternativas.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "SLOT_TAKEN",
+                    "message": "Este horário já está ocupado.",
+                    "details": {
+                      "alternatives": {
+                        "date": "Ter 30/09",
+                        "options": [
+                          {
+                            "id": "2026-09-30T17:30:00Z",
+                            "label": "14:30"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Regra de agenda violada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "RULE_VIOLATION",
+                    "message": "Horário fora das regras de agenda.",
+                    "details": {
+                      "rule": "OUTSIDE_HOURS"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/appointments/{id}/cancel": {
+      "post": {
+        "summary": "Cancela um agendamento (idempotente) (§6.5)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "contactId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 190
+                  }
+                },
+                "required": [
+                  "contactId"
+                ],
+                "additionalProperties": false,
+                "description": "Corpo de POST /appointments/{id}/cancel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK, idempotente"
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Id não pertence ao tenant da instância (§6.1) — nunca 403.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Recurso não encontrado."
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Fora do prazo mínimo de cancelamento.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "TOO_LATE",
+                    "message": "Prazo mínimo para cancelar já passou."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/appointments/{id}/reschedule": {
+      "post": {
+        "summary": "Remarca um agendamento (§6.5)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "contactId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "startsAt": {
+                    "description": "ISO 8601 (ex.: 2026-09-30T17:30:00Z)"
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 190
+                  }
+                },
+                "required": [
+                  "contactId",
+                  "startsAt"
+                ],
+                "additionalProperties": false,
+                "description": "Corpo de POST /appointments/{id}/reschedule"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Id não pertence ao tenant da instância (§6.1) — nunca 403.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "NOT_FOUND",
+                    "message": "Recurso não encontrado."
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Horário ocupado (com alternativas) ou fora do prazo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "SLOT_TAKEN",
+                    "message": "Este horário já está ocupado."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/connection-events": {
+      "post": {
+        "summary": "Aplica connection.update da Evolution — sempre 200 (§6.8)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "payload": {}
+                },
+                "required": [
+                  "payload"
+                ],
+                "additionalProperties": false,
+                "description": "Corpo de POST /connection-events"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sempre 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "applied": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "applied"
+                  ],
+                  "additionalProperties": false,
+                  "description": "200 sempre (§6.8)"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sandbox/outbox": {
+      "post": {
+        "summary": "Guarda a saída de uma instância sandbox para a bateria de roteiros (§6.8, §8)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "messages": {
+                    "minItems": 1,
+                    "maxItems": 3,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "sessionId",
+                  "messages"
+                ],
+                "additionalProperties": false,
+                "description": "Corpo de POST /sandbox/outbox"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "accepted"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Instância não é sandbox.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "FORBIDDEN",
+                    "message": "Este endpoint só aceita instâncias sandbox."
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "[Extensão além de §6.8] Lê o outbox sandbox — usado pela bateria de roteiros (Fase 6)",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer <INTERNAL_API_SECRET> (§6.1)"
+          },
+          {
+            "name": "X-InnoChat-Instance",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "webhookToken da WhatsappInstance — resolve o tenant (§6.1)"
+          },
+          {
+            "name": "sessionId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "filtra por sessão"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Segredo ausente/errado ou instância não encontrada.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {}
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Envelope de erro único de toda a API interna (§6.1)"
+                },
+                "example": {
+                  "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Segredo inválido."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {}
+  }
+}

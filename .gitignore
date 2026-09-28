@@ -31,3 +31,6 @@ Thumbs.db
 # Estado de sessão da squad (nunca versionado)
 .missao-atual
 .missoes-quadro.json
+
+# Logs locais
+*.log

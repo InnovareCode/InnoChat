@@ -207,12 +207,29 @@ function dateISOInTimezone(date: Date, timezone: string): string {
 
 export type CreateAppointmentResult = { appointment: unknown; alreadyExisted: boolean };
 
+/**
+ * `source`/`whatsappInstanceId`/`authorType` são opcionais e por omissão preservam o
+ * comportamento histórico (agendamento manual do painel: `source: "PANEL"`, autor `"USER"`).
+ * A Fase 4 (`src/modules/bot-api/booking-bot.ts`) passa `{ source: "WHATSAPP", whatsappInstanceId,
+ * authorType: "CONTACT" }` para agendamentos originados pelo bot — mesma função, mesma garantia
+ * de idempotência/concorrência, sem duplicar a lógica de reserva.
+ */
+export type CreateAppointmentActorOptions = {
+  source?: "PANEL" | "WHATSAPP";
+  whatsappInstanceId?: string | null;
+  authorType?: "USER" | "CONTACT" | "SYSTEM";
+};
+
 export async function createAppointmentManual(
   tenantId: string,
   input: CreateAppointmentInput,
-  actorUserId: string,
+  actorId: string,
+  actorOptions?: CreateAppointmentActorOptions,
 ): Promise<CreateAppointmentResult> {
   const db = forTenant(tenantId);
+  const source = actorOptions?.source ?? "PANEL";
+  const authorType = actorOptions?.authorType ?? "USER";
+  const whatsappInstanceId = actorOptions?.whatsappInstanceId ?? null;
 
   // Idempotência (docs/arquitetura.md §2 regra 4): mesma chave → devolve o existente.
   if (input.idempotencyKey) {
@@ -237,16 +254,17 @@ export async function createAppointmentManual(
           contactId: plan.contactId,
           serviceId: input.serviceId,
           professionalId: plan.professionalId,
+          whatsappInstanceId,
           startsAt: plan.startsAt,
           endsAt: plan.endsAt,
           blockEndsAt: plan.blockEndsAt,
           status: "SCHEDULED",
-          source: "PANEL",
+          source,
           idempotencyKey: input.idempotencyKey,
         },
       });
       await tx.appointmentEvent.create({
-        data: { appointmentId: created.id, action: "CREATED", authorType: "USER", authorId: actorUserId },
+        data: { appointmentId: created.id, action: "CREATED", authorType, authorId: actorId },
       });
       return created;
     });
@@ -265,7 +283,13 @@ async function loadOwnedAppointment(tenantId: string, appointmentId: string) {
   return appointment;
 }
 
-export async function cancelAppointment(tenantId: string, appointmentId: string, actorUserId: string, note?: string) {
+export async function cancelAppointment(
+  tenantId: string,
+  appointmentId: string,
+  actorId: string,
+  note?: string,
+  authorType: "USER" | "CONTACT" | "SYSTEM" = "USER",
+) {
   const appointment = await loadOwnedAppointment(tenantId, appointmentId);
 
   if (appointment.status === "CANCELED") {
@@ -282,7 +306,7 @@ export async function cancelAppointment(tenantId: string, appointmentId: string,
   return getPrisma().$transaction(async (tx) => {
     const updated = await tx.appointment.update({ where: { id: appointmentId }, data: { status: "CANCELED" } });
     await tx.appointmentEvent.create({
-      data: { appointmentId, action: "CANCELED", authorType: "USER", authorId: actorUserId, note: note ?? null },
+      data: { appointmentId, action: "CANCELED", authorType, authorId: actorId, note: note ?? null },
     });
     return updated;
   });
@@ -292,7 +316,8 @@ export async function rescheduleAppointment(
   tenantId: string,
   appointmentId: string,
   newStartsAt: Date,
-  actorUserId: string,
+  actorId: string,
+  authorType: "USER" | "CONTACT" | "SYSTEM" = "USER",
 ) {
   const appointment = await loadOwnedAppointment(tenantId, appointmentId);
   if (appointment.status !== "SCHEDULED") {
@@ -319,7 +344,7 @@ export async function rescheduleAppointment(
         data: { startsAt: plan.startsAt, endsAt: plan.endsAt, blockEndsAt: plan.blockEndsAt },
       });
       await tx.appointmentEvent.create({
-        data: { appointmentId, action: "RESCHEDULED", authorType: "USER", authorId: actorUserId },
+        data: { appointmentId, action: "RESCHEDULED", authorType, authorId: actorId },
       });
       return result;
     });

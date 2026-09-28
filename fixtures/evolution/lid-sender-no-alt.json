@@ -1,0 +1,18 @@
+{
+  "_source": "não capturado do servidor real — baseado na documentação pública da Evolution API v2, Fase 4. Ver fixtures/evolution/README.md.",
+  "event": "messages.upsert",
+  "instance": "innochat-studio-bela-x7k2",
+  "data": {
+    "key": {
+      "remoteJid": "184926574839202@lid",
+      "fromMe": false,
+      "id": "3EB0C767D26A1D2F1237"
+    },
+    "pushName": "Desconhecido",
+    "message": { "conversation": "oi" },
+    "messageType": "conversation",
+    "messageTimestamp": 1759020180
+  },
+  "date_time": "2026-09-28T14:03:00.000Z",
+  "apikey": "REDACTED"
+}
