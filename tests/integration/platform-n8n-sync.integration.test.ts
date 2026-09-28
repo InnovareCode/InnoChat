@@ -1,9 +1,11 @@
 /**
- * `syncN8n` (docs/contratos.md, `src/modules/platform/n8n-sync.ts`) contra Postgres real, com
- * `fetch` mockado simulando a API pública do n8n (não temos uma instância real disponível
- * nesta sessão — ver PENDÊNCIA registrada em `n8n-client.ts`/`docs/contratos.md`). Prova:
- * idempotência (rodar 2x não duplica credencial nem workflow) e que os nós HTTP corretos
- * recebem a credencial certa.
+ * `syncN8n`/`activateBotWorkflow`/`deactivateBotWorkflow` (docs/contratos.md,
+ * `src/modules/platform/n8n-sync.ts`) contra Postgres real, com `fetch` mockado simulando a
+ * API pública do n8n em duas versões: uma "moderna" (PATCH de credencial, publish/unpublish) e
+ * uma "antiga" (só POST/DELETE de credencial, só activate/deactivate) — para provar que
+ * `n8n-client.ts` tenta o caminho novo e cai para o antigo em 404/405, nos dois casos, sem
+ * quebrar em nenhuma das duas versões. Não temos uma instância n8n real disponível nesta sessão
+ * (ver PENDÊNCIA em `n8n-client.ts`/`docs/contratos.md`).
  */
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -64,15 +66,28 @@ function makeErrosWorkflow(): N8nWorkflow {
   return { id: "GZSwTNgvVt4LYnwW", name: "innochat-erros", active: false, nodes, connections: {} };
 }
 
-/** Simula a API pública do n8n: credenciais só têm POST/DELETE (sem update nem list), workflows têm GET/PUT. */
-function createFakeN8nServer() {
+type FakeServerOptions = {
+  /** `true` = instância nova (tem `PATCH /credentials/{id}`); `false` = instância antiga (só POST/DELETE). */
+  supportsCredentialPatch: boolean;
+  /** `true` = instância nova (tem `publish`/`unpublish`); `false` = instância antiga (só `activate`/`deactivate`, deprecated). */
+  supportsPublish: boolean;
+};
+
+/** Simula a API pública do n8n, com as duas superfícies possíveis controladas por `options` — ver cabeçalho do arquivo. */
+function createFakeN8nServer(options: FakeServerOptions) {
   let credentialCounter = 0;
   const deletedCredentialIds = new Set<string>();
   const createdCredentials: Array<{ id: string; name: string; type: string; data: Record<string, string> }> = [];
+  const patchedCredentialIds: string[] = [];
+  const activateCalls: Array<{ id: string; route: "publish" | "unpublish" | "activate" | "deactivate" }> = [];
   const workflows = new Map<string, N8nWorkflow>([
     ["levHnMSXf1dOR3gS", makeBotWorkflow()],
     ["GZSwTNgvVt4LYnwW", makeErrosWorkflow()],
   ]);
+
+  function jsonResponse(status: number, body: unknown = {}): Response {
+    return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  }
 
   const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
     const url = new URL(String(input));
@@ -87,21 +102,32 @@ function createFakeN8nServer() {
       return jsonResponse(200, { id, name: body.name });
     }
 
-    const credentialDeleteMatch = path.match(/^\/api\/v1\/credentials\/(.+)$/);
-    if (credentialDeleteMatch && method === "DELETE") {
-      deletedCredentialIds.add(credentialDeleteMatch[1]!);
+    const credentialByIdMatch = path.match(/^\/api\/v1\/credentials\/([^/]+)$/);
+    if (credentialByIdMatch && method === "DELETE") {
+      deletedCredentialIds.add(credentialByIdMatch[1]!);
       return jsonResponse(200, {});
+    }
+    if (credentialByIdMatch && method === "PATCH") {
+      if (!options.supportsCredentialPatch) return jsonResponse(404, {}); // instância antiga: rota não existe
+      const id = credentialByIdMatch[1]!;
+      const body = JSON.parse(String(init?.body)) as { name: string; type: string; data: Record<string, string> };
+      patchedCredentialIds.push(id);
+      return jsonResponse(200, { id, name: body.name });
     }
 
     const workflowMatch = path.match(/^\/api\/v1\/workflows\/([^/]+)$/);
     if (workflowMatch && method === "GET") {
       const wf = workflows.get(workflowMatch[1]!);
-      if (!wf) return jsonResponse(404, {});
-      return jsonResponse(200, wf);
+      return wf ? jsonResponse(200, wf) : jsonResponse(404, {});
     }
     if (workflowMatch && method === "PUT") {
       const id = workflowMatch[1]!;
       const body = JSON.parse(String(init?.body)) as Pick<N8nWorkflow, "name" | "nodes" | "connections" | "settings">;
+      // `n8n-client.ts#updateWorkflow` deve filtrar para só estes 4 campos — se algum campo
+      // readOnly (id/active/tags/etc.) vier no corpo, é bug do cliente, não da simulação.
+      const allowedKeys = new Set(["name", "nodes", "connections", "settings"]);
+      const extraKeys = Object.keys(body).filter((k) => !allowedKeys.has(k));
+      if (extraKeys.length > 0) return jsonResponse(400, { message: `campos readOnly no corpo: ${extraKeys.join(",")}` });
       const existing = workflows.get(id);
       if (!existing) return jsonResponse(404, {});
       const updated: N8nWorkflow = { ...existing, ...body };
@@ -109,14 +135,21 @@ function createFakeN8nServer() {
       return jsonResponse(200, updated);
     }
 
+    const activationMatch = path.match(/^\/api\/v1\/workflows\/([^/]+)\/(publish|unpublish|activate|deactivate)$/);
+    if (activationMatch && method === "POST") {
+      const [, id, route] = activationMatch as unknown as [string, string, "publish" | "unpublish" | "activate" | "deactivate"];
+      const isNewRoute = route === "publish" || route === "unpublish";
+      if (isNewRoute && !options.supportsPublish) return jsonResponse(404, {}); // instância antiga: publish/unpublish não existem
+      activateCalls.push({ id, route });
+      const wf = workflows.get(id);
+      if (wf) wf.active = route === "publish" || route === "activate";
+      return jsonResponse(200, {});
+    }
+
     throw new Error(`fake n8n server: rota não simulada ${method} ${path}`);
   });
 
-  function jsonResponse(status: number, body: unknown): Response {
-    return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-  }
-
-  return { fetchMock, createdCredentials, deletedCredentialIds, workflows };
+  return { fetchMock, createdCredentials, deletedCredentialIds, patchedCredentialIds, activateCalls, workflows };
 }
 
 const createdUserIds: string[] = [];
@@ -166,11 +199,11 @@ async function makeAdminUser() {
   return admin;
 }
 
-describe("syncN8n — sincronização idempotente com o n8n", () => {
-  it("cria as 3 credenciais, atualiza os dois workflows e reata a credencial certa em cada nó HTTP", async () => {
+describe("syncN8n — sincronização idempotente com o n8n (instância moderna: PATCH + publish/unpublish)", () => {
+  it("cria as 3 credenciais, atualiza os dois workflows (só 4 campos no PUT) e reata a credencial certa em cada nó HTTP", async () => {
     const { syncN8n } = await import("@/modules/platform/n8n-sync");
     const admin = await makeAdminUser();
-    const server = createFakeN8nServer();
+    const server = createFakeN8nServer({ supportsCredentialPatch: true, supportsPublish: true });
     vi.stubGlobal("fetch", server.fetchMock);
 
     const summary = await syncN8n(admin.id);
@@ -178,7 +211,7 @@ describe("syncN8n — sincronização idempotente com o n8n", () => {
     expect(summary.botWorkflowId).toBe("levHnMSXf1dOR3gS");
     expect(summary.errosWorkflowId).toBe("GZSwTNgvVt4LYnwW");
     expect(summary.credentialsRotated).toBe(3);
-    expect(server.createdCredentials).toHaveLength(3);
+    expect(server.createdCredentials).toHaveLength(3); // 1ª sync: sem id anterior, sempre cria
     expect(server.createdCredentials.map((c) => c.name).sort()).toEqual(
       ["Evolution API (apikey)", "InnoChat Painel (Bearer)", "n8n API (X-N8N-API-KEY)"].sort(),
     );
@@ -206,10 +239,10 @@ describe("syncN8n — sincronização idempotente com o n8n", () => {
     expect(settings?.n8nWorkflowBotId).toBe("levHnMSXf1dOR3gS");
   });
 
-  it("rodar 2x não duplica credencial — a 2ª sync deleta a credencial anterior antes de criar outra", async () => {
+  it("rodar 2x não duplica credencial — a 2ª sync usa PATCH (mesmo id, sem criar nem deletar)", async () => {
     const { syncN8n } = await import("@/modules/platform/n8n-sync");
     const admin = await makeAdminUser();
-    const server = createFakeN8nServer();
+    const server = createFakeN8nServer({ supportsCredentialPatch: true, supportsPublish: true });
     vi.stubGlobal("fetch", server.fetchMock);
 
     await syncN8n(admin.id);
@@ -218,25 +251,79 @@ describe("syncN8n — sincronização idempotente com o n8n", () => {
     await syncN8n(admin.id);
     const secondPainelCredId = (await prisma.platformSettings.findUnique({ where: { id: 1 } }))!.n8nCredPainelId;
 
-    // 3 credenciais criadas por sync × 2 syncs = 6 criadas no total, mas as 3 da primeira rodada
-    // foram deletadas antes da segunda criar as novas — nunca duas vigentes para o mesmo propósito.
-    expect(server.createdCredentials).toHaveLength(6);
-    expect(firstPainelCredId).not.toBe(secondPainelCredId);
-    expect(server.deletedCredentialIds.has(firstPainelCredId!)).toBe(true);
+    // Instância moderna: a 2ª sync faz PATCH (mesmo id) em vez de delete+create.
+    expect(server.createdCredentials).toHaveLength(3); // só a 1ª sync criou
+    expect(server.patchedCredentialIds).toContain(firstPainelCredId);
+    expect(server.deletedCredentialIds.size).toBe(0);
+    expect(secondPainelCredId).toBe(firstPainelCredId);
 
     // Workflow nunca é recriado — mesmo id nas duas rodadas.
     expect(server.workflows.size).toBe(2);
   });
 
-  it("nunca ativa nenhum workflow (fica sempre `active: false`)", async () => {
+  it("nunca ativa nenhum workflow na sync (fica sempre `active: false`)", async () => {
     const { syncN8n } = await import("@/modules/platform/n8n-sync");
     const admin = await makeAdminUser();
-    const server = createFakeN8nServer();
+    const server = createFakeN8nServer({ supportsCredentialPatch: true, supportsPublish: true });
     vi.stubGlobal("fetch", server.fetchMock);
 
     await syncN8n(admin.id);
 
     expect(server.workflows.get("levHnMSXf1dOR3gS")!.active).toBe(false);
     expect(server.workflows.get("GZSwTNgvVt4LYnwW")!.active).toBe(false);
+    expect(server.activateCalls).toHaveLength(0);
+  });
+
+  it("activateBotWorkflow/deactivateBotWorkflow usam publish/unpublish", async () => {
+    const { syncN8n, activateBotWorkflow, deactivateBotWorkflow } = await import("@/modules/platform/n8n-sync");
+    const admin = await makeAdminUser();
+    const server = createFakeN8nServer({ supportsCredentialPatch: true, supportsPublish: true });
+    vi.stubGlobal("fetch", server.fetchMock);
+
+    await syncN8n(admin.id);
+    await activateBotWorkflow();
+    await deactivateBotWorkflow();
+
+    expect(server.activateCalls).toEqual([
+      { id: "levHnMSXf1dOR3gS", route: "publish" },
+      { id: "levHnMSXf1dOR3gS", route: "unpublish" },
+    ]);
+  });
+});
+
+describe("syncN8n — compatibilidade com instância antiga (sem PATCH, sem publish/unpublish)", () => {
+  it("credencial cai para delete+create quando a instância não tem PATCH (404)", async () => {
+    const { syncN8n } = await import("@/modules/platform/n8n-sync");
+    const admin = await makeAdminUser();
+    const server = createFakeN8nServer({ supportsCredentialPatch: false, supportsPublish: false });
+    vi.stubGlobal("fetch", server.fetchMock);
+
+    await syncN8n(admin.id);
+    const firstPainelCredId = (await prisma.platformSettings.findUnique({ where: { id: 1 } }))!.n8nCredPainelId;
+
+    await syncN8n(admin.id);
+    const secondPainelCredId = (await prisma.platformSettings.findUnique({ where: { id: 1 } }))!.n8nCredPainelId;
+
+    expect(server.createdCredentials).toHaveLength(6); // 3 na 1ª sync + 3 recriadas na 2ª (delete+create)
+    expect(server.patchedCredentialIds).toHaveLength(0);
+    expect(server.deletedCredentialIds.has(firstPainelCredId!)).toBe(true);
+    expect(secondPainelCredId).not.toBe(firstPainelCredId);
+  });
+
+  it("activateBotWorkflow/deactivateBotWorkflow caem para activate/deactivate quando publish/unpublish não existem (404)", async () => {
+    const { syncN8n, activateBotWorkflow, deactivateBotWorkflow } = await import("@/modules/platform/n8n-sync");
+    const admin = await makeAdminUser();
+    const server = createFakeN8nServer({ supportsCredentialPatch: false, supportsPublish: false });
+    vi.stubGlobal("fetch", server.fetchMock);
+
+    await syncN8n(admin.id);
+    await activateBotWorkflow();
+    await deactivateBotWorkflow();
+
+    expect(server.activateCalls).toEqual([
+      { id: "levHnMSXf1dOR3gS", route: "activate" },
+      { id: "levHnMSXf1dOR3gS", route: "deactivate" },
+    ]);
+    expect(server.workflows.get("levHnMSXf1dOR3gS")!.active).toBe(false); // deactivate foi a última chamada
   });
 });

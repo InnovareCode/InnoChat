@@ -3,7 +3,7 @@ import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { getPublicBaseUrl } from "@/lib/public-url";
 import { regenerateInternalApiSecret } from "./service";
-import { createN8nClient, type N8nClient, type N8nNode, type N8nWorkflow } from "./n8n-client";
+import { createN8nClient, N8nApiError, type N8nClient, type N8nNode, type N8nWorkflow } from "./n8n-client";
 
 /**
  * "Sincronizar n8n" (docs/contratos.md — "Configuração pela plataforma"): sobe a URL do
@@ -11,10 +11,11 @@ import { createN8nClient, type N8nClient, type N8nNode, type N8nWorkflow } from 
  * workflow `innochat-erros`), sem nunca ativar nada (`n8n/README.md`, `n8n/innochat-bot.json`
  * são a fonte dos nomes de nó usados abaixo).
  *
- * Idempotente por desenho: credenciais são recriadas (delete + create, ver `n8n-client.ts` —
- * a API pública do n8n não expõe update nem list de credenciais) e o id novo é regravado em
- * TODO nó que a usa, então rodar duas vezes nunca deixa um nó apontando para uma credencial
- * órfã nem duplica nada no n8n. Workflows são atualizados no lugar (PUT no mesmo id), nunca
+ * Idempotente por desenho: credenciais são atualizadas no lugar via `PATCH` quando a instância
+ * suporta (mantém o mesmo id); em instâncias antigas sem `PATCH` (404/405), cai para "deletar o
+ * id anterior + criar um novo" (`rotateCredential`) e o id novo é regravado em TODO nó que a
+ * usa — rodar duas vezes nunca deixa um nó apontando para uma credencial órfã nem duplica nada
+ * no n8n, nos dois caminhos. Workflows são atualizados no lugar (PUT no mesmo id), nunca
  * recriados.
  */
 
@@ -82,7 +83,12 @@ function setConfigAssignment(node: N8nNode, name: string, value: string): void {
   if (assignment) assignment.value = value;
 }
 
-/** Recria uma credencial (delete do id antigo, se houver + create) e devolve o novo id — nunca deixa duas para o mesmo propósito. */
+/**
+ * Atualiza a credencial existente via `PATCH` (mesmo id, instância nova); se a instância não
+ * suportar `PATCH` (404/405 — versão antiga do n8n), cai para "deletar o id antigo + criar um
+ * novo" — o único caminho que sempre funciona, em qualquer versão. Sem `previousId`, cria
+ * direto. Nunca deixa duas credenciais vigentes para o mesmo propósito.
+ */
 async function rotateCredential(
   client: N8nClient,
   previousId: string | null,
@@ -91,9 +97,21 @@ async function rotateCredential(
   data: Record<string, string>,
 ): Promise<string> {
   if (previousId) {
-    await client.deleteCredential(previousId).catch((error) => {
-      logger.warn("platform.n8n_sync.delete_credential_failed", { name, errorMessage: error instanceof Error ? error.message : String(error) });
-    });
+    try {
+      const updated = await client.updateCredential(previousId, { name, type, data });
+      return updated.id;
+    } catch (error) {
+      if (!(error instanceof N8nApiError) || (error.status !== 404 && error.status !== 405)) {
+        throw error;
+      }
+      logger.info("platform.n8n_sync.credential_patch_unsupported", { name, status: error.status });
+      await client.deleteCredential(previousId).catch((deleteError) => {
+        logger.warn("platform.n8n_sync.delete_credential_failed", {
+          name,
+          errorMessage: deleteError instanceof Error ? deleteError.message : String(deleteError),
+        });
+      });
+    }
   }
   const created = await client.createCredential({ name, type, data });
   return created.id;

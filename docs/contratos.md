@@ -716,13 +716,29 @@ Os quatro aceitam os valores que a tela ainda não salvou (testar antes de grava
 
 ### Sincronização do n8n (`src/modules/platform/n8n-sync.ts`, `n8n-client.ts`) — Fase 5+
 
-**PENDÊNCIA registrada para o Órion/dono**: a superfície da API pública do n8n usada abaixo
-(`/api/v1/credentials` só com `POST`/`DELETE`, sem `GET` de lista nem update; `/api/v1/workflows`
-com `GET`/`PUT`/`activate`/`deactivate`) é conhecimento treinado sobre o n8n, **não confirmado
-ao vivo** — esta sessão não tem acesso à internet para validar contra a documentação da versão
-exata do n8n do dono. Confirmar contra `https://<n8n>/api/v1/docs` (Swagger da própria instância,
-menu *Settings → n8n API*) antes do primeiro uso real; se `PUT /workflows/{id}` rejeitar algum
-campo do corpo, é o primeiro lugar a olhar.
+Superfície confirmada pelo Atlas contra o spec oficial (repo `n8n-io/n8n`, branch `master`,
+`packages/cli/src/public-api/v1/handlers/**/spec`, consultado em 2026-09-28) — substitui o
+levantamento anterior por conhecimento treinado, não mais confiável sem essa fonte:
+
+- **Ativar/desativar**: `POST /workflows/{id}/activate`/`.../deactivate` estão **deprecated**;
+  o substituto é `POST /workflows/{id}/publish`/`.../unpublish`. `n8n-client.ts` tenta
+  publish/unpublish primeiro e só cai para activate/deactivate em 404 (instância antiga sem as
+  rotas novas) — testado com mock nos dois caminhos.
+- **Credenciais**: a versão atual do spec tem `GET /credentials`, `GET /credentials/{id}` e
+  `PATCH /credentials/{id}` (update) além de `POST`/`DELETE`. `rotateCredential`
+  (`n8n-sync.ts`) tenta `PATCH` primeiro (mantém o mesmo id); se a instância responder 404/405
+  (rota/método não suportado — versão antiga), cai para "deletar o id antigo + criar um novo",
+  que funciona em qualquer versão. Os dois caminhos são idempotentes.
+- **`PUT /workflows/{id}`**: exige só `name`, `nodes`, `connections`, `settings` — `id`,
+  `active`, `createdAt`, `updatedAt`, `isArchived`, `versionId`, `triggerCount`, `tags` e `meta`
+  são `readOnly`; `n8n-client.ts#updateWorkflow` filtra para esses 4 campos antes de enviar,
+  nunca reenvia o objeto cru do `GET`. `publishIfActive` (padrão `true`) fica no padrão.
+
+Ainda **PENDÊNCIA para o Órion/dono**: esta sessão não tem acesso à internet para bater o pé em
+uma instância real — o Atlas leu o spec do repositório, não testou contra um n8n rodando.
+Confirmar contra `https://<n8n>/api/v1/docs` (Swagger da própria instância) na primeira
+sincronização real, e conferir a versão do n8n do dono para saber se ela já tem
+publish/unpublish e PATCH de credencial ou vai cair nos fallbacks.
 
 - `syncN8nAction(): Result<N8nSyncSummary>` — exige `n8nBaseUrl`/`n8nApiKey` e
   `evolutionApiUrl`/`evolutionApiKey` já salvos em `PlatformSettings` (senão
@@ -730,23 +746,23 @@ campo do corpo, é o primeiro lugar a olhar.
   1. Resolve `painelUrl = ${getPublicBaseUrl()}/api/internal/v1`.
   2. Gera um novo segredo da API interna (`regenerateInternalApiSecret`) — o valor em texto
      puro só existe neste instante; nunca é devolvido pela action, só enviado ao n8n.
-  3. Recria (delete do id antigo + create) as 3 credenciais `httpHeaderAuth`: `InnoChat Painel
-     (Bearer)` (`Authorization: Bearer <segredo>`), `Evolution API (apikey)` (`apikey:
-     <evolutionApiKey>`), `n8n API (X-N8N-API-KEY)` (`X-N8N-API-KEY: <n8nApiKey>`). A API
-     pública do n8n não expõe update nem list de credenciais — por isso é sempre
-     "recriar", nunca "editar"; os ids novos ficam em `PlatformSettings.n8nCred*Id`.
+  3. Atualiza (ou recria, no fallback acima) as 3 credenciais `httpHeaderAuth`: `InnoChat
+     Painel (Bearer)` (`Authorization: Bearer <segredo>`), `Evolution API (apikey)` (`apikey:
+     <evolutionApiKey>`), `n8n API (X-N8N-API-KEY)` (`X-N8N-API-KEY: <n8nApiKey>`); os ids
+     ficam em `PlatformSettings.n8nCred*Id`.
   4. Acha o workflow `innochat-bot` (por id salvo, senão o id de fábrica do
      `n8n/README.md`, senão por nome — `resolveWorkflow`), atualiza o nó `Config`
      (`painelUrl`, `evolutionUrl`) e reata a credencial certa em todo nó HTTP Request com
      `genericAuthType: "httpHeaderAuth"` (classificado pela URL: contém `evolutionUrl` →
      Evolution, `n8nApiUrl` → n8n, senão → Painel). `PUT /workflows/{id}` com o objeto
-     completo (`name`, `nodes`, `connections`, `settings`).
+     filtrado (`name`, `nodes`, `connections`, `settings`).
   5. Mesma coisa para `innochat-erros` (nó `Config erros`, campo `n8nApiUrl`).
   6. **Nunca ativa** nenhum dos dois — grava só os ids em `PlatformSettings`.
   Erros: `N8N_NOT_CONFIGURED`, `EVOLUTION_NOT_CONFIGURED`, `N8N_WORKFLOW_NOT_FOUND`, `FORBIDDEN`.
 - `activateBotWorkflowAction()`/`deactivateBotWorkflowAction(): Result<{ activated: boolean }>`
-  — ação separada, de propósito (item 4c do pedido do dono). Erro `N8N_NOT_SYNCED` se
-  `syncN8nAction` nunca rodou (sem id de workflow salvo).
+  — ação separada, de propósito (item 4c do pedido do dono); tenta publish/unpublish e cai para
+  activate/deactivate em instância antiga. Erro `N8N_NOT_SYNCED` se `syncN8nAction` nunca rodou
+  (sem id de workflow salvo).
 
 ### Troca de plano pela empresa (`src/modules/billing/actions.ts`, `service.ts#changePlan`) — §7.2
 
