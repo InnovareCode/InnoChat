@@ -3,11 +3,11 @@
   "name": "innochat-bot",
   "active": false,
   "isArchived": false,
-  "versionId": "8cb3c6b4-d899-4ea8-8d66-32a6169669fe",
+  "versionId": "8706fb61-fd2a-4b45-bb69-994a2c7f1e50",
   "activeVersionId": null,
   "triggerCount": 0,
   "createdAt": "2026-09-28T20:01:09.159Z",
-  "updatedAt": "2026-09-28T20:04:53.249Z",
+  "updatedAt": "2026-09-28T21:18:49.305Z",
   "settings": {
     "saveDataSuccessExecution": "none",
     "saveDataErrorExecution": "all",
@@ -495,6 +495,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Remarcar agendamento",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -520,6 +527,28 @@
         ]
       ]
     },
+    "Remarcar agendamento": {
+      "main": [
+        [
+          {
+            "node": "Resultado remarcação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resultado remarcação": {
+      "main": [
+        [
+          {
+            "node": "Montar mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Agendamento escolhido": {
       "main": [
         [
@@ -533,6 +562,24 @@
     },
     "Ação escolhida": {
       "main": [
+        [
+          {
+            "node": "Remarcar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remarcar?": {
+      "main": [
+        [
+          {
+            "node": "Preparar dias",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Montar mensagem",
@@ -733,7 +780,7 @@
           "noResponseBody": true
         }
       },
-      "webhookId": "53750b2a-c0ac-43e7-b8fc-d74a972281ff"
+      "webhookId": "b12d5bcf-6ca4-4d91-b0d7-d255d196cfd5"
     },
     {
       "id": "236e424b-5335-4a03-a314-da2a4810b225",
@@ -762,9 +809,9 @@
               "type": "string"
             },
             {
-              "id": "timezone",
-              "name": "timezone",
-              "value": "America/Sao_Paulo",
+              "id": "n8nApiUrl",
+              "name": "n8nApiUrl",
+              "value": "https://N8N_A_DEFINIR/api/v1",
               "type": "string"
             },
             {
@@ -1069,7 +1116,7 @@
         "amount": "={{ ($json.retryAfterMs || 1500) / 1000 }}",
         "unit": "seconds"
       },
-      "webhookId": "d2cafb27-6cee-4cd5-bf43-270db029fe1d"
+      "webhookId": "73c95f8e-01e9-4be4-b95c-1cb83314ed02"
     },
     {
       "id": "76d45ea2-074f-4c1c-b47b-0838422ab5fe",
@@ -1374,7 +1421,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst r = Object.assign({ contextPatch: {}, vars: {}, invalidCount: 0 }, ($input.first().json || {}).result || {});\nconst texts = bot.texts || {};\nconst oldCtx = bot.context || {};\nconst MENUS = {\n  MAIN_MENU: { render: false, footer: false, options: [{ id: 'agendar', label: 'Agendar horário' }, { id: 'meus', label: 'Meus agendamentos' }, { id: 'atendente', label: 'Falar com atendente' }] },\n  APPOINTMENT_ACTION: { render: false, footer: true, options: [{ id: 'cancelar', label: 'Cancelar' }, { id: 'remarcar', label: 'Remarcar' }] },\n  CONFIRM: { render: true, footer: true, options: [{ id: 'confirmar', label: 'Confirmar' }, { id: 'outro', label: 'Escolher outro horário' }] },\n  CONFIRM_CANCEL: { render: true, footer: true, options: [{ id: 'sim', label: 'Sim, cancelar' }, { id: 'nao', label: 'Não, manter' }] },\n};\nconst vars = Object.assign({ nome: bot.contact.name || bot.contact.pushName || '', empresa: bot.tenant.name || '' }, r.vars || {});\nconst render = (key) => {\n  if (!key || typeof texts[key] !== 'string') return '';\n  return texts[key].replace(/\\{(\\w+)\\}/g, (m, k) => (vars[k] === undefined || vars[k] === null) ? m : String(vars[k])).trim();\n};\n\nlet nextState = r.nextState || bot.session.state;\nlet ctx;\nlet message;\nif (r.repeatPrompt && oldCtx.lastPrompt) {\n  ctx = Object.assign({}, oldCtx);\n  message = [render(r.textKey), oldCtx.lastPrompt].filter(Boolean).join('\\n\\n');\n} else {\n  let resetContext = !!r.resetContext;\n  if (r.repeatPrompt) { nextState = 'MAIN_MENU'; resetContext = true; }\n  ctx = resetContext ? {} : Object.assign({}, oldCtx);\n  Object.assign(ctx, r.contextPatch || {});\n  const closing = !!r.end || !!r.handoff || nextState === 'HUMAN';\n  const menu = MENUS[nextState];\n  const blocks = [];\n  if (r.prefixKey) blocks.push(render(r.prefixKey));\n  let heading = '';\n  let opts = Array.isArray(r.options) ? r.options : [];\n  let renderOpts = true;\n  let footer = true;\n  if (closing) {\n    blocks.push(render(r.textKey));\n    opts = []; renderOpts = false; footer = false;\n  } else if (nextState === 'MAIN_MENU') {\n    blocks.push(render(r.textKey));\n    heading = render('MAIN_MENU');\n    opts = menu.options; renderOpts = false; footer = false;\n  } else if (menu && opts.length === 0) {\n    heading = render(r.textKey);\n    opts = menu.options; renderOpts = menu.render; footer = menu.footer;\n  } else {\n    heading = render(r.textKey);\n  }\n  const regular = opts.filter((o) => !String(o.id).startsWith('__'));\n  const special = opts.filter((o) => String(o.id).startsWith('__') && o.id !== '__page_next');\n  let shown;\n  if (regular.length + special.length > 9) {\n    const pages = Math.ceil(regular.length / 8);\n    const page = r.keepPage ? ((Number(ctx.page) || 0) % pages) : 0;\n    shown = regular.slice(page * 8, page * 8 + 8).map((o, i) => ({ n: i + 1, id: o.id, label: o.label }));\n    shown.push({ n: 9, id: '__page_next', label: 'Ver mais' });\n    ctx.allOptions = opts;\n    ctx.page = page;\n  } else {\n    shown = regular.map((o, i) => ({ n: i + 1, id: o.id, label: o.label })).concat(special.map((o) => ({ n: Number(o.n), id: o.id, label: o.label })));\n    delete ctx.allOptions;\n    delete ctx.page;\n  }\n  const lines = [];\n  if (heading) lines.push(heading);\n  if (renderOpts && shown.length) lines.push(shown.map((o) => o.n + '. ' + o.label).join('\\n'));\n  if (footer) lines.push('0. Menu principal');\n  const prompt = lines.join('\\n');\n  if (prompt) blocks.push(prompt);\n  message = blocks.filter(Boolean).join('\\n\\n');\n  if (closing) {\n    ctx = {};\n  } else {\n    ctx.options = shown;\n    ctx.lastPrompt = prompt;\n    ctx.lastTextKey = r.textKey || null;\n    ctx.lastVars = r.vars || {};\n  }\n}\nif (!message) message = render('MAIN_MENU') || '0. Menu principal';\n\nreturn [{ json: {\n  sessionId: bot.session.id,\n  sandbox: !!(bot.instance && bot.instance.sandbox),\n  instanceName: bot.instance ? bot.instance.name : '',\n  save: { lockToken: bot.session.lockToken, version: bot.session.version, state: nextState, context: ctx, invalidCount: Number(r.invalidCount) || 0, outbound: [message], handoff: !!r.handoff },\n  messages: [{ number: bot.to, text: message }],\n} }];"
+        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst r = Object.assign({ contextPatch: {}, vars: {}, invalidCount: 0 }, ($input.first().json || {}).result || {});\nconst texts = bot.texts || {};\nconst oldCtx = bot.context || {};\nconst L = (key, fallback) => (typeof texts[key] === 'string' && texts[key].trim()) ? texts[key].trim() : fallback;\nconst SPECIAL_LABELS = { __more_days: L('LABEL_MORE_DAYS', 'Ver mais datas'), __more_times: L('LABEL_MORE_TIMES', 'Mais horários'), __page_next: L('LABEL_MORE', 'Ver mais') };\nconst MENUS = {\n  MAIN_MENU: { render: false, footer: false, options: [{ id: 'agendar', label: 'Agendar horário' }, { id: 'meus', label: 'Meus agendamentos' }, { id: 'atendente', label: 'Falar com atendente' }] },\n  APPOINTMENT_ACTION: { render: false, footer: true, options: [{ id: 'cancelar', label: 'Cancelar' }, { id: 'remarcar', label: 'Remarcar' }] },\n  CONFIRM: { render: true, footer: true, options: [{ id: 'confirmar', label: L('LABEL_CONFIRM', 'Confirmar') }, { id: 'outro', label: L('LABEL_OTHER_TIME', 'Escolher outro horário') }] },\n  CONFIRM_CANCEL: { render: true, footer: true, options: [{ id: 'sim', label: L('LABEL_CANCEL_YES', 'Sim, cancelar') }, { id: 'nao', label: L('LABEL_CANCEL_NO', 'Não, manter') }] },\n};\nconst vars = Object.assign({ nome: bot.contact.name || bot.contact.pushName || '', empresa: bot.tenant.name || '' }, r.vars || {});\nconst render = (key) => {\n  if (!key || typeof texts[key] !== 'string') return '';\n  return texts[key].replace(/\\{(\\w+)\\}/g, (m, k) => (vars[k] === undefined || vars[k] === null) ? m : String(vars[k])).trim();\n};\n\nlet nextState = r.nextState || bot.session.state;\nlet ctx;\nlet message;\nif (r.repeatPrompt && oldCtx.lastPrompt) {\n  ctx = Object.assign({}, oldCtx);\n  message = [render(r.textKey), oldCtx.lastPrompt].filter(Boolean).join('\\n\\n');\n} else {\n  let resetContext = !!r.resetContext;\n  if (r.repeatPrompt) { nextState = 'MAIN_MENU'; resetContext = true; }\n  ctx = resetContext ? {} : Object.assign({}, oldCtx);\n  Object.assign(ctx, r.contextPatch || {});\n  const closing = !!r.end || !!r.handoff || nextState === 'HUMAN';\n  const menu = MENUS[nextState];\n  const blocks = [];\n  if (r.prefixKey) blocks.push(render(r.prefixKey));\n  let heading = '';\n  let opts = Array.isArray(r.options) ? r.options : [];\n  let renderOpts = true;\n  let footer = true;\n  if (closing) {\n    blocks.push(render(r.textKey));\n    opts = []; renderOpts = false; footer = false;\n  } else if (nextState === 'MAIN_MENU') {\n    blocks.push(render(r.textKey));\n    heading = render('MAIN_MENU');\n    opts = menu.options; renderOpts = false; footer = false;\n  } else if (menu && opts.length === 0) {\n    heading = render(r.textKey);\n    opts = menu.options; renderOpts = menu.render; footer = menu.footer;\n  } else {\n    heading = render(r.textKey);\n  }\n  const regular = opts.filter((o) => !String(o.id).startsWith('__'));\n  const special = opts.filter((o) => String(o.id).startsWith('__') && o.id !== '__page_next');\n  let shown;\n  if (regular.length + special.length > 9) {\n    const pages = Math.ceil(regular.length / 8);\n    const page = r.keepPage ? ((Number(ctx.page) || 0) % pages) : 0;\n    shown = regular.slice(page * 8, page * 8 + 8).map((o, i) => ({ n: i + 1, id: o.id, label: o.label }));\n    shown.push({ n: 9, id: '__page_next', label: SPECIAL_LABELS.__page_next });\n    ctx.allOptions = opts;\n    ctx.page = page;\n  } else {\n    shown = regular.map((o, i) => ({ n: i + 1, id: o.id, label: o.label })).concat(special.map((o) => ({ n: Number(o.n), id: o.id, label: SPECIAL_LABELS[o.id] || o.label })));\n    delete ctx.allOptions;\n    delete ctx.page;\n  }\n  const lines = [];\n  if (heading) lines.push(heading);\n  if (renderOpts && shown.length) lines.push(shown.map((o) => o.n + '. ' + o.label).join('\\n'));\n  if (footer) lines.push(L('LABEL_BACK_TO_MENU', '0. Menu principal'));\n  const prompt = lines.join('\\n');\n  if (prompt) blocks.push(prompt);\n  message = blocks.filter(Boolean).join('\\n\\n');\n  if (closing) {\n    ctx = {};\n  } else {\n    ctx.options = shown;\n    ctx.lastPrompt = prompt;\n    ctx.lastTextKey = r.textKey || null;\n    ctx.lastVars = r.vars || {};\n  }\n}\nif (!message) message = render('MAIN_MENU') || '0. Menu principal';\n\nreturn [{ json: {\n  sessionId: bot.session.id,\n  sandbox: !!(bot.instance && bot.instance.sandbox),\n  instanceName: bot.instance ? bot.instance.name : '',\n  save: { lockToken: bot.session.lockToken, version: bot.session.version, state: nextState, context: ctx, invalidCount: Number(r.invalidCount) || 0, outbound: [message], handoff: !!r.handoff },\n  messages: [{ number: bot.to, text: message }],\n} }];"
       }
     },
     {
@@ -1554,7 +1601,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst ctx = bot.context || {};\nconst choice = I.choice || {};\nconst R = (result) => [{ json: { result } }];\nconst opts = ($input.first().json.options || []).map((o) => ({ id: o.id, label: o.label }));\nif (!opts.length) return R({ nextState: 'MAIN_MENU', resetContext: true, textKey: 'NO_APPOINTMENTS' });\nreturn R({ nextState: 'MY_APPOINTMENTS', resetContext: true, textKey: 'MY_APPOINTMENTS', options: opts });"
+        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst ctx = bot.context || {};\nconst choice = I.choice || {};\nconst R = (result) => [{ json: { result } }];\nconst itens = $input.first().json.options || [];\nconst opts = itens.map((o) => ({ id: o.id, label: o.label }));\nif (!opts.length) return R({ nextState: 'MAIN_MENU', resetContext: true, textKey: 'NO_APPOINTMENTS' });\nconst appointments = {};\nfor (const o of itens) appointments[o.id] = { serviceId: o.serviceId, professionalId: o.professionalId ?? null, servico: o.servico, profissional: o.profissional, data: o.data, hora: o.hora, startsAt: o.startsAt };\nreturn R({ nextState: 'MY_APPOINTMENTS', resetContext: true, contextPatch: { appointments }, textKey: 'MY_APPOINTMENTS', options: opts });"
       }
     },
     {
@@ -1660,7 +1707,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst ctx = bot.context || {};\nconst choice = I.choice || {};\nconst R = (result) => [{ json: { result } }];\nconst j = $input.first().json;\nconst req = j.req || {};\nconst today = $now.setZone($('Config').first().json.timezone).toFormat('yyyy-MM-dd');\nconst serviceId = req.serviceId || ctx.serviceId;\nconst professionalId = req.professionalId === undefined ? (ctx.professionalId ?? null) : req.professionalId;\nconst query = { serviceId, from: req.from || today, limit: '7' };\nif (professionalId) query.professionalId = professionalId;\nreturn [{ json: { query, professionalId, patch: j.patch || {} } }];"
+        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst ctx = bot.context || {};\nconst choice = I.choice || {};\nconst R = (result) => [{ json: { result } }];\nconst j = $input.first().json;\nconst req = j.req || {};\nconst serviceId = req.serviceId || ctx.serviceId;\nconst professionalId = req.professionalId === undefined ? (ctx.professionalId ?? null) : req.professionalId;\nconst query = { serviceId, limit: '7' };\nif (req.from) query.from = req.from;\nif (professionalId) query.professionalId = professionalId;\nreturn [{ json: { query, professionalId, patch: j.patch || {} } }];"
       }
     },
     {
@@ -1751,7 +1798,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst ctx = bot.context || {};\nconst choice = I.choice || {};\nconst R = (result) => [{ json: { result } }];\nconst resumo = (c) => { const p = String(c.serviceLabel || '').split(' — '); return { servico: p[0] || '', preco: p.slice(1).join(' — '), profissional: c.professionalLabel || 'Qualquer profissional', data: c.dayLabel || '', hora: c.timeLabel || '' }; };\nif (choice.id === '__more_times') {\n  return [{ json: { rota: 'horarios', req: { date: ctx.date, offset: (Number(ctx.slotOffset) || 0) + 8 }, patch: {} } }];\n}\nconst patch = { startsAt: choice.id, timeLabel: choice.label };\nif (!bot.contact.name) return [{ json: { rota: 'pronto', result: { nextState: 'ASK_NAME', contextPatch: patch, textKey: 'ASK_NAME', options: [] } } }];\nreturn [{ json: { rota: 'pronto', result: { nextState: 'CONFIRM', contextPatch: patch, textKey: 'CONFIRM_SUMMARY', vars: resumo(Object.assign({}, ctx, patch)), options: [] } } }];"
+        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst ctx = bot.context || {};\nconst choice = I.choice || {};\nconst R = (result) => [{ json: { result } }];\nconst resumo = (c) => { const p = String(c.serviceLabel || '').split(' — '); return { servico: p[0] || '', preco: p.slice(1).join(' — '), profissional: c.professionalLabel || 'Qualquer profissional', data: c.dayLabel || '', hora: c.timeLabel || '' }; };\nif (choice.id === '__more_times') {\n  return [{ json: { rota: 'horarios', req: { date: ctx.date, offset: (Number(ctx.slotOffset) || 0) + 8 }, patch: {} } }];\n}\nconst patch = { startsAt: choice.id, timeLabel: choice.label };\nif (!bot.contact.name && ctx.mode !== 'RESCHEDULE') return [{ json: { rota: 'pronto', result: { nextState: 'ASK_NAME', contextPatch: patch, textKey: 'ASK_NAME', options: [] } } }];\nreturn [{ json: { rota: 'pronto', result: { nextState: 'CONFIRM', contextPatch: patch, textKey: 'CONFIRM_SUMMARY', vars: resumo(Object.assign({}, ctx, patch)), options: [] } } }];"
       }
     },
     {
@@ -1853,7 +1900,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst ctx = bot.context || {};\nconst choice = I.choice || {};\nconst R = (result) => [{ json: { result } }];\nif (choice.id === 'confirmar') {\n  return [{ json: { rota: 'reservar', body: { contactId: bot.contact.id, serviceId: ctx.serviceId, professionalId: ctx.professionalId ?? null, startsAt: ctx.startsAt, idempotencyKey: bot.inboundEventId, instanceName: bot.instance.name } } }];\n}\nif (ctx.date) return [{ json: { rota: 'horarios', req: { date: ctx.date, offset: 0 }, patch: {} } }];\nreturn [{ json: { rota: 'dias', req: {}, patch: {} } }];"
+        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst ctx = bot.context || {};\nconst choice = I.choice || {};\nconst R = (result) => [{ json: { result } }];\nif (choice.id === 'confirmar' && ctx.mode === 'RESCHEDULE') {\n  return [{ json: { rota: 'remarcar', appointmentId: ctx.appointmentId, body: { contactId: bot.contact.id, startsAt: ctx.startsAt, idempotencyKey: bot.inboundEventId } } }];\n}\nif (choice.id === 'confirmar') {\n  return [{ json: { rota: 'reservar', body: { contactId: bot.contact.id, serviceId: ctx.serviceId, professionalId: ctx.professionalId ?? null, startsAt: ctx.startsAt, idempotencyKey: bot.inboundEventId, instanceName: bot.instance.name } } }];\n}\nif (ctx.date) return [{ json: { rota: 'horarios', req: { date: ctx.date, offset: 0 }, patch: {} } }];\nreturn [{ json: { rota: 'dias', req: {}, patch: {} } }];"
       }
     },
     {
@@ -1937,6 +1984,29 @@
               },
               "renameOutput": true,
               "outputKey": "outro dia"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.rota }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "remarcar"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "remarcar"
             }
           ]
         },
@@ -2000,6 +2070,62 @@
       }
     },
     {
+      "id": "2030068a-9cb6-4007-8790-33c862f203ee",
+      "name": "Remarcar agendamento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1980,
+        1600
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.painelUrl }}/appointments/{{ encodeURIComponent($json.appointmentId) }}/reschedule",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-InnoChat-Instance",
+              "value": "={{ $('Config').first().json.token }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      },
+      "retryOnFail": true
+    },
+    {
+      "id": "fb064480-877e-442a-b57c-cf023d984cf8",
+      "name": "Resultado remarcação",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        1600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst ctx = bot.context || {};\nconst choice = I.choice || {};\nconst R = (result) => [{ json: { result } }];\nconst res = $input.first().json;\nconst status = Number(res.statusCode);\nconst body = res.body || {};\nconst err = body.error || {};\nif (status >= 200 && status < 300) {\n  return R({ nextState: 'MAIN_MENU', resetContext: true, textKey: 'RESCHEDULED', vars: { data: ctx.dayLabel || '', hora: ctx.timeLabel || '', servico: (ctx.appointment && ctx.appointment.servico) || '', profissional: ctx.professionalLabel || '' } });\n}\nif (status === 409 && err.code === 'SLOT_TAKEN') {\n  const alt = (err.details && err.details.alternatives) || {};\n  const opts = (alt.options || []).map((o) => ({ id: o.id, label: o.label }));\n  if (!opts.length) return R({ nextState: 'MAIN_MENU', resetContext: true, textKey: 'NO_AVAILABILITY' });\n  return R({ nextState: 'SELECT_TIME', contextPatch: { date: null, dayLabel: alt.date || '', slotOffset: 0 }, textKey: 'SLOT_TAKEN', options: opts });\n}\nif (status === 409) return R({ nextState: 'MAIN_MENU', resetContext: true, textKey: 'TOO_LATE' });\nif (status === 422 || status === 403) return R({ nextState: 'MAIN_MENU', resetContext: true, textKey: 'NO_AVAILABILITY' });\nif (status === 404) return R({ nextState: 'MAIN_MENU', resetContext: true, textKey: 'NO_APPOINTMENTS' });\nthrow new Error('POST /appointments/{id}/reschedule respondeu HTTP ' + status + (err.code ? ' ' + err.code : ''));"
+      }
+    },
+    {
       "id": "6ec73725-e871-4cb9-9677-167050d438a5",
       "name": "Agendamento escolhido",
       "type": "n8n-nodes-base.code",
@@ -2011,7 +2137,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst ctx = bot.context || {};\nconst choice = I.choice || {};\nconst R = (result) => [{ json: { result } }];\nreturn R({ nextState: 'APPOINTMENT_ACTION', contextPatch: { appointmentId: choice.id, appointmentLabel: choice.label }, textKey: 'APPOINTMENT_ACTIONS', options: [] });"
+        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst ctx = bot.context || {};\nconst choice = I.choice || {};\nconst R = (result) => [{ json: { result } }];\nconst appointment = (ctx.appointments && ctx.appointments[choice.id]) || null;\nreturn R({ nextState: 'APPOINTMENT_ACTION', contextPatch: { appointmentId: choice.id, appointmentLabel: choice.label, appointment, appointments: null }, textKey: 'APPOINTMENT_ACTIONS', options: [] });"
       }
     },
     {
@@ -2026,7 +2152,38 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst ctx = bot.context || {};\nconst choice = I.choice || {};\nconst R = (result) => [{ json: { result } }];\nif (choice.id === 'cancelar') {\n  const label = String(ctx.appointmentLabel || '');\n  const m = label.match(/^(.+) ([0-9]{1,2}:[0-9]{2}) — (.+?)(?: \\((.+)\\))?$/);\n  const vars = m ? { data: m[1], hora: m[2], servico: m[3], profissional: m[4] || '' } : { data: label, hora: '', servico: '' };\n  return R({ nextState: 'CONFIRM_CANCEL', textKey: 'CONFIRM_CANCEL', vars, options: [] });\n}\nreturn R({ nextState: 'HUMAN', resetContext: true, textKey: 'HUMAN_HANDOFF', handoff: true });"
+        "jsCode": "const I = $('Interpretar').first().json;\nconst bot = I.bot;\nconst ctx = bot.context || {};\nconst choice = I.choice || {};\nconst R = (result) => [{ json: { result } }];\nconst a = ctx.appointment || {};\nif (choice.id === 'cancelar') {\n  const vars = { servico: a.servico || '', profissional: a.profissional || '', data: a.data || '', hora: a.hora || '' };\n  return [{ json: { rota: 'pronto', result: { nextState: 'CONFIRM_CANCEL', textKey: 'CONFIRM_CANCEL', vars, options: [] } } }];\n}\nif (!a.serviceId) {\n  return [{ json: { rota: 'pronto', result: { nextState: 'HUMAN', resetContext: true, textKey: 'HUMAN_HANDOFF', handoff: true } } }];\n}\nconst professionalId = a.professionalId ?? null;\nreturn [{ json: { rota: 'dias', req: { serviceId: a.serviceId, professionalId }, patch: { mode: 'RESCHEDULE', serviceId: a.serviceId, serviceLabel: a.servico || '', professionalId, professionalLabel: a.profissional || '' } } }];"
+      }
+    },
+    {
+      "id": "f58cbd4d-d104-43d8-82ae-244086e3a13d",
+      "name": "Remarcar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1760,
+        1850
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.rota }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "dias"
+            }
+          ],
+          "combinator": "and"
+        }
       }
     },
     {
@@ -2492,8 +2649,8 @@
       }
     },
     {
-      "id": "aff864d3-9633-4fb8-84a4-e54c194aecd0",
-      "name": "Sticky Note 18092220",
+      "id": "d3ddf478-7a9c-4dd5-85e0-079975056e27",
+      "name": "Sticky Note e726c988",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
@@ -2501,15 +2658,15 @@
         350
       ],
       "parameters": {
-        "content": "## Configuração central\nPreencha no nó **Config**: `painelUrl` (https://<painel>/api/internal/v1) e `evolutionUrl`.\nCredenciais Header Auth: **InnoChat Painel (Bearer)** (Authorization = Bearer <INTERNAL_API_SECRET>) e **Evolution API (apikey)** (apikey = <chave>).\nDocs: n8n/README.md",
+        "content": "## Configuração central\nPreencha no nó **Config**: `painelUrl` (https://<painel>/api/internal/v1), `evolutionUrl` e `n8nApiUrl` (ou deixe a sincronização do painel fazer isso). Não renomeie o nó nem os campos.\nCredenciais Header Auth: **InnoChat Painel (Bearer)** (Authorization = Bearer <INTERNAL_API_SECRET>) e **Evolution API (apikey)** (apikey = <chave>).\nDocs: n8n/README.md",
         "color": 4,
         "width": 300,
         "height": 200
       }
     },
     {
-      "id": "7a82f5ab-b8d1-439f-b9f5-78d199422ea9",
-      "name": "Sticky Note 6ea0f107",
+      "id": "1e982204-b33c-43d9-9ba7-726670c5c929",
+      "name": "Sticky Note 660f5f1c",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
