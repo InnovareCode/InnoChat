@@ -1,1 +1,155 @@
 @import "tailwindcss";
+
+/*
+ * Sistema de temas do painel (docs/design/direcoes.md — decisão do dono,
+ * 2026-09-28): 3 temas prontos por empresa (`Tenant.theme`), resolvidos no
+ * SERVIDOR via atributo `data-theme` no `<html>` (nenhum flash de tema
+ * errado — o layout já sabe o tema do tenant antes de renderizar).
+ *
+ * Padrão de theming em runtime do Tailwind v4: os tokens do `@theme`
+ * referenciam variáveis `--panel-*`, que só existem dentro de cada bloco
+ * `[data-theme="..."]`. O Tailwind gera as classes utilitárias uma vez no
+ * build (`bg-primary`, `text-secondary`, `font-display`...) e o NAVEGADOR
+ * resolve o valor de acordo com o `data-theme` atual — sem recompilar CSS
+ * ao trocar de tema.
+ *
+ * REGRA: nenhum componente usa hex, rem de raio/sombra ou nome de fonte
+ * fixo — sempre a variável semântica (`bg-primary`, `rounded-card`,
+ * `shadow-card`, `font-display`, `font-body`).
+ */
+@theme {
+  --color-primary: var(--panel-primary);
+  --color-primary-strong: var(--panel-primary-strong);
+  --color-accent: var(--panel-accent);
+  --color-text: var(--panel-text);
+  --color-text-secondary: var(--panel-text-secondary);
+  --color-bg: var(--panel-bg);
+  --color-surface: var(--panel-surface);
+  --color-border: var(--panel-border);
+  --color-success: var(--panel-success);
+  --color-success-bg: var(--panel-success-bg);
+  --color-warning: var(--panel-warning);
+  --color-warning-bg: var(--panel-warning-bg);
+  --color-danger: var(--panel-danger);
+  --color-danger-bg: var(--panel-danger-bg);
+  --color-sidebar: var(--panel-sidebar);
+  --color-sidebar-text: var(--panel-sidebar-text);
+  --color-sidebar-active: var(--panel-sidebar-active);
+  --color-sidebar-active-text: var(--panel-sidebar-active-text);
+  --color-sidebar-hover: var(--panel-sidebar-hover);
+
+  --font-display: var(--panel-font-display);
+  --font-body: var(--panel-font-body);
+
+  --radius-card: var(--panel-radius);
+  --shadow-card: var(--panel-shadow);
+
+  /* Densidade: multiplicador de espaçamento vertical usado pelos componentes
+     de lista/linha (Table, itens de sidebar) — 1 = confortável (Índigo),
+     >1 = relaxada (Âmbar), <1 = compacta (Verde Slate). */
+  --spacing-density: var(--panel-density);
+}
+
+:root,
+[data-theme="INDIGO_CLINICO"] {
+  --panel-primary: #2563eb;
+  --panel-primary-strong: #1d4ed8;
+  --panel-accent: #0ea5e9;
+  --panel-text: #0f172a;
+  --panel-text-secondary: #475569;
+  --panel-bg: #f8fafc;
+  --panel-surface: #ffffff;
+  --panel-border: #e2e8f0;
+  --panel-success: #15803d;
+  --panel-success-bg: #dcfce7;
+  --panel-warning: #b45309;
+  --panel-warning-bg: #fef3c7;
+  --panel-danger: #b91c1c;
+  --panel-danger-bg: #fee2e2;
+  --panel-sidebar: #0f172a;
+  --panel-sidebar-text: #cbd5e1;
+  --panel-sidebar-active: rgb(37 99 235 / 0.2);
+  --panel-sidebar-active-text: #ffffff;
+  --panel-sidebar-hover: rgb(255 255 255 / 0.06);
+  --panel-radius: 0.75rem;
+  --panel-shadow: 0 4px 16px -4px rgb(37 99 235 / 0.1);
+  --panel-density: 1;
+  --panel-font-display: var(--font-manrope);
+  --panel-font-body: var(--font-inter);
+}
+
+[data-theme="AMBAR_ESTUDIO"] {
+  --panel-primary: #8a5423;
+  --panel-primary-strong: #6e4119;
+  --panel-accent: #c99a5b;
+  --panel-text: #241a14;
+  --panel-text-secondary: #7a5230;
+  --panel-bg: #fbf4ec;
+  --panel-surface: #ffffff;
+  --panel-border: #ead9c2;
+  --panel-success: #2a6b45;
+  --panel-success-bg: #e8f3ec;
+  /* Alerta não estava especificado em docs/design/direcoes.md para esta
+     direção (só Índigo e Verde Slate tinham "Alerta" na tabela) — valor
+     derivado para manter a mesma paridade AA (~5.7:1) das outras duas,
+     dentro da paleta terracota. Registrado como pendência no handoff. */
+  --panel-warning: #7a4a12;
+  --panel-warning-bg: #f5e3c4;
+  --panel-danger: #b4432e;
+  --panel-danger-bg: #fbe7e2;
+  --panel-sidebar: #1c1410;
+  --panel-sidebar-text: #d8c3a8;
+  --panel-sidebar-active: rgb(201 154 91 / 0.22);
+  --panel-sidebar-active-text: #ffffff;
+  --panel-sidebar-hover: rgb(255 255 255 / 0.06);
+  --panel-radius: 1.25rem;
+  --panel-shadow: 0 10px 28px -8px rgb(120 72 20 / 0.16);
+  --panel-density: 1.25;
+  --panel-font-display: var(--font-fraunces);
+  --panel-font-body: var(--font-inter);
+}
+
+[data-theme="VERDE_SLATE"] {
+  --panel-primary: #2f6b4f;
+  --panel-primary-strong: #1f4a36;
+  --panel-accent: #2f6b4f;
+  --panel-text: #16241c;
+  --panel-text-secondary: #3f5b4c;
+  --panel-bg: #f7f9f7;
+  --panel-surface: #ffffff;
+  --panel-border: #dce5de;
+  --panel-success: #1f4a36;
+  --panel-success-bg: #e7f0ea;
+  --panel-warning: #8a5a00;
+  --panel-warning-bg: #fbeedb;
+  --panel-danger: #b3261e;
+  --panel-danger-bg: #fbe6e4;
+  --panel-sidebar: #ffffff;
+  --panel-sidebar-text: #16241c;
+  --panel-sidebar-active: rgb(47 107 79 / 0.12);
+  --panel-sidebar-active-text: #1f4a36;
+  --panel-sidebar-hover: rgb(22 36 28 / 0.05);
+  --panel-radius: 0.5rem;
+  --panel-shadow: 0 1px 2px 0 rgb(22 36 28 / 0.05);
+  --panel-density: 0.85;
+  --panel-font-display: var(--font-sora);
+  --panel-font-body: var(--font-inter);
+}
+
+html {
+  background-color: var(--color-bg);
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+
+/* Foco visível consistente em todo o painel (nunca `outline-none` sem
+   substituto) — ver componentes em src/components/ui/. */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}

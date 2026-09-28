@@ -31,3 +31,9 @@ três direções foi escolhida (ou que mistura) e atualizar esta memória com a
 decisão. Repassar a paleta e tipografia escolhida para a Vega não é
 necessário (ela não mexe em UI), mas é necessário para qualquer outro agente
 de frontend que pegar o trabalho depois de mim.
+
+**Atualização 2026-09-28 (decisão fechada):** as 3 direções viraram temas
+prontos por empresa (`Tenant.theme`, enum `PanelTheme`) — ver a seção final
+de `docs/design/direcoes.md` e [[sistema-de-temas-tailwind-v4]] para a
+implementação real em `src/app/globals.css`/`src/app/fonts.ts`. Este
+registro fica só como histórico de como as direções nasceram.
