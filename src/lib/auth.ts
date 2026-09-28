@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { verifyCredentials } from "@/modules/auth/service";
+import { clientIp } from "@/lib/http/client-ip";
 
 /**
  * Auth.js v5 — Credentials (e-mail + senha) com sessão JWT.
@@ -34,9 +35,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         password: { label: "Senha", type: "password" },
       },
       async authorize(credentials) {
+        const ip = await clientIp();
         return verifyCredentials({
           email: String(credentials?.email ?? ""),
           password: String(credentials?.password ?? ""),
+          ip,
         });
       },
     }),

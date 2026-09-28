@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { logger } from "@/lib/logger";
+import { safeFetch, UnsafeUrlError } from "@/lib/net/safe-fetch";
 
 /**
  * "Testar conexão" para as integrações configuradas em `PlatformSettings` (docs/contratos.md).
@@ -8,6 +9,10 @@ import { logger } from "@/lib/logger";
  * Timeout curto (5s): é um clique de "testar agora" na UI, não uma chamada de negócio — o
  * admin não deve ficar esperando o padrão de retry/timeout de 10s usado no resto do sistema
  * (Mercado Pago, n8n em produção).
+ *
+ * Evolution/n8n usam `safeFetch` (revisão de segurança 2026-09-28, achado MÉDIA — defesa SSRF
+ * leve contra a URL informada pelo admin, ver `src/lib/net/safe-fetch.ts`); Mercado Pago usa a
+ * URL fixa da API oficial (`fetchWithTimeout` simples), não é input do admin.
  */
 
 export type ConnectionTestResult = { ok: boolean; detalhe: string };
@@ -24,7 +29,20 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<Respons
   }
 }
 
+async function safeFetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TEST_TIMEOUT_MS);
+  try {
+    return await safeFetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function describeFetchError(error: unknown): string {
+  if (error instanceof UnsafeUrlError) {
+    return `URL de destino bloqueada por segurança: ${error.message}`;
+  }
   if (error instanceof Error && error.name === "AbortError") {
     return `Sem resposta em ${TEST_TIMEOUT_MS / 1000}s (timeout).`;
   }
@@ -34,7 +52,7 @@ function describeFetchError(error: unknown): string {
 export async function testEvolutionConnection(baseUrl: string, apiKey: string): Promise<ConnectionTestResult> {
   const url = `${baseUrl.replace(/\/$/, "")}/instance/fetchInstances`;
   try {
-    const response = await fetchWithTimeout(url, { method: "GET", headers: { apikey: apiKey } });
+    const response = await safeFetchWithTimeout(url, { method: "GET", headers: { apikey: apiKey } });
     if (response.ok) return { ok: true, detalhe: "Conectado — a Evolution respondeu normalmente." };
     if (response.status === 401 || response.status === 403) {
       return { ok: false, detalhe: "Conectou, mas a chave de API foi rejeitada (401/403)." };
@@ -64,7 +82,7 @@ export async function testMercadoPagoConnection(accessToken: string): Promise<Co
 export async function testN8nConnection(baseUrl: string, apiKey: string): Promise<ConnectionTestResult> {
   const url = `${baseUrl.replace(/\/$/, "")}/api/v1/workflows?limit=1`;
   try {
-    const response = await fetchWithTimeout(url, { method: "GET", headers: { "X-N8N-API-KEY": apiKey } });
+    const response = await safeFetchWithTimeout(url, { method: "GET", headers: { "X-N8N-API-KEY": apiKey } });
     if (response.ok) return { ok: true, detalhe: "Conectado — a API do n8n respondeu normalmente." };
     if (response.status === 401 || response.status === 403) {
       return { ok: false, detalhe: "Conectou, mas a API key do n8n foi rejeitada (401/403)." };

@@ -1,4 +1,5 @@
 import { getPrisma } from "@/lib/db/prisma";
+import { isUniqueViolation } from "@/lib/db/prisma-errors";
 import { forTenant } from "@/lib/db/tenant-client";
 import { logger } from "@/lib/logger";
 import { effectiveStatusForTenant } from "@/modules/billing/service";
@@ -80,14 +81,4 @@ export async function applyConnectedNumber(params: {
   });
 
   return { blocked: false };
-}
-
-/**
- * Detecta `PrismaClientKnownRequestError` com `code === "P2002"` por assinatura, sem
- * `instanceof` de `@prisma/client` (proibido fora de `src/lib/db/`) — mesmo padrão de
- * `src/modules/bot-api/claim.ts` (`.claude/agent-memory/vega/prisma_exclude_violation_shape.md`).
- */
-function isUniqueViolation(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return error.constructor?.name === "PrismaClientKnownRequestError" && (error as unknown as { code?: string }).code === "P2002";
 }

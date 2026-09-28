@@ -179,6 +179,27 @@ describe("runBillingTick — reconciliação de status e e-mail de suspensão", 
     const suspensionEmails = sentEmails.filter((e) => e.subject.includes("suspenso"));
     expect(suspensionEmails).toHaveLength(1);
   });
+
+  it("60+ dias em SUSPENDED vira CANCELED e persiste `canceledAt` (correção 2026-09-28 — sem isto, a anonimização de LGPD nunca teria data de referência)", async () => {
+    const { tenant } = await makeTenantWithOwner("status-canceled");
+    cleanupTenantIds.push(tenant.id);
+    const plan = await makePlan("status-canceled");
+
+    // Vencido há bem mais que carência (1 dia) + 60 dias em SUSPENDED → efetivo já CANCELED.
+    const currentPeriodEnd = addDays(new Date(), -70);
+    await prisma.subscription.create({
+      data: { tenantId: tenant.id, planId: plan.id, status: "ACTIVE", currentPeriodEnd },
+    });
+
+    const { gateway } = createMockMercadoPagoGateway();
+    const now = new Date();
+    await runBillingTick(now, gateway);
+
+    const reloaded = await prisma.subscription.findFirstOrThrow({ where: { tenantId: tenant.id } });
+    expect(reloaded.status).toBe("CANCELED");
+    expect(reloaded.canceledAt).not.toBeNull();
+    expect(reloaded.canceledAt!.getTime()).toBe(now.getTime());
+  });
 });
 
 describe("Limite de profissionais por plano (§7.2) — checado no servidor", () => {

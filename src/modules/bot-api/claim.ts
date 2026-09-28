@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { getPrisma } from "@/lib/db/prisma";
+import { isUniqueViolation } from "@/lib/db/prisma-errors";
 import type { InboundIgnoreReason } from "@/lib/db/types";
 import { normalizeEvolutionMessage, resolveSenderIdentity, digitsFromJid, type NormalizedMessage } from "@/core/bot/evolution-normalize";
 import { getMergedBotTexts } from "@/modules/bot-texts/service";
@@ -38,18 +39,6 @@ export type ClaimResult =
 
 function sha256Hex(text: string): string {
   return createHash("sha256").update(text).digest("hex");
-}
-
-/**
- * Detecta `PrismaClientKnownRequestError` com `code === "P2002"` (unique constraint) por
- * assinatura, sem `instanceof` de `@prisma/client` (proibido fora de `src/lib/db/`, ver
- * eslint.config.mjs) — mesmo padrão de `isExclusionViolation` em
- * `src/modules/agenda/appointments.ts`, documentado em
- * `.claude/agent-memory/vega/prisma_exclude_violation_shape.md`.
- */
-function isUniqueViolation(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return error.constructor?.name === "PrismaClientKnownRequestError" && (error as unknown as { code?: string }).code === "P2002";
 }
 
 function isRecentOutboundEcho(recentOutbound: unknown, content: NormalizedMessage["content"], now: Date): boolean {

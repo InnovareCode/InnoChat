@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { requireTenantMember } from "@/lib/auth/guards";
 import { runAction, type Result } from "@/lib/result";
+import { assertTenantCanWrite } from "@/modules/billing/service";
 import { BOT_TEXT_KEYS } from "@/core/bot/texts";
 import { listBotTexts, previewBotText, resetBotText, upsertBotText } from "./service";
 
@@ -10,6 +11,11 @@ import { listBotTexts, previewBotText, resetBotText, upsertBotText } from "./ser
  * CRUD de `BotText` para a futura tela "Mensagens do bot" (Lyra, fora do escopo da Fase 4 —
  * "sem tela" nesta fase). Guardadas por `requireTenantMember(tenantSlug)`, mesma convenção de
  * `docs/contratos.md`.
+ *
+ * `assertTenantCanWrite` nas duas mutações (revisão de segurança 2026-09-28, achado BAIXA):
+ * faltava aqui — uma empresa `SUSPENDED`/`CANCELED` ainda editava textos do bot, inconsistente
+ * com "painel só leitura quando suspenso" (§7.4). `listBotTextsAction`/`previewBotTextAction`
+ * continuam sem o guard: são leitura, não escrita.
  */
 
 const keySchema = z.enum(BOT_TEXT_KEYS);
@@ -26,6 +32,7 @@ const upsertSchema = z.object({ key: keySchema, text: z.string().trim().min(1).m
 export async function upsertBotTextAction(tenantSlug: string, input: unknown): Promise<Result<unknown>> {
   return runAction(async () => {
     const { tenant } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     const data = upsertSchema.parse(input);
     return upsertBotText(tenant.id, data.key, data.text);
   });
@@ -34,6 +41,7 @@ export async function upsertBotTextAction(tenantSlug: string, input: unknown): P
 export async function resetBotTextAction(tenantSlug: string, key: unknown): Promise<Result<{ key: string }>> {
   return runAction(async () => {
     const { tenant } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     const parsedKey = keySchema.parse(key);
     await resetBotText(tenant.id, parsedKey);
     return { key: parsedKey };

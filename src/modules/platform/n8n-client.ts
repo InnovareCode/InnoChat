@@ -25,6 +25,8 @@
  *     `publishIfActive` (padrão `true`) é deixado no padrão — não passamos o parâmetro.
  */
 
+import { safeFetch } from "@/lib/net/safe-fetch";
+
 export type N8nCredentialInput = {
   name: string;
   type: string; // ex.: "httpHeaderAuth"
@@ -82,11 +84,15 @@ const REQUEST_TIMEOUT_MS = 10_000;
 const WORKFLOWS_LIST_LIMIT = 100;
 const WORKFLOWS_LIST_MAX_PAGES = 5; // teto de segurança — nunca varredura ilimitada (docs/arquitetura.md, "nunca todos os registros sem limite")
 
+/**
+ * `safeFetch` (não `fetch` direto) — defesa SSRF leve contra `baseUrl` configurado pelo admin
+ * (revisão de segurança 2026-09-28, achado MÉDIA; `src/lib/net/safe-fetch.ts`).
+ */
 async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await safeFetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }

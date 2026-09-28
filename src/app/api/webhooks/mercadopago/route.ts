@@ -16,8 +16,11 @@ export async function POST(req: Request) {
     // Corpo vazio/inválido — o MP também manda notificação só por query string em alguns casos.
   }
 
+  // `data.id` vem do QUERY PARAM da notificação — é o que o Mercado Pago de fato assina (ver
+  // `mercadopago.ts#verifyMercadoPagoSignature`, conferido contra o SDK oficial em Go). O corpo
+  // é só um fallback para notificações antigas/mal formadas que não tragam a query string.
   const url = new URL(req.url);
-  const dataId = body.data?.id != null ? String(body.data.id) : url.searchParams.get("data.id") ?? url.searchParams.get("id");
+  const dataId = url.searchParams.get("data.id") ?? url.searchParams.get("id") ?? (body.data?.id != null ? String(body.data.id) : null);
 
   try {
     const result = await handleMercadoPagoWebhook({

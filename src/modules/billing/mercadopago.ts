@@ -169,29 +169,44 @@ export async function getMercadoPagoGateway(): Promise<MercadoPagoGateway> {
 }
 
 /**
- * Validação da assinatura do webhook do Mercado Pago (`x-signature`), conforme a documentação
- * oficial "Verificar a origem das notificações" (Mercado Pago Developers — Webhooks / Notificações):
- * https://www.mercadopago.com.br/developers/pt/docs/your-integrations/notifications/webhooks
+ * Tolerância contra replay: um `x-signature` capturado (ex.: log de proxy, MITM parcial) não
+ * expira por si só — o `ts` está DENTRO do HMAC, mas nada nesse header o compara contra o
+ * relógio atual. Sem isto, o mesmo header replayado passaria a validação para sempre. 10 min é
+ * generoso o bastante para reentregas legítimas do MP com atraso de rede, e curto o bastante
+ * para não ser útil a um replay (revisão de segurança 2026-09-28, achado MÉDIA/INFO).
+ */
+const SIGNATURE_TOLERANCE_MS = 10 * 60 * 1000;
+
+/**
+ * Validação da assinatura do webhook do Mercado Pago (`x-signature`), conferida em 2026-09-28
+ * pelo Atlas contra o SDK oficial em Go (`github.com/mercadopago/sdk-go/pkg/webhook`,
+ * `ValidateSignature`) — substitui a implementação anterior (feita de memória/doc em texto),
+ * que tinha 2 desvios reais:
+ *
+ * 1. **`data.id` vem do QUERY PARAM**, não do corpo — quem resolve isso é `route.ts` (o corpo
+ *    pode nem ter `data.id`, ou pode ter um valor diferente do que o MP realmente assinou; a
+ *    assinatura é sobre o que veio na URL da notificação).
+ * 2. **Cada par ausente é OMITIDO do manifest**, nunca causa rejeição isolada — antes, `!dataId
+ *    || !xRequestId` já devolvia `false` sem nem montar o manifest; o formato correto é: se
+ *    `data.id` (ou `request-id`) não vier, o manifest simplesmente não tem aquele segmento, e a
+ *    validação segue baseada no que sobrou.
  *
  * O header `x-signature` vem no formato `ts=<timestamp>,v1=<hash>`. A assinatura é
- * `HMAC-SHA256` (hex) da string "manifest":
- *   `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`
- * usando `PlatformSettings.mercadoPagoWebhookSecret` como chave. `data.id` vem em minúsculas
- * quando o webhook é de pagamento (query string `?data.id=123` ou corpo `data.id`); `x-request-id`
- * é outro header enviado pelo MP.
- *
- * Não implementado de memória (pedido explícito do dono): assinatura confirmada contra o
- * formato documentado acima em 2026-09-28. Se o MP mudar o formato do header, isto quebra em
- * runtime (assinatura sempre inválida) — não silenciosamente aceita.
+ * `HMAC-SHA256` (hex) do manifest `id:<data.id>;request-id:<x-request-id>;ts:<ts>;` (pares
+ * ausentes omitidos, nesta ordem), com `data.id` sempre em minúsculas, usando
+ * `PlatformSettings.mercadoPagoWebhookSecret` como chave.
  */
 export function verifyMercadoPagoSignature(params: {
   xSignature: string | null;
   xRequestId: string | null;
-  dataId: string;
+  /** Já deve vir do query param `data.id` (nunca do corpo) — ver `route.ts`. */
+  dataId: string | null;
   secret: string;
+  /** Só para teste — no runtime real é sempre `new Date()` (injetado via `now` no `webhook.ts`). */
+  now?: Date;
 }): boolean {
   const { xSignature, xRequestId, dataId, secret } = params;
-  if (!xSignature || !xRequestId || !secret) return false;
+  if (!xSignature || !secret) return false;
 
   const parts = new Map<string, string>();
   for (const chunk of xSignature.split(",")) {
@@ -202,7 +217,18 @@ export function verifyMercadoPagoSignature(params: {
   const v1 = parts.get("v1");
   if (!ts || !v1) return false;
 
-  const manifest = `id:${dataId.toLowerCase()};request-id:${xRequestId};ts:${ts};`;
+  const tsSeconds = Number(ts);
+  if (!Number.isFinite(tsSeconds)) return false;
+  const now = params.now ?? new Date();
+  if (Math.abs(now.getTime() - tsSeconds * 1000) > SIGNATURE_TOLERANCE_MS) {
+    return false;
+  }
+
+  let manifest = "";
+  if (dataId) manifest += `id:${dataId.toLowerCase()};`;
+  if (xRequestId) manifest += `request-id:${xRequestId};`;
+  manifest += `ts:${ts};`;
+
   const expected = crypto.createHmac("sha256", secret).update(manifest).digest("hex");
 
   const expectedBuf = Buffer.from(expected);

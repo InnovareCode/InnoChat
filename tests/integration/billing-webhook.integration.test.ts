@@ -69,7 +69,7 @@ describe("handleMercadoPagoWebhook — idempotência (§6.10)", () => {
 
     const dataId = `pay_${invoice.id}`;
     const requestId = "req-dup";
-    const ts = String(Date.now());
+    const ts = String(Math.floor(Date.now() / 1000));
     const xSignature = signManifest(dataId, requestId, ts);
 
     const paidAt = new Date();
@@ -95,6 +95,50 @@ describe("handleMercadoPagoWebhook — idempotência (§6.10)", () => {
     const reloadedInvoice = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
     expect(reloadedInvoice.status).toBe("PAID");
     expect(gateway.getPayment).toHaveBeenCalledTimes(2); // reconsulta sempre, mas só aplica 1x
+  });
+
+  it("2 webhooks concorrentes para o MESMO evento: 1 efeito, nenhum 500 (revisão 2026-09-28, achado MÉDIA)", async () => {
+    const { tenant, subscription, invoice } = await makeSubscriptionWithOpenInvoice("concurrent");
+    cleanupTenantIds.push(tenant.id);
+    await prisma.platformSettings.upsert({ where: { id: 1 }, create: { id: 1, mercadoPagoWebhookSecret: WEBHOOK_SECRET }, update: { mercadoPagoWebhookSecret: WEBHOOK_SECRET } });
+
+    const dataId = `pay_${invoice.id}_concurrent`;
+    const requestId = "req-concurrent";
+    const ts = String(Math.floor(Date.now() / 1000));
+    const xSignature = signManifest(dataId, requestId, ts);
+
+    const paidAt = new Date();
+    const gateway = {
+      createPixPayment: vi.fn(),
+      getPayment: vi.fn().mockResolvedValue({ id: dataId, status: "approved", dateApproved: paidAt, externalReference: invoice.id }),
+    };
+
+    // Duas "entregas" do MESMO webhook batendo praticamente ao mesmo tempo — simula o retry de
+    // rede do Mercado Pago (ou 2 notificações do mesmo pagamento chegando quase juntas).
+    const [first, second] = await Promise.all([
+      handleMercadoPagoWebhook({ xSignature, xRequestId: requestId, dataId, gateway }),
+      handleMercadoPagoWebhook({ xSignature, xRequestId: requestId, dataId, gateway }),
+    ]);
+
+    // Nenhuma das duas deve ter lançado (o que a route.ts converteria em 500) — `await` acima já
+    // garantiria isso (rejeição faria o teste falhar). Qual das duas fica com "processed" vs.
+    // "already_processed" depende de timing real da corrida (não é determinístico: a
+    // idempotência de `ProviderEvent` só evita o `create` duplicado, mas as duas podem chegar a
+    // `applyInvoicePayment` antes de qualquer uma marcar `processedAt` — e `applyInvoicePayment`
+    // tem sua PRÓPRIA idempotência, por isso o efeito final abaixo continua único) — o que
+    // importa é nenhuma delas ter sido rejeitada e o efeito final ser único.
+    expect(first.status).not.toBe("ignored");
+    expect(second.status).not.toBe("ignored");
+
+    const reloadedInvoice = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(reloadedInvoice.status).toBe("PAID");
+
+    const expectedNextPeriodEnd = new Date(subscription.currentPeriodEnd);
+    expectedNextPeriodEnd.setMonth(expectedNextPeriodEnd.getMonth() + 1);
+    const reloadedSubscription = await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } });
+    // Avançou o período UMA vez só — se a corrida tivesse escapado (2 `create` bem-sucedidos em
+    // paralelo), `applyInvoicePayment` teria rodado 2x e avançado 2 meses em vez de 1.
+    expect(reloadedSubscription.currentPeriodEnd.getTime()).toBe(expectedNextPeriodEnd.getTime());
   });
 
   it("chamar applyInvoicePayment de novo (fora do webhook) também é idempotente", async () => {

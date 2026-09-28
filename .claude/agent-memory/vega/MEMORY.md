@@ -19,3 +19,6 @@
 - [parseConnectionEvent não pode exigir `instance` no corpo](connection_event_parser_must_not_require_instance_field.md) — bug real: quebrou 3 testes da Fase 4 já verdes; a instância já vem do webhookToken do path, nunca do corpo.
 - [Heurística de status: evento (webhook) aplica direto, consulta (polling) usa "só regride de CONNECTED"](webhook_event_vs_polling_status_heuristic.md) — mesmo bug do dia acima, lição complementar.
 - [Plan.maxWhatsappNumbers NÃO é nullable](plan_max_whatsapp_numbers_not_nullable.md) — só maxProfessionals e os *Override de Tenant aceitam null=ilimitado; usar número alto em fixtures de teste.
+- [Assinatura do webhook do MP conferida contra o SDK oficial em Go](mercadopago_signature_go_sdk_spec.md) — data.id vem do query param, pares ausentes são omitidos do manifest.
+- [Prisma: transação aborta inteira após P2002](prisma_transaction_aborts_after_p2002.md) — releitura de recuperação precisa de conexão/transação NOVA, nunca continuar no `tx` que falhou.
+- [SSRF leve: o que bloquear e o que NÃO bloquear em URL de admin](ssrf_guard_scope_platform_admin_urls.md) — decisão amarrada a "só requirePlatformAdmin chega aqui".

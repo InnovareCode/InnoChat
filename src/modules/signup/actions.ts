@@ -1,11 +1,11 @@
 "use server";
 
-import { headers } from "next/headers";
 import { z } from "zod";
 import { requireSessionUser, requireTenantMember } from "@/lib/auth/guards";
 import { runAction, type Result } from "@/lib/result";
 import { DomainError } from "@/lib/errors";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { clientIp } from "@/lib/http/client-ip";
 import { acceptInvite, inviteTeamMember, requestPasswordReset, resetPassword, signUp, verifyEmail } from "./service";
 
 /**
@@ -13,16 +13,6 @@ import { acceptInvite, inviteTeamMember, requestPasswordReset, resetPassword, si
  * (§7.3 regra 4) fica AQUI, não em `service.ts` — é uma preocupação de "borda HTTP" (de onde
  * vem a requisição), enquanto `service.ts` é regra de negócio pura de I/O.
  */
-
-async function clientIp(): Promise<string> {
-  const h = await headers();
-  // Ordem de confiança: proxy reverso do próprio deploy (Easypanel/Traefik, arquitetura.md §14)
-  // popula x-forwarded-for; sem ele, cai num valor fixo (rate limit vira "global" nesse caso
-  // raro — melhor que quebrar o cadastro).
-  const forwarded = h.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]!.trim();
-  return h.get("x-real-ip") ?? "unknown";
-}
 
 function assertRateLimit(scope: string, ip: string, limit: number, windowMs: number) {
   const result = checkRateLimit(`${scope}:${ip}`, limit, windowMs);

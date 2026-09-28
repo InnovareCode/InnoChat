@@ -1008,4 +1008,105 @@ publish/unpublish e PATCH de credencial ou vai cair nos fallbacks.
 `20260928000007_platform_public_url_install_n8n` — `PlatformSettings.publicBaseUrl`/
 `n8nBaseUrl`/`n8nApiKey`/`n8nCredPainelId`/`n8nCredEvolutionId`/`n8nCredApiId`/
 `n8nWorkflowBotId`/`n8nWorkflowErrosId` (todas nullable) + tabela nova `PlatformInstallCode`.
+
+## Segurança — correções pós-revisão (`docs/seguranca/revisao-2026-09-28.md`)
+
+Vega implementou os 2 achados ALTA e os 5 MÉDIA/BAIXA priorizados pelo Atlas depois da revisão do
+Órion de 2026-09-28 (veredito "LIBERADO COM RESSALVAS"). Contrato de cada correção, para Lyra/Íris/
+Órion:
+
+### Rate limit de login (`src/modules/auth/service.ts#verifyCredentials`)
+
+Dois tetos independentes, checados ANTES de tocar o banco/bcrypt:
+- por IP (`login:ip:<ip>`): 20 tentativas / 5 min.
+- por e-mail normalizado (`login:email:<email>`): 8 tentativas / 15 min.
+
+Excedendo qualquer um dos dois, `verifyCredentials` devolve `null` — EXATAMENTE o mesmo retorno
+de "credencial inválida" (nenhum código/mensagem novo chega ao client; o Auth.js já trata
+`authorize() → null` como erro genérico de login). Não há novo estado para a Lyra tratar na tela
+de login — o comportamento observável do formulário não muda, só passa a haver um teto. IP vem
+de `src/lib/http/client-ip.ts` (extraído nesta rodada — antes duplicado em `signup/actions.ts` e
+`platform/install-actions.ts`, agora usado também por `src/lib/auth.ts#authorize()`).
+
+### Cabeçalhos de segurança + CSP (`next.config.ts`)
+
+`headers()` global (`source: "/(.*)"`, sem `middleware.ts`/`proxy.ts` — Next 16 renomeou para
+`proxy.ts`, mas não foi necessário para isto): `Content-Security-Policy`, `X-Frame-Options: DENY`,
+`Strict-Transport-Security` (2 anos + subdomínios), `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` enxuto (nega
+camera/microphone/geolocation/payment/usb, nenhum usado pelo painel).
+
+CSP SEM nonce (decisão registrada no comentário de `next.config.ts`): `script-src`/`style-src`
+usam `'unsafe-inline'` — a alternativa com nonce exige TODA página dinamicamente renderizada, e
+o padrão "Without Nonces" é o que a doc da versão instalada do Next recomenda para quem não usa
+nonce. `img-src` inclui `data:` (QR do Pix/Evolution vêm em base64). Fontes via `next/font`
+(self-hosted) já cabem em `font-src 'self'`. **Se a Lyra algum dia adicionar um script de
+terceiro (analytics, chat widget, etc.), precisa entrar em `script-src`/`connect-src`/`img-src`
+explicitamente — CSP vai bloquear silenciosamente sem isso** (erro só aparece no console do
+navegador, não em log de servidor).
+
+### Corrida no webhook do Mercado Pago (`src/modules/billing/webhook.ts`)
+
+`ProviderEvent.create` concorrente (2 notificações quase simultâneas) agora trata a violação de
+unique constraint (`P2002`, `isUniqueViolation` — extraído para `src/lib/db/prisma-errors.ts`
+nesta rodada, antes duplicado em `claim.ts`/`connection.ts`) como "já existe", relendo com uma
+query NOVA (nunca continuando na transação que acabou de falhar — Postgres aborta a transação
+inteira após uma violação; ver comentário no código). Sem `$transaction` nesta função desde esta
+rodada — a constraint única já é a fonte de atomicidade real.
+
+### Assinatura do webhook do Mercado Pago (`src/modules/billing/mercadopago.ts`)
+
+Conferida contra o SDK oficial em Go (`github.com/mercadopago/sdk-go/pkg/webhook`,
+`ValidateSignature`) — 2 desvios corrigidos:
+- `data.id` agora resolvido a partir do QUERY PARAM da notificação (`route.ts`), não do corpo
+  (fallback só se a query não tiver, para notificações antigas mal formadas).
+- Cada par ausente (`id`/`request-id`) é OMITIDO do manifest, nunca causa rejeição isolada.
+
+Adicionada tolerância de 10 min no `ts` (contra replay de um header capturado) —
+`verifyMercadoPagoSignature` aceita um `now?: Date` opcional só para teste.
+
+### `assertTenantCanWrite` em bot-texts e tema (`src/modules/bot-texts/bot-text-actions.ts`,
+`src/modules/tenant/actions.ts`)
+
+`upsertBotTextAction`/`resetBotTextAction`/`updateTenantThemeAction` agora bloqueiam com
+`TENANT_SUSPENDED` quando a empresa está `SUSPENDED`/`CANCELED` — mesmo padrão de
+`catalog-actions.ts`/`appointment-actions.ts`/`whatsapp/actions.ts`. `listBotTextsAction`/
+`previewBotTextAction` continuam sem o guard (são leitura).
+
+### LGPD — retenção/anonimização (`src/modules/maintenance/tick.ts`, NOVO)
+
+`POST /api/internal/v1/maintenance/tick` — MESMA autenticação do `billing/tick`
+(`Authorization: Bearer <INTERNAL_API_SECRET>`, sem `X-InnoChat-Instance`). Chamado
+periodicamente pelo `innochat-cron` (fora deste repo — **sem workflow novo no n8n**, o Atlas
+pluga a chamada). Resposta 200: `{ inboundEventsPurged, contactsAnonymized }`
+(`MaintenanceTickSummary`).
+
+- Purga `InboundEvent` com `createdAt` > 30 dias (`docs/arquitetura.md` §11).
+- Anonimiza `Contact` de tenants `CANCELED` há mais de 90 dias (`Subscription.canceledAt`):
+  zera `name`/`pushName`/`phoneE164`/`lid`, substitui `waJid` por `anon:<contactId>` (mantém a
+  linha e a integridade referencial com `Appointment` histórico). Processado em lotes de 500 por
+  chamada — a próxima execução continua de onde parou.
+- Idempotente: `InboundEvent` já apagado não conta de novo; `Contact` já anonimizado é
+  reconhecido pelo prefixo `anon:` em `waJid` e pulado.
+
+**Correção associada em `src/modules/billing/tick.ts#reconcileStatuses`**: `canceledAt` nunca
+era persistido quando o status efetivo virava `CANCELED` por lá (só era zerado na reativação) —
+sem isso, uma empresa cancelada automaticamente (60 dias em `SUSPENDED`) nunca teria data de
+referência para a anonimização rodar. Agora marca `canceledAt: now` na transição.
+
+### SSRF leve em "Testar conexão" e na sincronização do n8n (`src/lib/net/safe-fetch.ts`, NOVO)
+
+`safeFetch`/`assertSafeExternalUrl` usados em `platform/connection-tests.ts` (Evolution, n8n —
+NÃO Mercado Pago, que usa URL fixa da API oficial) e `platform/n8n-client.ts` (usado por
+`n8n-sync.ts`). Bloqueia: esquema diferente de `http`/`https`; o endereço de metadados de nuvem
+`169.254.169.254`; redirecionamento para um HOST diferente do original. **Não bloqueia IP
+privado em geral** — decisão deliberada, Evolution/n8n reais costumam estar na mesma rede
+interna do Easypanel.
+
+### Dívida técnica (não implementada nesta rodada, por pedido explícito)
+
+- Cifragem em repouso dos segredos de `PlatformSettings` (proposta detalhada no relatório do
+  Órion: AES-256-GCM com chave derivada de `AUTH_SECRET` via HKDF).
+- Rate limit distribuído (Redis/Postgres) — o rate limit de login herda a mesma limitação já
+  documentada em `src/lib/rate-limit.ts` (processo único, zera em restart).
 Aplicada em `innochat` e `innochat_test`; `DOWN.sql` presente.

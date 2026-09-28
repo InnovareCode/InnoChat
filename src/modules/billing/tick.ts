@@ -240,6 +240,13 @@ async function reconcileStatuses(prisma: ReturnType<typeof getPrisma>, now: Date
         status: next,
         // Sai de SUSPENDED (pagou/reativou) → zera a marca, para avisar de novo numa suspensão futura.
         suspendedEmailSentAt: next === "SUSPENDED" ? subscription.suspendedEmailSentAt : null,
+        // Correção 2026-09-28 (achado do endpoint de manutenção/LGPD, `maintenance/tick.ts`):
+        // `canceledAt` nunca era persistido quando o STATUS EFETIVO virava `CANCELED` por aqui
+        // (só era zerado na reativação, em `admin-service.ts`) — sem isto, a anonimização de
+        // 90 dias após `CANCELED` (docs/arquitetura.md §11/§12) nunca teria uma data de
+        // referência para contar a partir de nenhuma empresa cancelada automaticamente (60
+        // dias em `SUSPENDED`, ver `effectiveStatus`). Marca só na transição PARA `CANCELED`.
+        ...(next === "CANCELED" ? { canceledAt: now } : {}),
       },
     });
     summary.statusChanges += 1;

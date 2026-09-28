@@ -1,10 +1,10 @@
 "use server";
 
-import { headers } from "next/headers";
 import { z } from "zod";
 import { runAction, type Result } from "@/lib/result";
 import { DomainError } from "@/lib/errors";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { clientIp } from "@/lib/http/client-ip";
 import { hasPlatformAdmin, installPlatformAdmin } from "./install";
 
 /**
@@ -13,13 +13,6 @@ import { hasPlatformAdmin, installPlatformAdmin } from "./install";
  * uso único, `src/modules/platform/install.ts`) e do rate limit por IP abaixo, mesma técnica
  * de `src/modules/signup/actions.ts`.
  */
-
-async function clientIp(): Promise<string> {
-  const h = await headers();
-  const forwarded = h.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]!.trim();
-  return h.get("x-real-ip") ?? "unknown";
-}
 
 const INSTALL_LIMIT = 10;
 const INSTALL_WINDOW_MS = 15 * 60 * 1000;

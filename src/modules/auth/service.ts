@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { getPrisma } from "@/lib/db/prisma";
 import { logger } from "@/lib/logger";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 /**
  * Custo do hash: bcrypt com `SALT_ROUNDS = 12` — mais que o mínimo de 10,
@@ -8,6 +9,24 @@ import { logger } from "@/lib/logger";
  * frequente; cadastro/troca de senha idem).
  */
 const SALT_ROUNDS = 12;
+
+/**
+ * Rate limit de login (revisão de segurança 2026-09-28, achado ALTA — `authorize()` é rota
+ * padrão do Auth.js, fora de qualquer Server Action, então nenhum `checkRateLimit` cobria
+ * força bruta de senha). Dois tetos independentes, por escopos diferentes:
+ * - por IP: contém varredura ampla (um atacante tentando várias contas).
+ * - por e-mail: contém força bruta contra UMA conta, mesmo de IPs residenciais/CGNAT rotativos
+ *   (comuns no Brasil), onde o teto por IP sozinho é fácil de contornar.
+ * Limites generosos o bastante para não incomodar um usuário real (login errado por engano
+ * algumas vezes, várias abas abertas), e nenhum dos dois é revelado ao cliente: excedendo
+ * qualquer um dos dois, `verifyCredentials` devolve `null` — o MESMO retorno de "credencial
+ * inválida" (docs/contratos.md "Segurança") — nunca um erro/mensagem distinta, para não abrir
+ * um canal de enumeration novo (nem de conta, nem de rate limit).
+ */
+const LOGIN_IP_LIMIT = 20;
+const LOGIN_IP_WINDOW_MS = 5 * 60 * 1000;
+const LOGIN_EMAIL_LIMIT = 8;
+const LOGIN_EMAIL_WINDOW_MS = 15 * 60 * 1000;
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, SALT_ROUNDS);
@@ -33,9 +52,21 @@ export type AuthorizedUser = {
 export async function verifyCredentials(input: {
   email: string;
   password: string;
+  /** IP do cliente (`src/lib/http/client-ip.ts`), resolvido em `src/lib/auth.ts#authorize()`. */
+  ip: string;
 }): Promise<AuthorizedUser | null> {
   const email = input.email.trim().toLowerCase();
   if (!email || !input.password) {
+    return null;
+  }
+
+  // Checa (e já incrementa) os dois tetos ANTES de tocar o banco/bcrypt — barato, e evita gastar
+  // o custo de bcrypt (propositalmente caro, SALT_ROUNDS=12) numa tentativa que já vai ser
+  // recusada por rate limit.
+  const ipLimit = checkRateLimit(`login:ip:${input.ip}`, LOGIN_IP_LIMIT, LOGIN_IP_WINDOW_MS);
+  const emailLimit = checkRateLimit(`login:email:${email}`, LOGIN_EMAIL_LIMIT, LOGIN_EMAIL_WINDOW_MS);
+  if (!ipLimit.allowed || !emailLimit.allowed) {
+    logger.info("auth.login.rate_limited", { reason: !ipLimit.allowed ? "ip" : "email" });
     return null;
   }
 
