@@ -4,7 +4,7 @@
 |---|---|---|---|
 | `innochat-bot.json` | `innochat-bot`: chatbot de agendamento (menu numerado, sem IA) | `levHnMSXf1dOR3gS` | **inativo** |
 | `innochat-erros.json` | `innochat-erros`: error workflow do bot, libera a trava da sessão | `GZSwTNgvVt4LYnwW` | **inativo** |
-| `innochat-cron.json` | `innochat-cron`: de hora em hora chama `POST /billing/tick` (idempotente, "Fase 7" em `docs/contratos.md`) | `dPMhT4MqGglCpFSw` | **inativo** |
+| `innochat-cron.json` | `innochat-cron`: de hora em hora chama `POST /billing/tick` ("Fase 7" em `docs/contratos.md`); diariamente às 03:15 chama `POST /maintenance/tick` (LGPD, "Segurança"). Ambos idempotentes | `dPMhT4MqGglCpFSw` | **inativo** |
 
 Contrato: `docs/arquitetura.md` §6.6/§6.7, `docs/api-interna.openapi.json` e as seções "API interna do bot — Fase 4" e "Fase 4b" em `docs/contratos.md`.
 Estes arquivos são o export (`get_workflow_details`) e servem de histórico e diff do fluxo.
@@ -32,7 +32,7 @@ O fuso não é mais configurado no n8n. O claim devolve `tenant.timezone`, e `/a
 - Nós `Config` e `Claim` (o `innochat-erros` procura esses dois nomes no runData).
 - Campos do `Config`: `painelUrl`, `evolutionUrl`, `n8nApiUrl`, `token`, `event` e `payload`.
 - Nomes das três credenciais abaixo.
-- No `innochat-cron`: o nó `Config cron`, o campo `painelUrl` e o nó HTTP `Chamar billing/tick`.
+- No `innochat-cron`: o nó `Config cron`, o campo `painelUrl`, os nós HTTP `Chamar billing/tick` e `Chamar maintenance/tick` e os gatilhos `De hora em hora` e `Diariamente 03:15`. O IF `Manutenção diária?` referencia o nome do gatilho diário.
 
 O campo `token` do nó **Config** **não é segredo**: é o `webhookToken` lido do path da URL (`:token`).
 O validador do n8n acusa o nome como "credencial", mas é falso positivo.
@@ -45,11 +45,11 @@ Os nomes abaixo são **exatos**: a sincronização do painel liga as credenciais
 |---|---|---|---|---|
 | `InnoChat Painel (Bearer)` | `Authorization` | `Bearer <INTERNAL_API_SECRET>` (gerado no admin da plataforma) | `innochat-bot` | `Claim`, `Registrar conexão`, `Buscar serviços`, `Buscar meus agendamentos`, `Buscar profissionais`, `Buscar dias`, `Buscar horários`, `Salvar nome`, `Reservar horário`, `Remarcar agendamento`, `Cancelar agendamento`, `Salvar sessão`, `Enviar para sandbox` (13 nós) |
 | `InnoChat Painel (Bearer)` | idem | idem | `innochat-erros` | `Liberar trava` |
-| `InnoChat Painel (Bearer)` | idem | idem | `innochat-cron` | `Chamar billing/tick`. Vai **sem** `X-InnoChat-Instance`, porque o tick não é escopado a uma instância |
+| `InnoChat Painel (Bearer)` | idem | idem | `innochat-cron` | `Chamar billing/tick`, `Chamar maintenance/tick`. Vão **sem** `X-InnoChat-Instance`, porque os ticks não são escopados a uma instância |
 | `Evolution API (apikey)` | `apikey` | chave da Evolution | `innochat-bot` | `Enviar pela Evolution` |
 | `n8n API (X-N8N-API-KEY)` | `X-N8N-API-KEY` | API key do n8n (*Settings → n8n API*) | `innochat-erros` | `Buscar execução com falha` |
 
-São 17 nós HTTP no total: 14 no bot, 2 no workflow de erro e 1 no cron. Todos usam *Authentication: Generic → Header Auth* (`httpHeaderAuth`).
+São 18 nós HTTP no total: 14 no bot, 2 no workflow de erro e 2 no cron. Todos usam *Authentication: Generic → Header Auth* (`httpHeaderAuth`).
 
 Os workflows foram criados sem credencial nenhuma. Os nós HTTP ficam com a autenticação *Header Auth* selecionada, mas vazia, até alguém escolher a credencial.
 
@@ -126,15 +126,24 @@ As opções do menu principal e de "Cancelar/Remarcar" já estão numeradas nos 
 ## `innochat-cron`
 
 ```
-De hora em hora (Schedule, minuto 5) → Config cron → Chamar billing/tick (POST, timeout 60 s, Never error + resposta completa)
-  → Resultado do tick ─ 2xx ► Tick ok
-                      ├ 5xx ► Tentar de novo? (5xx) ($runIndex < 2) ─ sim ► Esperar (5xx) 5 s ► Chamar billing/tick
-                      │                                             └ não ► Falha no tick
-                      └ outro (4xx) ► Falha no tick (erro)
+De hora em hora (minuto 5) ─┐
+Diariamente 03:15 ──────────┴► Config cron ► Manutenção diária? ($('Diariamente 03:15').isExecuted)
+  ─ sim ► Chamar maintenance/tick (POST /maintenance/tick, LGPD) ► Resultado da manutenção
+            ─ 2xx ► Manutenção ok
+            ├ 5xx ► Tentar de novo? (manutenção 5xx) ($runIndex < 2) ─ sim ► Esperar (manutenção 5xx) 5 s ► Chamar maintenance/tick
+            │                                                         └ não ► Falha na manutenção
+            └ outro (4xx) ► Falha na manutenção
+  ─ não ► Chamar billing/tick (POST /billing/tick) ► Resultado do tick
+            ─ 2xx ► Tick ok
+            ├ 5xx ► Tentar de novo? (5xx) ($runIndex < 2) ─ sim ► Esperar (5xx) 5 s ► Chamar billing/tick
+            │                                             └ não ► Falha no tick
+            └ outro (4xx) ► Falha no tick
 ```
 
-- Timeout e falha de rede são re-tentados pelo *Retry on fail* do próprio nó (3×). Um 5xx tem mais 2 tentativas pelo laço, e um 4xx falha direto. Re-tentar é seguro porque o tick é idempotente.
-- Settings: não salva sucesso, salva erro, timeout de 300 s. O `errorWorkflow` aponta para o `innochat-erros`.
+- Os dois gatilhos reaproveitam o **mesmo** nó `Config cron`, com um só `painelUrl` escrito pela sincronização. Os dois nós HTTP (`Chamar billing/tick` e `Chamar maintenance/tick`) usam a credencial `InnoChat Painel (Bearer)`, **sem** `X-InnoChat-Instance`.
+- `maintenance/tick` purga `InboundEvent` com mais de 30 dias e anonimiza os contatos de tenants cancelados há mais de 90 dias, em lotes de 500 ("Segurança" em `docs/contratos.md`). A resposta é `{ inboundEventsPurged, contactsAnonymized }`.
+- As duas chamadas são idempotentes. Timeout e falha de rede são re-tentados pelo *Retry on fail* do próprio nó (3×). Um 5xx tem mais 2 tentativas pelo laço, e um 4xx falha direto. Timeout de 60 s por chamada e de 300 s por execução.
+- Settings: não salva sucesso, salva erro, e o `errorWorkflow` aponta para o `innochat-erros`.
   - Isso não quebra a extração de trava: sem nó `Claim` na execução, `Extrair trava` devolve `[]` e o workflow de erro termina sem chamar `release`.
   - Efeito colateral: a cada falha do cron, o workflow de erro faz uma chamada à API do n8n à toa.
 
