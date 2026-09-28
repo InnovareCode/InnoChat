@@ -1,0 +1,6 @@
+-- CreateEnum
+CREATE TYPE "PanelTheme" AS ENUM ('INDIGO_CLINICO', 'AMBAR_ESTUDIO', 'VERDE_SLATE');
+
+-- AlterTable
+ALTER TABLE "tenants" ADD COLUMN     "theme" "PanelTheme" NOT NULL DEFAULT 'INDIGO_CLINICO';
+

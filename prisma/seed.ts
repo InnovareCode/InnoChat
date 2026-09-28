@@ -1,0 +1,136 @@
+// Seed de dev: 1 tenant demo, serviços e profissionais, expediente básico e um agendamento
+// SCHEDULED de exemplo. Não roda em produção (chamar só via `npm run db:seed`).
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
+
+async function main() {
+  const tenant = await prisma.tenant.upsert({
+    where: { slug: "studio-demo" },
+    update: {},
+    create: {
+      slug: "studio-demo",
+      name: "Studio Demo",
+      timezone: "America/Sao_Paulo",
+      segment: "Salão de beleza",
+    },
+  });
+
+  const [corte, coloracao] = await Promise.all([
+    prisma.service.upsert({
+      where: { id: `${tenant.id}-svc-corte` },
+      update: {},
+      create: {
+        id: `${tenant.id}-svc-corte`,
+        tenantId: tenant.id,
+        name: "Corte feminino",
+        durationMin: 60,
+        bufferAfterMin: 10,
+        priceCents: 8000,
+        sortOrder: 1,
+      },
+    }),
+    prisma.service.upsert({
+      where: { id: `${tenant.id}-svc-coloracao` },
+      update: {},
+      create: {
+        id: `${tenant.id}-svc-coloracao`,
+        tenantId: tenant.id,
+        name: "Coloração",
+        durationMin: 120,
+        bufferAfterMin: 15,
+        priceCents: 18000,
+        sortOrder: 2,
+      },
+    }),
+  ]);
+
+  const [ana, bruna] = await Promise.all([
+    prisma.professional.upsert({
+      where: { id: `${tenant.id}-pro-ana` },
+      update: {},
+      create: {
+        id: `${tenant.id}-pro-ana`,
+        tenantId: tenant.id,
+        name: "Ana",
+        sortOrder: 1,
+      },
+    }),
+    prisma.professional.upsert({
+      where: { id: `${tenant.id}-pro-bruna` },
+      update: {},
+      create: {
+        id: `${tenant.id}-pro-bruna`,
+        tenantId: tenant.id,
+        name: "Bruna",
+        sortOrder: 2,
+      },
+    }),
+  ]);
+
+  await prisma.professionalService.createMany({
+    data: [
+      { professionalId: ana.id, serviceId: corte.id },
+      { professionalId: ana.id, serviceId: coloracao.id },
+      { professionalId: bruna.id, serviceId: corte.id },
+    ],
+    skipDuplicates: true,
+  });
+
+  // Expediente: terça a sábado, 09:00-18:00, para as duas profissionais.
+  const weekdaysWithWork = [2, 3, 4, 5, 6];
+  for (const professional of [ana, bruna]) {
+    await prisma.workingHour.deleteMany({ where: { professionalId: professional.id } });
+    await prisma.workingHour.createMany({
+      data: weekdaysWithWork.map((weekday) => ({
+        professionalId: professional.id,
+        weekday,
+        startTime: "09:00",
+        endTime: "18:00",
+      })),
+    });
+  }
+
+  const contact = await prisma.contact.upsert({
+    where: { tenantId_waJid: { tenantId: tenant.id, waJid: "5511999990000@s.whatsapp.net" } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      waJid: "5511999990000@s.whatsapp.net",
+      phoneE164: "+5511999990000",
+      name: "Maria Souza",
+    },
+  });
+
+  const startsAt = new Date();
+  startsAt.setDate(startsAt.getDate() + 1);
+  startsAt.setHours(14, 0, 0, 0);
+  const endsAt = new Date(startsAt.getTime() + corte.durationMin * 60_000);
+  const blockEndsAt = new Date(endsAt.getTime() + corte.bufferAfterMin * 60_000);
+
+  await prisma.appointment.upsert({
+    where: { tenantId_idempotencyKey: { tenantId: tenant.id, idempotencyKey: "seed-demo-appointment" } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      contactId: contact.id,
+      serviceId: corte.id,
+      professionalId: ana.id,
+      startsAt,
+      endsAt,
+      blockEndsAt,
+      idempotencyKey: "seed-demo-appointment",
+    },
+  });
+
+  console.log(`Seed ok: tenant "${tenant.slug}" (${tenant.id})`);
+}
+
+main()
+  .catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
