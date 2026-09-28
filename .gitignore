@@ -34,3 +34,14 @@ Thumbs.db
 
 # Logs locais
 *.log
+
+# Playwright / E2E
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+tests/e2e/.e2e-fixture-ids.json
+
+# Worktrees locais do Claude Code
+.claude/worktrees/
+.claude/settings.local.json
