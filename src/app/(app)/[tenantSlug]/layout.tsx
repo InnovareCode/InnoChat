@@ -67,13 +67,20 @@ export default async function TenantLayout({
   // Onboarding (docs/arquitetura.md §13): incompleto enquanto não houver nenhum serviço OU
   // nenhum profissional com expediente cadastrado — o link "Primeiros passos" some da sidebar
   // assim que os dois existirem (WhatsApp fica de fora da checagem: ainda não tem tela).
-  const [serviceCount, professionalWithHoursCount] = await Promise.all([
+  const [serviceCount, professionalWithHoursCount, disconnectedWhatsappCount] = await Promise.all([
     getPrisma().service.count({ where: { tenantId: membership.tenant.id } }),
     getPrisma().professional.count({
       where: { tenantId: membership.tenant.id, workingHours: { some: {} } },
     }),
+    getPrisma().whatsappInstance.count({
+      where: { tenantId: membership.tenant.id, deletedAt: null, status: "DISCONNECTED" },
+    }),
   ]);
   const onboardingIncomplete = serviceCount === 0 || professionalWithHoursCount === 0;
+  // Ponto de alerta discreto na sidebar (mission): só para instância que já esteve conectada e
+  // caiu — uma instância recém-criada nasce em `QRCODE` (esperando o primeiro scan), o que NÃO é
+  // "queda" e não deveria acender o alerta.
+  const whatsappNeedsAttention = disconnectedWhatsappCount > 0;
 
   return (
     <html lang="pt-BR" data-theme={membership.tenant.theme} className={fontVariables}>
@@ -86,6 +93,7 @@ export default async function TenantLayout({
             subscriptionStatus={status}
             trialHoursLeft={trialHoursLeft}
             onboardingIncomplete={onboardingIncomplete}
+            whatsappNeedsAttention={whatsappNeedsAttention}
           >
             {children}
           </PanelShell>

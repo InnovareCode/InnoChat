@@ -12,6 +12,7 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/components/lib/cn";
+import { ConnectWhatsappDialog } from "@/components/whatsapp/connect-whatsapp-dialog";
 import {
   createProfessionalAction,
   createServiceAction,
@@ -66,14 +67,17 @@ export function OnboardingClient({
   tenantSlug,
   initialServices,
   initialProfessionals,
+  initialWhatsappConnected = false,
 }: {
   tenantSlug: string;
   initialServices: OnboardingService[];
   initialProfessionals: OnboardingProfessional[];
+  initialWhatsappConnected?: boolean;
 }) {
   const { notify } = useToast();
   const [services, setServices] = useState<OnboardingService[]>(initialServices);
   const [professionals, setProfessionals] = useState<OnboardingProfessional[]>(initialProfessionals);
+  const [whatsappConnected, setWhatsappConnected] = useState(initialWhatsappConnected);
   const [step, setStep] = useState(1);
   const [isPending, startTransition] = useTransition();
 
@@ -260,11 +264,18 @@ export function OnboardingClient({
             <CardTitle>Conectar WhatsApp</CardTitle>
             <CardDescription>O número que o bot vai usar para atender seus clientes.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <Alert variant="info">
-              A conexão com o WhatsApp chega em breve. Você já pode continuar configurando e usar a agenda manualmente
-              enquanto isso — nada aqui trava seu uso do painel.
-            </Alert>
+          <CardContent className="flex flex-col gap-4">
+            {whatsappConnected ? (
+              <Alert variant="success">Número conectado. Você pode conectar outro a qualquer momento por aqui ou em WhatsApp, na barra lateral.</Alert>
+            ) : (
+              <Alert variant="info">
+                Você já pode continuar configurando e usar a agenda manualmente sem conectar agora — nada aqui trava
+                seu uso do painel.
+              </Alert>
+            )}
+            <div>
+              <ConnectWhatsappDialog tenantSlug={tenantSlug} onConnected={() => setWhatsappConnected(true)} />
+            </div>
           </CardContent>
           <CardFooter className="justify-between">
             <Button variant="ghost" onClick={() => setStep(2)}>

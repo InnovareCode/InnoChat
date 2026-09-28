@@ -14,6 +14,7 @@ type PanelShellProps = {
   subscriptionStatus?: SubscriptionStatus;
   trialHoursLeft?: number | null;
   onboardingIncomplete?: boolean;
+  whatsappNeedsAttention?: boolean;
   children: React.ReactNode;
 };
 
@@ -109,6 +110,7 @@ export function PanelShell({
   subscriptionStatus = null,
   trialHoursLeft = null,
   onboardingIncomplete = false,
+  whatsappNeedsAttention = false,
   children,
 }: PanelShellProps) {
   return (
@@ -118,7 +120,11 @@ export function PanelShell({
           <Brand tenantName={tenantName} />
         </div>
         <div className="flex-1 overflow-y-auto">
-          <TenantSidebarNav tenantSlug={tenantSlug} onboardingIncomplete={onboardingIncomplete} />
+          <TenantSidebarNav
+            tenantSlug={tenantSlug}
+            onboardingIncomplete={onboardingIncomplete}
+            whatsappNeedsAttention={whatsappNeedsAttention}
+          />
         </div>
       </aside>
 
@@ -129,6 +135,7 @@ export function PanelShell({
               variant="tenant"
               tenantSlug={tenantSlug}
               onboardingIncomplete={onboardingIncomplete}
+              whatsappNeedsAttention={whatsappNeedsAttention}
               brand={<Brand tenantName={tenantName} />}
               footer={<LogoutButton className="w-full justify-start gap-2 text-sidebar-text hover:bg-sidebar-hover" />}
             />

@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AlertTriangle } from "lucide-react";
 import { listProfessionalsAction, listServicesAction } from "@/modules/agenda/catalog-actions";
+import { listWhatsappInstancesAction } from "@/modules/whatsapp/actions";
 import { OnboardingClient, type OnboardingProfessional, type OnboardingService } from "./onboarding-client";
 
 export default async function OnboardingPage({
@@ -11,9 +12,10 @@ export default async function OnboardingPage({
 }) {
   const { tenantSlug } = await params;
 
-  const [servicesResult, professionalsResult] = await Promise.all([
+  const [servicesResult, professionalsResult, whatsappResult] = await Promise.all([
     listServicesAction(tenantSlug),
     listProfessionalsAction(tenantSlug),
+    listWhatsappInstancesAction(tenantSlug),
   ]);
 
   if (!servicesResult.ok || !professionalsResult.ok) {
@@ -29,11 +31,14 @@ export default async function OnboardingPage({
     );
   }
 
+  const initialWhatsappConnected = whatsappResult.ok && whatsappResult.data.some((i) => i.status === "CONNECTED");
+
   return (
     <OnboardingClient
       tenantSlug={tenantSlug}
       initialServices={servicesResult.data as OnboardingService[]}
       initialProfessionals={professionalsResult.data as OnboardingProfessional[]}
+      initialWhatsappConnected={initialWhatsappConnected}
     />
   );
 }

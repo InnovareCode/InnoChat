@@ -37,6 +37,12 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
           >
             <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
             <span className="truncate">{item.label}</span>
+            {item.dot ? (
+              <>
+                <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden="true" title="Precisa de atenção" />
+                <span className="sr-only"> — precisa de atenção</span>
+              </>
+            ) : null}
           </Link>
         );
       })}
@@ -47,14 +53,19 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
 export function TenantSidebarNav({
   tenantSlug,
   onboardingIncomplete,
+  whatsappNeedsAttention,
   onNavigate,
 }: {
   tenantSlug: string;
   onboardingIncomplete?: boolean;
+  whatsappNeedsAttention?: boolean;
   onNavigate?: () => void;
 }) {
   return (
-    <NavList items={tenantNavItems(tenantSlug, { includeOnboarding: onboardingIncomplete })} onNavigate={onNavigate} />
+    <NavList
+      items={tenantNavItems(tenantSlug, { includeOnboarding: onboardingIncomplete, whatsappNeedsAttention })}
+      onNavigate={onNavigate}
+    />
   );
 }
 

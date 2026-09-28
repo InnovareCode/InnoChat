@@ -17,6 +17,10 @@ import {
   type WhatsappInstanceView,
 } from "./service";
 
+// Reexportados para a Lyra consumir sem importar direto de `./service` (camada de domínio) nos
+// Client Components — mesma convenção de `PlanListItem` em `src/modules/billing/actions.ts`.
+export type { ConnectionStatusView, QrCodeView, WhatsappInstanceView };
+
 /**
  * Server Actions da tela "WhatsApp" (docs/arquitetura.md §4, §9; docs/contratos.md "WhatsApp
  * (Fase 3)"). Toda ação de MUTAÇÃO (`create`/`disconnect`/`remove`/`setSandbox`) é restrita a

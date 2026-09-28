@@ -20,6 +20,10 @@ export type NavItem = {
   label: string;
   href: string;
   icon: LucideIcon;
+  /** Ponto de alerta discreto (ex.: número de WhatsApp desconectado) — sempre um booleano vindo
+   * do servidor, nunca um ícone cruzando a fronteira servidor/cliente (ver nota no topo deste
+   * arquivo/`sidebar-nav.tsx`). */
+  dot?: boolean;
 };
 
 /**
@@ -47,11 +51,15 @@ const TENANT_NAV_DEF: { label: string; path: string; icon: LucideIcon }[] = [
  * expediente) não está completa — calculado no `layout.tsx` do tenant, que já consulta o banco
  * para o banner de assinatura.
  */
-export function tenantNavItems(tenantSlug: string, options: { includeOnboarding?: boolean } = {}): NavItem[] {
-  const items = TENANT_NAV_DEF.map(({ label, path, icon }) => ({
+export function tenantNavItems(
+  tenantSlug: string,
+  options: { includeOnboarding?: boolean; whatsappNeedsAttention?: boolean } = {},
+): NavItem[] {
+  const items: NavItem[] = TENANT_NAV_DEF.map(({ label, path, icon }) => ({
     label,
     icon,
     href: `/${tenantSlug}/${path}`,
+    dot: path === "whatsapp" && !!options.whatsappNeedsAttention,
   }));
 
   if (options.includeOnboarding) {
