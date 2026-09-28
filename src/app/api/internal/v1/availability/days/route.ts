@@ -13,7 +13,7 @@ export async function GET(req: Request) {
     const result = await listAvailabilityDayOptions(ctx.tenantId, {
       serviceId: query.serviceId,
       professionalId: query.professionalId ?? null,
-      from: query.from,
+      from: query.from ?? null,
       limit: query.limit,
     });
     return NextResponse.json(result, { status: 200 });

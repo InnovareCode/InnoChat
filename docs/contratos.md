@@ -229,7 +229,9 @@ Rotas (`src/app/api/internal/v1/**`):
   `"any"` adiante).
 - `PATCH /contacts/{contactId}`, `GET /contacts/{contactId}/appointments` — nome 2–60
   caracteres (`INVALID_NAME`); "meus agendamentos" com rótulo `"Ter 30/09 14:30 — Corte
-  feminino (Ana)"`.
+  feminino (Ana)"` **e** (Fase 4b) `serviceId`, `professionalId`, `servico`, `profissional`,
+  `data`, `hora` (mesmos formatos de `core/bot/format.ts`) e `startsAt` (ISO) em cada opção —
+  aditivo, `label` continua igual.
 - `POST /appointments`, `POST /appointments/{id}/cancel`, `POST /appointments/{id}/reschedule`
   (`src/modules/bot-api/booking-bot.ts`) — reaproveitam `createAppointmentManual`/
   `cancelAppointment`/`rescheduleAppointment` de `src/modules/agenda/appointments.ts` (Fase 2,
@@ -259,6 +261,52 @@ do bot" depois). `upsertBotTextAction` valida que só existem variáveis conheci
 extendedTextMessage, `@lid` com/sem alternativa, grupo, mídia, `fromMe`, `connection.update`,
 lixo) — **nenhum capturado do servidor real** (Fase 0 ainda não rodou). Ver
 `fixtures/evolution/README.md` para o que muda quando os reais chegarem.
+
+## Fase 4b — API interna do bot: buracos de contrato encontrados ao montar o `innochat-bot` no n8n
+
+O workflow real (`n8n/innochat-bot.json`, mapa em `n8n/README.md`) expôs 3 buracos no contrato
+da Fase 4 — corrigidos de forma ADITIVA (nada do que o workflow já usa mudou de forma):
+
+1. **`GET /contacts/{contactId}/appointments` agora devolve dados estruturados por opção**, não
+   só `{id,label}`. Antes, o nó "Ação escolhida" do n8n extraía `data`/`hora`/`servico`/
+   `profissional` do `label` por regex para montar `CONFIRM_CANCEL` — frágil (dependia do
+   formato exato do rótulo) e não dava para remarcar (faltava `serviceId`/`professionalId`).
+   Cada item agora é `{ id, label, serviceId, professionalId, servico, profissional, data, hora,
+   startsAt }` (`data`/`hora` no fuso do tenant, mesmos formatos de `core/bot/format.ts`;
+   `startsAt` ISO em UTC). Implementado em `listMyAppointmentOptions`
+   (`src/modules/bot-api/booking-bot.ts`).
+2. **`tenant.timezone` na resposta `process` do `POST /messages/claim`** — antes só `{ name,
+   askProfessional }`; agora `{ name, askProfessional, timezone }`. O placeholder `timezone` do
+   nó Config do n8n (`n8n/README.md`) pode ser eliminado a favor deste campo, que nunca fica
+   desincronizado do tenant real.
+   `GET /availability/days` já aceita `from` **omitido** (novo — antes era obrigatório): nesse
+   caso o padrão é "hoje no fuso do tenant", resolvido no backend (`listAvailabilityDayOptions`)
+   sem o chamador precisar saber o fuso.
+3. **Rótulos estruturais editáveis** — "Confirmar", "Escolher outro horário", "Sim, cancelar",
+   "Não, manter", "Ver mais datas", "Mais horários", "Ver mais" e o rodapé "0. Menu principal"
+   (hoje hardcoded no Code node "Montar mensagem" do n8n) ganharam chaves `BotText` novas, com
+   os MESMOS valores como padrão, devolvidas no mesmo `texts` do claim:
+   `LABEL_CONFIRM`, `LABEL_OTHER_TIME`, `LABEL_CANCEL_YES`, `LABEL_CANCEL_NO`,
+   `LABEL_MORE_DAYS`, `LABEL_MORE_TIMES`, `LABEL_MORE`, `LABEL_BACK_TO_MENU`
+   (`BOT_TEXT_KEYS`/`DEFAULT_BOT_TEXTS` em `src/core/bot/texts.ts`; migration
+   `prisma/migrations/20260928000006_bot_text_structural_labels`, `ALTER TYPE ... ADD VALUE`
+   aplicada em `innochat` e `innochat_test`). Passam pelo MESMO CRUD/preview de `BotText`
+   (`listBotTextsAction`/`upsertBotTextAction`/`resetBotTextAction`/`previewBotTextAction`) sem
+   tratamento especial — são texto livre sem `{variavel}` (não fazem parte de
+   `BOT_TEXT_VARIABLES`, então `{algo}` neles cai em `INVALID_PAYLOAD` como qualquer variável
+   desconhecida). **Descrição humana de cada chave nova, para a tela "Mensagens do bot" (Lyra):**
+   - `LABEL_CONFIRM` — botão/opção "Confirmar" na tela de confirmar agendamento.
+   - `LABEL_OTHER_TIME` — botão/opção "Escolher outro horário" na tela de confirmar agendamento.
+   - `LABEL_CANCEL_YES` — botão/opção "Sim, cancelar" na confirmação de cancelamento.
+   - `LABEL_CANCEL_NO` — botão/opção "Não, manter" na confirmação de cancelamento.
+   - `LABEL_MORE_DAYS` — opção de paginação "Ver mais datas" na lista de dias disponíveis.
+   - `LABEL_MORE_TIMES` — opção de paginação "Mais horários" na lista de horários disponíveis.
+   - `LABEL_MORE` — opção de paginação genérica "Ver mais" (menus com mais de 9 itens).
+   - `LABEL_BACK_TO_MENU` — rodapé "0. Menu principal" que aparece nas telas do bot.
+
+   A implementação do lado do n8n (trocar o hardcode de `MENUS`/footer/paginação no Code node
+   "Montar mensagem" por `texts.LABEL_*`) **não foi feita nesta rodada** — é trabalho no
+   workflow, fora do escopo de backend; o contrato já está pronto para consumir.
 
 ## Rotas HTTP do navegador previstas (Fase 2+)
 

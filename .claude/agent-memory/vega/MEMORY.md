@@ -13,3 +13,4 @@
 - [Lease atômica da ChatSession via updateMany](chatsession_lease_atomic_update.md) — trava de 20s sem SELECT FOR UPDATE, padrão reusável para travas por prazo.
 - [z.toJSONSchema quebra com z.coerce.date()](zod_openapi_date_coerce.md) — precisa de `unrepresentable: "any"` para gerar OpenAPI sem trocar de lib.
 - [Estender função de domínio compartilhada, não forkar](extend_dont_fork_shared_domain_fn.md) — como o bot reaproveitou createAppointmentManual/cancel/reschedule da Fase 2.
+- [Chave nova em BOT_TEXT_KEYS quebra Record exaustivo no frontend](bot_text_keys_ripple_to_frontend.md) — checar `Record<BotTextKeyLiteral,...>` (ex.: tela "Mensagens do bot") antes de fechar.

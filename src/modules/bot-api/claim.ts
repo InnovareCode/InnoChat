@@ -27,7 +27,7 @@ export type ClaimProcessResult = {
     lockToken: string;
     expired: boolean;
   };
-  tenant: { name: string; askProfessional: boolean };
+  tenant: { name: string; askProfessional: boolean; timezone: string };
   texts: Record<string, string>;
 };
 
@@ -271,7 +271,7 @@ export async function claimMessage(ctx: InternalApiContext, rawPayload: unknown)
       lockToken,
       expired,
     },
-    tenant: { name: tenant.name, askProfessional: tenant.askProfessional },
+    tenant: { name: tenant.name, askProfessional: tenant.askProfessional, timezone: tenant.timezone },
     texts,
   };
 }

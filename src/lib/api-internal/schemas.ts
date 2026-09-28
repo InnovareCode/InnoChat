@@ -38,7 +38,7 @@ export const ClaimProcessResponseSchema = z
       lockToken: z.string(),
       expired: z.boolean(),
     }),
-    tenant: z.object({ name: z.string(), askProfessional: z.boolean() }),
+    tenant: z.object({ name: z.string(), askProfessional: z.boolean(), timezone: z.string() }),
     texts: z.record(z.string(), z.string()),
   })
   .describe("200 — processar (§6.2)");
@@ -99,7 +99,9 @@ export const CatalogProfessionalsResponseSchema = z
 export const AvailabilityDaysQuerySchema = z.object({
   serviceId: z.string().min(1),
   professionalId: z.string().min(1).optional(),
-  from: z.string().regex(isoDateOnly, "from precisa estar no formato YYYY-MM-DD"),
+  // Omitido = "hoje no fuso do tenant" (resolvido em `listAvailabilityDayOptions`, que já
+  // carrega o tenant para outras coisas — evita o n8n precisar saber o fuso só para montar isto).
+  from: z.string().regex(isoDateOnly, "from precisa estar no formato YYYY-MM-DD").optional(),
   limit: z.coerce.number().int().min(1).max(7).default(7),
 });
 export const AvailabilityDaysResponseSchema = z
@@ -122,8 +124,20 @@ export const AvailabilitySlotsResponseSchema = z.object({ options: z.array(optio
 export const UpdateContactRequestSchema = z.object({ name: z.string().min(1).max(60) }).describe("Corpo de PATCH /contacts/{contactId}");
 
 export const ContactAppointmentsQuerySchema = z.object({ upcoming: z.coerce.boolean().default(true) });
+
+// Estende `optionSchema` com os dados que hoje o n8n extraía por regex do `label` (ver
+// "PARA O PRÓXIMO" do handoff da Vega, Fase 4b) — aditivo, `id`/`label` continuam iguais.
+const appointmentOptionSchema = optionSchema.extend({
+  serviceId: z.string(),
+  professionalId: z.string(),
+  servico: z.string(),
+  profissional: z.string(),
+  data: z.string().describe("Rótulo formatado no fuso do tenant, ex.: \"Ter 30/09\" (core/bot/format.ts)."),
+  hora: z.string().describe("Rótulo formatado no fuso do tenant, ex.: \"14:30\" (core/bot/format.ts)."),
+  startsAt: z.string().describe("ISO 8601 em UTC."),
+});
 export const ContactAppointmentsResponseSchema = z
-  .object({ options: z.array(optionSchema) })
+  .object({ options: z.array(appointmentOptionSchema) })
   .describe("200 GET /contacts/{contactId}/appointments");
 
 export const CreateAppointmentRequestSchema = z

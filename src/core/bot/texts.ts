@@ -29,6 +29,17 @@ export const BOT_TEXT_KEYS = [
   "ONLY_TEXT",
   "SESSION_EXPIRED",
   "GOODBYE",
+  // Rótulos estruturais (docs/arquitetura.md §6.6/§6.7): usados pelo n8n para montar opções e o
+  // rodapé do menu — não são mensagens completas e não aceitam `{variavel}`, mas passam pelo
+  // mesmo CRUD/preview de `BotText` (edição livre, sem tratamento especial no backend).
+  "LABEL_CONFIRM",
+  "LABEL_OTHER_TIME",
+  "LABEL_CANCEL_YES",
+  "LABEL_CANCEL_NO",
+  "LABEL_MORE_DAYS",
+  "LABEL_MORE_TIMES",
+  "LABEL_MORE",
+  "LABEL_BACK_TO_MENU",
 ] as const;
 
 export type BotTextKeyLiteral = (typeof BOT_TEXT_KEYS)[number];
@@ -62,6 +73,14 @@ export const DEFAULT_BOT_TEXTS: Record<BotTextKeyLiteral, string> = {
   ONLY_TEXT: "Por enquanto só entendo mensagens de texto.",
   SESSION_EXPIRED: "Faz um tempo que não conversamos, então recomecei o menu por aqui. ",
   GOODBYE: "Até logo! 👋",
+  LABEL_CONFIRM: "Confirmar",
+  LABEL_OTHER_TIME: "Escolher outro horário",
+  LABEL_CANCEL_YES: "Sim, cancelar",
+  LABEL_CANCEL_NO: "Não, manter",
+  LABEL_MORE_DAYS: "Ver mais datas",
+  LABEL_MORE_TIMES: "Mais horários",
+  LABEL_MORE: "Ver mais",
+  LABEL_BACK_TO_MENU: "0. Menu principal",
 };
 
 /**

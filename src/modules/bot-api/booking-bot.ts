@@ -77,7 +77,7 @@ async function resolveEligibleProfessionalIds(tenantId: string, serviceId: strin
 
 export async function listAvailabilityDayOptions(
   tenantId: string,
-  params: { serviceId: string; professionalId: string | null; from: string; limit: number },
+  params: { serviceId: string; professionalId: string | null; from: string | null; limit: number },
 ): Promise<{ options: Option[]; hasMore: boolean; nextFrom: string | null }> {
   const service = await forTenant(tenantId).service.findFirst({ where: { id: params.serviceId, active: true } });
   if (!service) notFound("Serviço não encontrado.");
@@ -87,6 +87,8 @@ export async function listAvailabilityDayOptions(
   if (professionalIds.length === 0) return { options: [], hasMore: false, nextFrom: null };
 
   const now = new Date();
+  // `from` omitido = hoje no fuso do tenant (docs/contratos.md — "API interna do bot").
+  const fromDateISO = params.from ?? formatDayIso(now, tenant.timezone);
   const horizonEnd = new Date(now.getTime() + (tenant.maxHorizonDays + 2) * 86_400_000);
   const loadRange = { from: new Date(now.getTime() - 86_400_000), to: horizonEnd };
 
@@ -103,7 +105,7 @@ export async function listAvailabilityDayOptions(
       minLeadTimeMin: tenant.minLeadTimeMin,
       maxHorizonDays: tenant.maxHorizonDays,
       now,
-      fromDateISO: params.from,
+      fromDateISO,
       limit: tenant.maxHorizonDays + 1,
     });
     for (const d of days) daysWithSlot.add(d);
@@ -299,7 +301,24 @@ export async function rescheduleAppointmentBot(ctx: InternalApiContext, appointm
   }
 }
 
-export async function listMyAppointmentOptions(tenantId: string, contactId: string, upcoming: boolean): Promise<{ options: Option[] }> {
+export type AppointmentOption = Option & {
+  serviceId: string;
+  professionalId: string;
+  servico: string;
+  profissional: string;
+  data: string;
+  hora: string;
+  startsAt: string;
+};
+
+/**
+ * `GET /contacts/{contactId}/appointments` (docs/arquitetura.md §6.5). Cada opção já vem com os
+ * dados que o n8n precisaria extrair do `label` por regex para remarcar/cancelar (docs/contratos.md
+ * — "API interna do bot"): `serviceId`/`professionalId`/`servico`/`profissional`/`data`/`hora`
+ * (formatados no fuso do tenant, mesmos formatos de `core/bot/format.ts`) e `startsAt` em ISO.
+ * `label` continua igual, por compatibilidade com quem já lê só ele.
+ */
+export async function listMyAppointmentOptions(tenantId: string, contactId: string, upcoming: boolean): Promise<{ options: AppointmentOption[] }> {
   const contact = await forTenant(tenantId).contact.findFirst({ where: { id: contactId } });
   if (!contact) notFound("Cliente não encontrado.");
 
@@ -318,9 +337,20 @@ export async function listMyAppointmentOptions(tenantId: string, contactId: stri
   });
 
   return {
-    options: appointments.map((a) => ({
-      id: a.id,
-      label: `${formatDayLabel(a.startsAt, tenant.timezone)} ${formatTimeLabel(a.startsAt, tenant.timezone)} — ${a.service.name} (${a.professional.name})`,
-    })),
+    options: appointments.map((a) => {
+      const data = formatDayLabel(a.startsAt, tenant.timezone);
+      const hora = formatTimeLabel(a.startsAt, tenant.timezone);
+      return {
+        id: a.id,
+        label: `${data} ${hora} — ${a.service.name} (${a.professional.name})`,
+        serviceId: a.serviceId,
+        professionalId: a.professionalId,
+        servico: a.service.name,
+        profissional: a.professional.name,
+        data,
+        hora,
+        startsAt: a.startsAt.toISOString(),
+      };
+    }),
   };
 }
