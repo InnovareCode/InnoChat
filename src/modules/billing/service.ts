@@ -4,7 +4,7 @@ import { forTenant } from "@/lib/db/tenant-client";
 import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { sendMail, invoiceGeneratedEmail, subscriptionSuspendedEmail } from "@/lib/email";
-import { env } from "@/env";
+import { getPublicBaseUrl } from "@/lib/public-url";
 import { computeTrialEndsAt, effectiveStatus, type SubscriptionStatus } from "@/core/billing";
 import { formatCentsBRL, formatDateBR } from "./format";
 import { getMercadoPagoGateway, type MercadoPagoGateway } from "./mercadopago";
@@ -16,8 +16,8 @@ import { getMercadoPagoGateway, type MercadoPagoGateway } from "./mercadopago";
 
 const PIX_EXPIRATION_DAYS = 3;
 
-export function billingUrlFor(tenantSlug: string): string {
-  return `${env.NEXT_PUBLIC_APP_URL}/${tenantSlug}/assinatura`;
+export async function billingUrlFor(tenantSlug: string): Promise<string> {
+  return `${await getPublicBaseUrl()}/${tenantSlug}/assinatura`;
 }
 
 // ---------------------------------------------------------------------------
@@ -231,11 +231,93 @@ export async function applyInvoicePayment(invoiceId: string, paidAt: Date): Prom
     await tx.invoice.update({ where: { id: invoice.id }, data: { status: "PAID", paidAt } });
     await tx.subscription.update({
       where: { id: subscription.id },
-      data: { status: "ACTIVE", currentPeriodEnd: nextPeriodEnd, trialEndsAt: null },
+      data: {
+        status: "ACTIVE",
+        currentPeriodEnd: nextPeriodEnd,
+        trialEndsAt: null,
+        // O ciclo pago que está começando AGORA é o "próximo ciclo" do §7.2: se havia um
+        // downgrade agendado (`changePlan`), é aqui que ele entra em vigor — nunca antes
+        // (upgrade já aplicou na hora, em `changePlan`; downgrade espera o pagamento que abre
+        // o novo período, não só o tick rodar perto do vencimento).
+        ...(subscription.pendingPlanId ? { planId: subscription.pendingPlanId, pendingPlanId: null } : {}),
+      },
     });
 
     return { alreadyProcessed: false };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Troca de plano pelo OWNER (docs/arquitetura.md §7.2)
+// ---------------------------------------------------------------------------
+
+export type ChangePlanResult = { appliedImmediately: boolean };
+
+/**
+ * Upgrade (novo plano com `sortOrder` maior) vale na hora — a diferença de preço só aparece na
+ * próxima fatura, sem cálculo proporcional (§7.2, decisão do dono). Downgrade fica em
+ * `pendingPlanId` e só é aceito se o uso ATUAL já couber no plano novo (considerando os
+ * overrides da empresa, que continuam valendo depois da troca) — a `DomainError` traz `rule`/
+ * `limit`/`current` para a tela dizer exatamente o que remover antes de tentar de novo.
+ */
+export async function changePlan(tenantId: string, newPlanId: string): Promise<ChangePlanResult> {
+  const prisma = getPrisma();
+
+  const [subscription, newPlan, tenant] = await Promise.all([
+    prisma.subscription.findUnique({ where: { tenantId }, include: { plan: true } }),
+    prisma.plan.findUnique({ where: { id: newPlanId } }),
+    prisma.tenant.findUnique({ where: { id: tenantId }, select: { maxProfessionalsOverride: true, maxWhatsappNumbersOverride: true } }),
+  ]);
+
+  if (!subscription) throw new DomainError("NOT_FOUND", "Assinatura não encontrada para esta empresa.");
+  if (!newPlan || !newPlan.active) throw new DomainError("NOT_FOUND", "Plano não encontrado ou não disponível.");
+  if (!tenant) throw new DomainError("NOT_FOUND", "Empresa não encontrada.");
+  if (subscription.status === "CANCELED") {
+    throw new DomainError("INVALID_STATE", "Reative a assinatura antes de trocar de plano.");
+  }
+  if (newPlan.id === subscription.planId && !subscription.pendingPlanId) {
+    throw new DomainError("INVALID_STATE", "A empresa já está neste plano.");
+  }
+
+  const isUpgrade = newPlan.sortOrder >= subscription.plan.sortOrder;
+
+  if (isUpgrade) {
+    await prisma.subscription.update({ where: { tenantId }, data: { planId: newPlan.id, pendingPlanId: null } });
+    return { appliedImmediately: true };
+  }
+
+  const profLimit = tenant.maxProfessionalsOverride ?? newPlan.maxProfessionals;
+  const whatsappLimit = tenant.maxWhatsappNumbersOverride ?? newPlan.maxWhatsappNumbers;
+  const scoped = forTenant(tenantId);
+
+  if (profLimit !== null) {
+    const current = await scoped.professional.count({});
+    if (current > profLimit) {
+      throw new DomainError(
+        "PLAN_DOWNGRADE_BLOCKED",
+        `O plano novo permite até ${profLimit} profissional(is), e a empresa tem ${current}. Remova profissionais antes de trocar.`,
+        { rule: "maxProfessionals", limit: profLimit, current },
+      );
+    }
+  }
+  if (whatsappLimit !== null) {
+    const current = await scoped.whatsappInstance.count({ where: { deletedAt: null } });
+    if (current > whatsappLimit) {
+      throw new DomainError(
+        "PLAN_DOWNGRADE_BLOCKED",
+        `O plano novo permite até ${whatsappLimit} número(s) de WhatsApp, e a empresa tem ${current}. Desconecte números antes de trocar.`,
+        { rule: "maxWhatsappNumbers", limit: whatsappLimit, current },
+      );
+    }
+  }
+
+  await prisma.subscription.update({ where: { tenantId }, data: { pendingPlanId: newPlan.id } });
+  return { appliedImmediately: false };
+}
+
+/** Planos visíveis para a empresa escolher (docs/arquitetura.md §7.2 — `active` controla o que aparece aqui). */
+export async function listActivePlans() {
+  return getPrisma().plan.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } });
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +338,7 @@ export async function sendInvoiceGeneratedEmail(params: {
     amountReais: formatCentsBRL(params.amountCents),
     dueDateBr: formatDateBR(params.dueAt, params.timezone),
     pixCopyPaste: params.pixCopyPaste ?? "(gere o Pix na tela de Assinatura)",
-    billingUrl: billingUrlFor(params.tenantSlug),
+    billingUrl: await billingUrlFor(params.tenantSlug),
   });
   await sendMail({ to: params.toEmail, subject, html, text }).catch((error) => {
     logger.error("billing.email.invoice_generated.failed", { errorMessage: error instanceof Error ? error.message : String(error) });
@@ -266,7 +348,7 @@ export async function sendInvoiceGeneratedEmail(params: {
 export async function sendSubscriptionSuspendedEmail(params: { toEmail: string; tenantName: string; tenantSlug: string }) {
   const { subject, html, text } = subscriptionSuspendedEmail({
     tenantName: params.tenantName,
-    billingUrl: billingUrlFor(params.tenantSlug),
+    billingUrl: await billingUrlFor(params.tenantSlug),
   });
   await sendMail({ to: params.toEmail, subject, html, text }).catch((error) => {
     logger.error("billing.email.suspended.failed", { errorMessage: error instanceof Error ? error.message : String(error) });

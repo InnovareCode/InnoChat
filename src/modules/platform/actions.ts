@@ -3,12 +3,21 @@
 import { z } from "zod";
 import { requirePlatformAdmin } from "@/lib/auth/guards";
 import { runAction, type Result } from "@/lib/result";
+import { ensurePublicBaseUrlFromCurrentRequest } from "@/lib/public-url";
 import {
   getMaskedPlatformSettings,
   regenerateInternalApiSecret,
   updatePlatformSettings,
   type PlatformSettingsView,
 } from "./service";
+import {
+  testEvolutionConnection,
+  testMercadoPagoConnection,
+  testN8nConnection,
+  testSmtpConnection,
+  type ConnectionTestResult,
+} from "./connection-tests";
+import { activateBotWorkflow, deactivateBotWorkflow, syncN8n, type N8nSyncSummary } from "./n8n-sync";
 
 /**
  * Server Actions do admin da plataforma (docs/contratos.md). Guardadas por
@@ -26,6 +35,8 @@ const updatePlatformSettingsSchema = z.object({
   evolutionApiUrl: z.union([z.literal(""), z.string().url()]).optional(),
   evolutionApiKey: z.string().max(500).optional(),
   n8nWebhookBaseUrl: z.union([z.literal(""), z.string().url()]).optional(),
+  n8nBaseUrl: z.union([z.literal(""), z.string().url()]).optional(),
+  n8nApiKey: z.string().max(500).optional(),
   mercadoPagoAccessToken: z.string().max(500).optional(),
   mercadoPagoWebhookSecret: z.string().max(500).optional(),
   smtpHost: z.string().max(255).optional(),
@@ -41,6 +52,9 @@ export async function updatePlatformSettingsAction(input: unknown): Promise<Resu
   return runAction(async () => {
     const admin = await requirePlatformAdmin();
     const data = updatePlatformSettingsSchema.parse(input);
+    // 1ª vez que um admin salva Configurações: grava `publicBaseUrl` a partir desta própria
+    // requisição (nunca sobrescreve se já tiver um valor — ver `src/lib/public-url.ts`).
+    await ensurePublicBaseUrlFromCurrentRequest();
     return updatePlatformSettings(data, admin.id);
   });
 }
@@ -53,5 +67,88 @@ export async function regenerateInternalApiSecretAction(): Promise<Result<{ secr
   return runAction(async () => {
     const admin = await requirePlatformAdmin();
     return regenerateInternalApiSecret(admin.id);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Testar conexão (docs/contratos.md) — sempre {ok, detalhe}, nunca o segredo de volta.
+// ---------------------------------------------------------------------------
+
+const testEvolutionSchema = z.object({ evolutionApiUrl: z.string().url(), evolutionApiKey: z.string().min(1) });
+
+export async function testEvolutionConnectionAction(input: unknown): Promise<Result<ConnectionTestResult>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    const data = testEvolutionSchema.parse(input);
+    return testEvolutionConnection(data.evolutionApiUrl, data.evolutionApiKey);
+  });
+}
+
+const testMercadoPagoSchema = z.object({ mercadoPagoAccessToken: z.string().min(1) });
+
+export async function testMercadoPagoConnectionAction(input: unknown): Promise<Result<ConnectionTestResult>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    const data = testMercadoPagoSchema.parse(input);
+    return testMercadoPagoConnection(data.mercadoPagoAccessToken);
+  });
+}
+
+const testN8nSchema = z.object({ n8nBaseUrl: z.string().url(), n8nApiKey: z.string().min(1) });
+
+export async function testN8nConnectionAction(input: unknown): Promise<Result<ConnectionTestResult>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    const data = testN8nSchema.parse(input);
+    return testN8nConnection(data.n8nBaseUrl, data.n8nApiKey);
+  });
+}
+
+const testSmtpSchema = z.object({
+  smtpHost: z.string().min(1),
+  smtpPort: z.coerce.number().int().min(1).max(65535),
+  smtpSecure: z.boolean().optional(),
+  smtpUser: z.string().optional(),
+  smtpPassword: z.string().optional(),
+});
+
+export async function testSmtpConnectionAction(input: unknown): Promise<Result<ConnectionTestResult>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    const data = testSmtpSchema.parse(input);
+    return testSmtpConnection({
+      host: data.smtpHost,
+      port: data.smtpPort,
+      secure: !!data.smtpSecure,
+      user: data.smtpUser,
+      password: data.smtpPassword,
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Sincronização do n8n (docs/contratos.md) — nunca ativa o bot sozinha.
+// ---------------------------------------------------------------------------
+
+export async function syncN8nAction(): Promise<Result<N8nSyncSummary>> {
+  return runAction(async () => {
+    const admin = await requirePlatformAdmin();
+    return syncN8n(admin.id);
+  });
+}
+
+export async function activateBotWorkflowAction(): Promise<Result<{ activated: true }>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    await activateBotWorkflow();
+    return { activated: true };
+  });
+}
+
+export async function deactivateBotWorkflowAction(): Promise<Result<{ activated: false }>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    await deactivateBotWorkflow();
+    return { activated: false };
   });
 }

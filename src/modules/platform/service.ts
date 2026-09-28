@@ -10,9 +10,14 @@ import { maskSecret } from "@/lib/mask";
  * (`regenerateInternalApiSecret`).
  */
 export type PlatformSettingsView = {
+  // Só leitura — nunca vem de `PlatformSettingsInput` (gravado sozinho a partir da requisição,
+  // `src/lib/public-url.ts`). Exibido para o admin conferir o que o sistema está usando.
+  publicBaseUrl: string | null;
   evolutionApiUrl: string | null;
   evolutionApiKeyMasked: string | null;
   n8nWebhookBaseUrl: string | null;
+  n8nBaseUrl: string | null;
+  n8nApiKeyMasked: string | null;
   internalApiSecretConfigured: boolean;
   mercadoPagoAccessTokenMasked: string | null;
   mercadoPagoWebhookSecretMasked: string | null;
@@ -28,9 +33,12 @@ export type PlatformSettingsView = {
 };
 
 type PlatformSettingsRow = {
+  publicBaseUrl: string | null;
   evolutionApiUrl: string | null;
   evolutionApiKey: string | null;
   n8nWebhookBaseUrl: string | null;
+  n8nBaseUrl: string | null;
+  n8nApiKey: string | null;
   internalApiSecretHash: string | null;
   mercadoPagoAccessToken: string | null;
   mercadoPagoWebhookSecret: string | null;
@@ -48,9 +56,12 @@ type PlatformSettingsRow = {
 function toView(row: PlatformSettingsRow): PlatformSettingsView {
   if (!row) {
     return {
+      publicBaseUrl: null,
       evolutionApiUrl: null,
       evolutionApiKeyMasked: null,
       n8nWebhookBaseUrl: null,
+      n8nBaseUrl: null,
+      n8nApiKeyMasked: null,
       internalApiSecretConfigured: false,
       mercadoPagoAccessTokenMasked: null,
       mercadoPagoWebhookSecretMasked: null,
@@ -67,9 +78,12 @@ function toView(row: PlatformSettingsRow): PlatformSettingsView {
   }
 
   return {
+    publicBaseUrl: row.publicBaseUrl,
     evolutionApiUrl: row.evolutionApiUrl,
     evolutionApiKeyMasked: maskSecret(row.evolutionApiKey),
     n8nWebhookBaseUrl: row.n8nWebhookBaseUrl,
+    n8nBaseUrl: row.n8nBaseUrl,
+    n8nApiKeyMasked: maskSecret(row.n8nApiKey),
     internalApiSecretConfigured: !!row.internalApiSecretHash,
     mercadoPagoAccessTokenMasked: maskSecret(row.mercadoPagoAccessToken),
     mercadoPagoWebhookSecretMasked: maskSecret(row.mercadoPagoWebhookSecret),
@@ -99,6 +113,8 @@ export type PlatformSettingsInput = {
   evolutionApiUrl?: string;
   evolutionApiKey?: string;
   n8nWebhookBaseUrl?: string;
+  n8nBaseUrl?: string;
+  n8nApiKey?: string;
   mercadoPagoAccessToken?: string;
   mercadoPagoWebhookSecret?: string;
   smtpHost?: string;
@@ -123,6 +139,8 @@ export async function updatePlatformSettings(input: PlatformSettingsInput, updat
     evolutionApiUrl: keepIfEmpty(input.evolutionApiUrl, current?.evolutionApiUrl),
     evolutionApiKey: keepIfEmpty(input.evolutionApiKey, current?.evolutionApiKey),
     n8nWebhookBaseUrl: keepIfEmpty(input.n8nWebhookBaseUrl, current?.n8nWebhookBaseUrl),
+    n8nBaseUrl: keepIfEmpty(input.n8nBaseUrl, current?.n8nBaseUrl),
+    n8nApiKey: keepIfEmpty(input.n8nApiKey, current?.n8nApiKey),
     mercadoPagoAccessToken: keepIfEmpty(input.mercadoPagoAccessToken, current?.mercadoPagoAccessToken),
     mercadoPagoWebhookSecret: keepIfEmpty(input.mercadoPagoWebhookSecret, current?.mercadoPagoWebhookSecret),
     smtpHost: keepIfEmpty(input.smtpHost, current?.smtpHost),

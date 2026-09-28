@@ -52,6 +52,20 @@ model AuthToken {
   @@map("auth_tokens")
 }
 
+// Instalação única do primeiro admin da plataforma (`/instalacao`, docs/contratos.md). Sem
+// `userId`: nasce antes de existir qualquer `User` administrador. Regenerado a cada boot do
+// servidor enquanto não houver admin (`src/instrumentation.ts`) — por isso não precisa de mais
+// de uma linha vigente; a camada de aplicação apaga a anterior antes de criar a nova.
+model PlatformInstallCode {
+  id        String    @id @default(cuid())
+  codeHash  String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@map("platform_install_codes")
+}
+
 enum PanelTheme {
   INDIGO_CLINICO
   AMBAR_ESTUDIO
@@ -122,11 +136,31 @@ model Membership {
 model PlatformSettings {
   id Int @id @default(1)
 
+  // URL pública do painel (decisão do dono, 2026-09-28: nada de URL/credencial solta em env
+  // var — só `DATABASE_URL`/`AUTH_SECRET` sobram no Easypanel). Normalmente derivada da própria
+  // requisição (`src/lib/public-url.ts`, cabeçalhos `x-forwarded-host`/`x-forwarded-proto`);
+  // este campo é só o OVERRIDE para contextos sem requisição (tick/cron) — preenchido sozinho
+  // na 1ª vez que um admin salva Configurações, nunca editado à mão na v1.
+  publicBaseUrl String?
+
   evolutionApiUrl String?
   evolutionApiKey String?
 
   n8nWebhookBaseUrl     String?
   internalApiSecretHash String?
+
+  // Sincronização do n8n pelo painel (Fase 7+, docs/contratos.md "Configuração pela
+  // plataforma"): API pública do n8n (`n8nBaseUrl` = ex. `https://n8n.exemplo.com`,
+  // `n8nApiKey` mascarada na UI) e os IDs encontrados/criados na última sincronização — para a
+  // sync ser idempotente (atualiza a mesma credencial/workflow, nunca duplica).
+  n8nBaseUrl String?
+  n8nApiKey  String?
+
+  n8nCredPainelId    String?
+  n8nCredEvolutionId String?
+  n8nCredApiId       String?
+  n8nWorkflowBotId    String?
+  n8nWorkflowErrosId  String?
 
   mercadoPagoAccessToken   String?
   mercadoPagoWebhookSecret String?

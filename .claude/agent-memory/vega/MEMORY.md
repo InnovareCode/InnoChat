@@ -14,3 +14,5 @@
 - [z.toJSONSchema quebra com z.coerce.date()](zod_openapi_date_coerce.md) — precisa de `unrepresentable: "any"` para gerar OpenAPI sem trocar de lib.
 - [Estender função de domínio compartilhada, não forkar](extend_dont_fork_shared_domain_fn.md) — como o bot reaproveitou createAppointmentManual/cancel/reschedule da Fase 2.
 - [Chave nova em BOT_TEXT_KEYS quebra Record exaustivo no frontend](bot_text_keys_ripple_to_frontend.md) — checar `Record<BotTextKeyLiteral,...>` (ex.: tela "Mensagens do bot") antes de fechar.
+- [URL pública sem env var + armadilha do prerender estático em /instalacao](public_url_no_env.md) — `getPublicBaseUrl()`, `PlatformSettings.publicBaseUrl`, e por que página pública que decide 200/404 por banco precisa de `dynamic = "force-dynamic"`.
+- [n8n: API pública não tem update/list de credenciais](n8n_public_api_no_update_no_list_credentials.md) — só POST/DELETE; "atualizar" é sempre recriar + regravar o id em todo nó. PENDÊNCIA: não confirmado contra instância real.

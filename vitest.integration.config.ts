@@ -12,6 +12,11 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/integration/**/*.{test,spec}.ts"],
+    // Ver `tests/integration/setup.ts`: fora de uma requisição HTTP, `getPublicBaseUrl()`
+    // (src/lib/public-url.ts) precisa de `PlatformSettings.publicBaseUrl` — sem isto, todo
+    // teste que passa por `signUp`/`billing/tick`/e-mails com link quebraria com
+    // `PUBLIC_URL_UNKNOWN`.
+    setupFiles: ["tests/integration/setup.ts"],
     testTimeout: 30_000,
     // Todos os arquivos de integração batem no MESMO Postgres real, e alguns (Fase 7 — billing)
     // fazem varredura GLOBAL de tabelas (`Subscription`/`Invoice` sem filtro de tenant, de

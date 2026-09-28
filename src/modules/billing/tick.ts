@@ -85,7 +85,7 @@ async function generateUpcomingInvoices(
   const leadWindow = addDays(now, INVOICE_LEAD_DAYS);
   const subscriptions = await prisma.subscription.findMany({
     where: { status: { in: ["ACTIVE", "PAST_DUE"] }, currentPeriodEnd: { lte: leadWindow } },
-    include: { plan: true, tenant: true },
+    include: { plan: true, pendingPlan: true, tenant: true },
   });
 
   for (const subscription of subscriptions) {
@@ -98,9 +98,17 @@ async function generateUpcomingInvoices(
     const periodStart = subscription.currentPeriodEnd;
     const periodEnd = addMonths(periodStart, 1);
 
+    // Downgrade agendado (`changePlan`, docs/arquitetura.md §7.2): o ciclo que está sendo
+    // faturado AGORA (5 dias antes de começar) é o "próximo ciclo" em que ele entra em vigor —
+    // a fatura já sai no preço do plano novo, e a assinatura já aponta para ele a partir daqui.
+    const billingPlan = subscription.pendingPlan ?? subscription.plan;
+    if (subscription.pendingPlanId) {
+      await prisma.subscription.update({ where: { id: subscription.id }, data: { planId: subscription.pendingPlanId, pendingPlanId: null } });
+    }
+
     const { invoice, created } = await createInvoiceForPeriodTracked({
       subscriptionId: subscription.id,
-      amountCents: subscription.plan.priceCents,
+      amountCents: billingPlan.priceCents,
       periodStart,
       periodEnd,
       dueAt: periodEnd,
@@ -205,7 +213,7 @@ async function notifyDue(
     tenantName: invoice.subscription.tenant.name,
     amountReais: formatCentsBRL(invoice.amountCents),
     dueDateBr: formatDateBR(invoice.dueAt, invoice.subscription.tenant.timezone),
-    billingUrl: billingUrlFor(invoice.subscription.tenant.slug),
+    billingUrl: await billingUrlFor(invoice.subscription.tenant.slug),
     dueToday,
   });
   await sendMail({ to: payerEmail, subject, html, text }).catch((error) => {

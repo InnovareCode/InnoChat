@@ -65,9 +65,12 @@ caracteres) ou como booleano `configured`. Ao salvar, campo de texto/segredo vaz
 - `getPlatformSettingsAction(): Result<PlatformSettingsView>`
   ```ts
   type PlatformSettingsView = {
+    publicBaseUrl: string | null; // só leitura — ver "Configuração pela plataforma" abaixo
     evolutionApiUrl: string | null;
     evolutionApiKeyMasked: string | null;
     n8nWebhookBaseUrl: string | null;
+    n8nBaseUrl: string | null;
+    n8nApiKeyMasked: string | null;
     internalApiSecretConfigured: boolean; // nunca o hash, nunca o segredo
     mercadoPagoAccessTokenMasked: string | null;
     mercadoPagoWebhookSecretMasked: string | null;
@@ -78,10 +81,11 @@ caracteres) ou como booleano `configured`. Ao salvar, campo de texto/segredo vaz
   };
   ```
 - `updatePlatformSettingsAction(input): Result<PlatformSettingsView>` — `input` aceita
-  `evolutionApiUrl?`, `evolutionApiKey?`, `n8nWebhookBaseUrl?`, `mercadoPagoAccessToken?`,
-  `mercadoPagoWebhookSecret?`, `smtpHost?`, `smtpPort?`, `smtpSecure?`, `smtpUser?`,
-  `smtpPassword?`, `smtpFrom?`, `termsVersion?` — todos opcionais, `""` = manter.
-  Erros: `INVALID_PAYLOAD` (zod), `FORBIDDEN`.
+  `evolutionApiUrl?`, `evolutionApiKey?`, `n8nWebhookBaseUrl?`, `n8nBaseUrl?`, `n8nApiKey?`,
+  `mercadoPagoAccessToken?`, `mercadoPagoWebhookSecret?`, `smtpHost?`, `smtpPort?`,
+  `smtpSecure?`, `smtpUser?`, `smtpPassword?`, `smtpFrom?`, `termsVersion?` — todos opcionais,
+  `""` = manter. Na primeira chamada, grava `publicBaseUrl` sozinho a partir da requisição (ver
+  "Configuração pela plataforma"). Erros: `INVALID_PAYLOAD` (zod), `FORBIDDEN`.
 - `regenerateInternalApiSecretAction(): Result<{ secret: string }>` — gera e devolve o segredo
   da API interna do n8n **em texto puro, uma única vez**; persiste só o hash SHA-256
   (`internalApiSecretHash`). A tela precisa mostrar isso ao dono nesta resposta e nunca mais
@@ -649,3 +653,127 @@ Todas guardadas por `requirePlatformAdmin()`.
 - `isTenantBotAllowedFor` está pronta e exportada (`src/modules/billing/service.ts`) mas
   `src/modules/bot-api/subscription-gate.ts` continua com o stub `true` fixo — o Atlas liga isso
   quando integrar as duas frentes.
+
+## Configuração pela plataforma (sem URL/credencial em env var)
+
+Decisão do dono (2026-09-28): nenhuma URL ou credencial solta em env var/chat. No Easypanel só
+sobram `DATABASE_URL` e `AUTH_SECRET`; o domínio público é só a aba Domínios do Easypanel. Tudo
+o mais — Evolution, n8n, Mercado Pago, SMTP, e a própria URL pública do painel — mora em
+`PlatformSettings` (banco), configurado pelo admin da plataforma.
+
+### URL pública do painel (`src/lib/public-url.ts`)
+
+`AUTH_URL`/`NEXT_PUBLIC_APP_URL` (`src/env.ts`) ficaram **opcionais** e não são mais lidas em
+runtime por nenhum código (link de e-mail, `billingUrlFor`, URL do painel enviada ao n8n).
+
+`getPublicBaseUrl(): Promise<string>`:
+1. Deriva de `x-forwarded-proto`/`x-forwarded-host` (fallback `host`) da requisição atual —
+   sempre correta dentro de uma Server Action/Route Handler/RSC (mesma base do `trustHost` do
+   Auth.js).
+2. Fora de uma requisição (ex.: um job chamado direto, sem passar pelo handler HTTP), cai para
+   `PlatformSettings.publicBaseUrl` — um espelho gravado sozinho, sem intervenção manual, na
+   primeira vez que um admin salva Configurações (`ensurePublicBaseUrlFromCurrentRequest`,
+   chamada de dentro de `updatePlatformSettingsAction`). Nunca sobrescreve um valor já gravado.
+3. Sem nenhuma das duas (nunca aconteceu um `updatePlatformSettingsAction`, e a chamada atual
+   não tem requisição — ex.: `billing/tick` rodando antes do primeiro save do admin) → lança
+   `DomainError("PUBLIC_URL_UNKNOWN", ...)`. Use `tryGetPublicBaseUrl()` (nunca lança, devolve
+   `null`) em caminhos que já têm um fallback de UI aceitável.
+
+### Instalação única do primeiro admin (`src/modules/platform/install.ts`, `install-actions.ts`)
+
+- `src/instrumentation.ts` roda `bootstrapInstallCodeIfNeeded()` no boot do servidor (runtime
+  `nodejs` só — instrumentação também dispara no Edge, sem Prisma). Enquanto **não existir**
+  nenhum `User.isPlatformAdmin`, gera um código novo a cada boot (`PlatformInstallCode`, hash
+  SHA-256 + expiração de 24h) e imprime em texto puro, uma vez, direto em `console.log`:
+  `InnoChat: código de instalação = <código> (válido por 24h, use em /instalacao)`. Nenhum outro
+  lugar do sistema mostra esse valor. Se já houver admin, não faz nada (nem loga).
+- `hasPlatformAdminAction(): Result<{ installed: boolean }>` — pública.
+- `installPlatformAdminAction(input): Result<{ userId: string }>` — pública, mas só funciona
+  enquanto não houver admin (reconfere dentro de uma transação, junto com o consumo do código —
+  duas instalações concorrentes nunca criam dois admins). `input: { code, name, email,
+  password }` (`name` só para UX, não persistido — `User` não tem campo de nome, mesma lacuna já
+  existente em `signUpAction`/`ownerName`). Rate limit de 10/15min por IP. Erros:
+  `INSTALL_CODE_INVALID`, `ALREADY_INSTALLED`, `EMAIL_TAKEN`, `RATE_LIMITED`, `INVALID_PAYLOAD`.
+- `/instalacao` (rota pública): responde **404** (`notFound()`) se já houver admin — nunca
+  redireciona.
+
+### Testar conexão (`src/modules/platform/connection-tests.ts`, `actions.ts`) — Fase 1
+
+Todas restritas a `requirePlatformAdmin()`, timeout de 5s, resultado sempre
+`{ ok: boolean; detalhe: string }` — nunca o segredo de volta (nem no `detalhe`, nem em log).
+
+- `testEvolutionConnectionAction({ evolutionApiUrl, evolutionApiKey })` — `GET
+  /instance/fetchInstances` com header `apikey`.
+- `testMercadoPagoConnectionAction({ mercadoPagoAccessToken })` — `GET
+  https://api.mercadopago.com/users/me` com `Authorization: Bearer`.
+- `testN8nConnectionAction({ n8nBaseUrl, n8nApiKey })` — `GET /api/v1/workflows?limit=1` com
+  header `X-N8N-API-KEY`.
+- `testSmtpConnectionAction({ smtpHost, smtpPort, smtpSecure?, smtpUser?, smtpPassword? })` —
+  `transporter.verify()` (nodemailer).
+
+Os quatro aceitam os valores que a tela ainda não salvou (testar antes de gravar) — não leem
+`PlatformSettings`.
+
+### Sincronização do n8n (`src/modules/platform/n8n-sync.ts`, `n8n-client.ts`) — Fase 5+
+
+**PENDÊNCIA registrada para o Órion/dono**: a superfície da API pública do n8n usada abaixo
+(`/api/v1/credentials` só com `POST`/`DELETE`, sem `GET` de lista nem update; `/api/v1/workflows`
+com `GET`/`PUT`/`activate`/`deactivate`) é conhecimento treinado sobre o n8n, **não confirmado
+ao vivo** — esta sessão não tem acesso à internet para validar contra a documentação da versão
+exata do n8n do dono. Confirmar contra `https://<n8n>/api/v1/docs` (Swagger da própria instância,
+menu *Settings → n8n API*) antes do primeiro uso real; se `PUT /workflows/{id}` rejeitar algum
+campo do corpo, é o primeiro lugar a olhar.
+
+- `syncN8nAction(): Result<N8nSyncSummary>` — exige `n8nBaseUrl`/`n8nApiKey` e
+  `evolutionApiUrl`/`evolutionApiKey` já salvos em `PlatformSettings` (senão
+  `N8N_NOT_CONFIGURED`/`EVOLUTION_NOT_CONFIGURED`). Passos, todos idempotentes:
+  1. Resolve `painelUrl = ${getPublicBaseUrl()}/api/internal/v1`.
+  2. Gera um novo segredo da API interna (`regenerateInternalApiSecret`) — o valor em texto
+     puro só existe neste instante; nunca é devolvido pela action, só enviado ao n8n.
+  3. Recria (delete do id antigo + create) as 3 credenciais `httpHeaderAuth`: `InnoChat Painel
+     (Bearer)` (`Authorization: Bearer <segredo>`), `Evolution API (apikey)` (`apikey:
+     <evolutionApiKey>`), `n8n API (X-N8N-API-KEY)` (`X-N8N-API-KEY: <n8nApiKey>`). A API
+     pública do n8n não expõe update nem list de credenciais — por isso é sempre
+     "recriar", nunca "editar"; os ids novos ficam em `PlatformSettings.n8nCred*Id`.
+  4. Acha o workflow `innochat-bot` (por id salvo, senão o id de fábrica do
+     `n8n/README.md`, senão por nome — `resolveWorkflow`), atualiza o nó `Config`
+     (`painelUrl`, `evolutionUrl`) e reata a credencial certa em todo nó HTTP Request com
+     `genericAuthType: "httpHeaderAuth"` (classificado pela URL: contém `evolutionUrl` →
+     Evolution, `n8nApiUrl` → n8n, senão → Painel). `PUT /workflows/{id}` com o objeto
+     completo (`name`, `nodes`, `connections`, `settings`).
+  5. Mesma coisa para `innochat-erros` (nó `Config erros`, campo `n8nApiUrl`).
+  6. **Nunca ativa** nenhum dos dois — grava só os ids em `PlatformSettings`.
+  Erros: `N8N_NOT_CONFIGURED`, `EVOLUTION_NOT_CONFIGURED`, `N8N_WORKFLOW_NOT_FOUND`, `FORBIDDEN`.
+- `activateBotWorkflowAction()`/`deactivateBotWorkflowAction(): Result<{ activated: boolean }>`
+  — ação separada, de propósito (item 4c do pedido do dono). Erro `N8N_NOT_SYNCED` se
+  `syncN8nAction` nunca rodou (sem id de workflow salvo).
+
+### Troca de plano pela empresa (`src/modules/billing/actions.ts`, `service.ts#changePlan`) — §7.2
+
+- `listActivePlansAction(tenantSlug): Result<PlanListItem[]>` — qualquer membro (`OWNER`/`STAFF`)
+  pode ver os planos disponíveis (`Plan.active`, ordenados por `sortOrder`).
+- `changePlanAction(tenantSlug, { planId }): Result<{ appliedImmediately: boolean }>` — restrito
+  a `OWNER`. Sem `assertTenantCanWrite`: funciona mesmo com a assinatura `SUSPENDED` (é o
+  caminho para saír de lá).
+  - **Upgrade** (`sortOrder` novo ≥ atual): aplica na hora (`planId` trocado já, `Subscription`
+    atual) — `appliedImmediately: true`. A diferença de preço só aparece na próxima fatura, sem
+    cálculo proporcional (decisão do dono, §7.2).
+  - **Downgrade**: só aceito se o uso ATUAL já couber no plano novo, considerando os overrides
+    da empresa (`Tenant.max*Override`, que continuam valendo depois da troca) —
+    `PLAN_DOWNGRADE_BLOCKED` com `{ rule: "maxProfessionals" | "maxWhatsappNumbers", limit,
+    current }` se não couber (a tela usa isso para dizer o que remover). Se couber, grava
+    `Subscription.pendingPlanId` — `appliedImmediately: false`.
+  - `pendingPlanId` entra em vigor quando `billing/tick` gera a fatura do próximo ciclo (5 dias
+    antes de começar, `generateUpcomingInvoices`): a fatura já sai no preço do plano novo E
+    `Subscription.planId` já troca ali (não espera o pagamento) — é o ciclo em que o downgrade
+    "vale". `applyInvoicePayment` tem o mesmo swap como rede de segurança para o caso raro de um
+    pagamento confirmado antes de o tick rodar.
+  - Erros: `NOT_FOUND` (assinatura/plano/empresa), `INVALID_STATE` (assinatura `CANCELED`, ou já
+    está neste plano), `PLAN_DOWNGRADE_BLOCKED`, `FORBIDDEN`, `INVALID_PAYLOAD`.
+
+### Migration
+
+`20260928000007_platform_public_url_install_n8n` — `PlatformSettings.publicBaseUrl`/
+`n8nBaseUrl`/`n8nApiKey`/`n8nCredPainelId`/`n8nCredEvolutionId`/`n8nCredApiId`/
+`n8nWorkflowBotId`/`n8nWorkflowErrosId` (todas nullable) + tabela nova `PlatformInstallCode`.
+Aplicada em `innochat` e `innochat_test`; `DOWN.sql` presente.

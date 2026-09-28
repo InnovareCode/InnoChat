@@ -4,7 +4,7 @@ import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { hashPassword } from "@/modules/auth/service";
 import { sendMail, verificationEmail, passwordResetEmail, teamInviteEmail } from "@/lib/email";
-import { env } from "@/env";
+import { getPublicBaseUrl } from "@/lib/public-url";
 import type { MembershipRole } from "@/lib/db/types";
 import { validateSlug, type SlugValidationError } from "@/core/signup/slug";
 import {
@@ -201,7 +201,7 @@ export async function signUp(input: SignUpInput, gateway?: MercadoPagoGateway): 
   });
 
   const { rawToken } = await createAuthToken(created.user.id, "VERIFY_EMAIL", VERIFY_EMAIL_TTL_MS);
-  const verifyUrl = `${env.NEXT_PUBLIC_APP_URL}/verificar-email?token=${rawToken}`;
+  const verifyUrl = `${await getPublicBaseUrl()}/verificar-email?token=${rawToken}`;
   const { subject, html, text } = verificationEmail({ verifyUrl });
   await sendMail({ to: email, subject, html, text }).catch((error) => {
     logger.error("signup.verification_email.failed", { errorMessage: error instanceof Error ? error.message : String(error) });
@@ -241,7 +241,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
   }
 
   const { rawToken } = await createAuthToken(user.id, "RESET_PASSWORD", RESET_PASSWORD_TTL_MS);
-  const resetUrl = `${env.NEXT_PUBLIC_APP_URL}/recuperar-senha/confirmar?token=${rawToken}`;
+  const resetUrl = `${await getPublicBaseUrl()}/recuperar-senha/confirmar?token=${rawToken}`;
   const { subject, html, text } = passwordResetEmail({ resetUrl });
   await sendMail({ to: normalized, subject, html, text }).catch((error) => {
     logger.error("password_reset.email.failed", { errorMessage: error instanceof Error ? error.message : String(error) });
@@ -281,7 +281,7 @@ export async function inviteTeamMember(params: { tenantId: string; tenantName: s
   await prisma.membership.create({ data: { userId: user.id, tenantId: params.tenantId, role: params.role } });
 
   const { rawToken } = await createAuthToken(user.id, "INVITE", INVITE_TTL_MS);
-  const inviteUrl = `${env.NEXT_PUBLIC_APP_URL}/convite?token=${rawToken}`;
+  const inviteUrl = `${await getPublicBaseUrl()}/convite?token=${rawToken}`;
   const { subject, html, text } = teamInviteEmail({ tenantName: params.tenantName, inviteUrl });
   await sendMail({ to: email, subject, html, text }).catch((error) => {
     logger.error("invite.email.failed", { errorMessage: error instanceof Error ? error.message : String(error) });
