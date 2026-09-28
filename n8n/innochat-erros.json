@@ -1,0 +1,271 @@
+{
+  "id": "GZSwTNgvVt4LYnwW",
+  "name": "innochat-erros",
+  "active": false,
+  "isArchived": false,
+  "versionId": "694d63b9-ca63-48ab-9b54-cdef4f85579f",
+  "activeVersionId": null,
+  "triggerCount": 0,
+  "createdAt": "2026-09-28T19:44:32.509Z",
+  "updatedAt": "2026-09-28T19:44:32.509Z",
+  "settings": {
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": false,
+    "timezone": "America/Sao_Paulo",
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "connections": {
+    "Falha no innochat-bot": {
+      "main": [
+        [
+          {
+            "node": "Config erros",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config erros": {
+      "main": [
+        [
+          {
+            "node": "Tem execução?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem execução?": {
+      "main": [
+        [
+          {
+            "node": "Buscar execução com falha",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sem execução para inspecionar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar execução com falha": {
+      "main": [
+        [
+          {
+            "node": "Extrair trava",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair trava": {
+      "main": [
+        [
+          {
+            "node": "Liberar trava",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodes": [
+    {
+      "id": "6c27aec7-818c-4256-8626-3d7eb7003d23",
+      "name": "Falha no innochat-bot",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "id": "ac741ced-b3c3-421b-809e-9edc751e9577",
+      "name": "Config erros",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "n8nApiUrl",
+              "name": "n8nApiUrl",
+              "value": "https://N8N_A_DEFINIR/api/v1",
+              "type": "string"
+            },
+            {
+              "id": "executionId",
+              "name": "executionId",
+              "value": "={{ $json.execution?.id ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "workflowName",
+              "name": "workflowName",
+              "value": "={{ $json.workflow?.name ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "lastNode",
+              "name": "lastNodeExecuted",
+              "value": "={{ $json.execution?.lastNodeExecuted ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "errorName",
+              "name": "errorName",
+              "value": "={{ $json.execution?.error?.name ?? \"\" }}",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7aa5ee39-849d-4f59-a6ec-04416215a852",
+      "name": "Tem execução?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.executionId }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "989effc0-1d0f-45a9-9bd6-7c65106499ee",
+      "name": "Buscar execução com falha",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        660,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.n8nApiUrl }}/executions/{{ $json.executionId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "includeData",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true
+    },
+    {
+      "id": "31f7dbc8-a538-478f-b341-80c8bd8d6544",
+      "name": "Extrair trava",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        200
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "let exec = $input.first().json;\nlet data = exec.data;\nif (typeof data === 'string') { try { data = JSON.parse(data); } catch (e) { data = null; } }\nconst runData = (data && data.resultData && data.resultData.runData) || {};\nconst lastJson = (nodeName, pick) => {\n  const runs = runData[nodeName] || [];\n  for (let i = runs.length - 1; i >= 0; i--) {\n    const main = (runs[i] && runs[i].data && runs[i].data.main) || [];\n    for (const out of main) {\n      for (const it of (out || [])) {\n        if (it && it.json && pick(it.json)) return it.json;\n      }\n    }\n  }\n  return null;\n};\nconst claim = lastJson('Claim', (j) => j.action === 'process' && j.session && j.session.lockToken);\nconst cfg = lastJson('Config', (j) => !!j.token);\nif (!claim || !cfg) return [];\nreturn [{ json: { sessionId: claim.session.id, lockToken: claim.session.lockToken, token: cfg.token, painelUrl: cfg.painelUrl } }];"
+      }
+    },
+    {
+      "id": "32e12919-c48d-45e4-a475-d962d28ac980",
+      "name": "Liberar trava",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1100,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.painelUrl }}/sessions/{{ encodeURIComponent($json.sessionId) }}/release",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-InnoChat-Instance",
+              "value": "={{ $json.token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ lockToken: $json.lockToken }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "retryOnFail": true
+    },
+    {
+      "id": "7b67166c-3f58-4073-b139-7d043a6b971d",
+      "name": "Sem execução para inspecionar",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        660,
+        400
+      ]
+    }
+  ],
+  "activeVersion": null,
+  "tags": [],
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "parentFolderId": null,
+  "description": "Error workflow do innochat-bot: busca a execução com falha na API do n8n, extrai sessionId+lockToken do nó Claim e libera a trava via POST /sessions/{id}/release do painel."
+}
