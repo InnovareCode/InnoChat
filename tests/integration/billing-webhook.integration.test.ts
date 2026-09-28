@@ -1,0 +1,113 @@
+/**
+ * Idempotência do webhook do Mercado Pago (docs/arquitetura.md §6.10, §7.1) contra Postgres
+ * real: o MESMO evento entregue 2x só aplica o pagamento 1 vez (não soma 2 meses, não paga a
+ * fatura "de novo"). `sendMail` mockado (não precisamos de SMTP real).
+ */
+import { randomUUID } from "node:crypto";
+import crypto from "node:crypto";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { getPrisma } from "@/lib/db/prisma";
+
+vi.mock("@/lib/email", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/email")>("@/lib/email");
+  return { ...actual, sendMail: vi.fn(async () => ({ sent: true })) };
+});
+
+const { handleMercadoPagoWebhook } = await import("@/modules/billing/webhook");
+
+const prisma = getPrisma();
+const WEBHOOK_SECRET = "it-webhook-secret";
+
+function signManifest(dataId: string, requestId: string, ts: string) {
+  const manifest = `id:${dataId.toLowerCase()};request-id:${requestId};ts:${ts};`;
+  const v1 = crypto.createHmac("sha256", WEBHOOK_SECRET).update(manifest).digest("hex");
+  return `ts=${ts},v1=${v1}`;
+}
+
+async function makeSubscriptionWithOpenInvoice(label: string) {
+  const slug = `it-${label}-${Date.now()}-${randomUUID().slice(0, 6)}`;
+  const tenant = await prisma.tenant.create({ data: { slug, name: `Webhook ${label}`, timezone: "UTC" } });
+  const plan = await prisma.plan.create({
+    data: { code: `${slug}-plan`, name: "Plano IT", priceCents: 5000, maxWhatsappNumbers: 1, maxProfessionals: 1, active: false, sortOrder: 999 },
+  });
+  const currentPeriodEnd = new Date();
+  const subscription = await prisma.subscription.create({
+    data: { tenantId: tenant.id, planId: plan.id, status: "ACTIVE", currentPeriodEnd },
+  });
+  const invoice = await prisma.invoice.create({
+    data: { subscriptionId: subscription.id, amountCents: 5000, periodStart: new Date(0), periodEnd: currentPeriodEnd, dueAt: currentPeriodEnd, status: "OPEN" },
+  });
+  return { tenant, plan, subscription, invoice };
+}
+
+const cleanupTenantIds: string[] = [];
+
+afterAll(async () => {
+  await prisma.tenant.deleteMany({ where: { id: { in: cleanupTenantIds } } });
+  await prisma.$disconnect();
+});
+
+describe("handleMercadoPagoWebhook — idempotência (§6.10)", () => {
+  it("rejeita assinatura inválida (401, sem tocar no banco)", async () => {
+    const { tenant, invoice } = await makeSubscriptionWithOpenInvoice("bad-sig");
+    cleanupTenantIds.push(tenant.id);
+    await prisma.platformSettings.upsert({ where: { id: 1 }, create: { id: 1, mercadoPagoWebhookSecret: WEBHOOK_SECRET }, update: { mercadoPagoWebhookSecret: WEBHOOK_SECRET } });
+
+    const dataId = "pay_bad_sig";
+    await expect(
+      handleMercadoPagoWebhook({ xSignature: "ts=123,v1=deadbeef", xRequestId: "req-1", dataId }),
+    ).rejects.toThrow();
+
+    const reloaded = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(reloaded.status).toBe("OPEN");
+  });
+
+  it("o MESMO evento processado 2x só dá baixa 1 vez (não avança 2 meses)", async () => {
+    const { tenant, subscription, invoice } = await makeSubscriptionWithOpenInvoice("dup-event");
+    cleanupTenantIds.push(tenant.id);
+    await prisma.platformSettings.upsert({ where: { id: 1 }, create: { id: 1, mercadoPagoWebhookSecret: WEBHOOK_SECRET }, update: { mercadoPagoWebhookSecret: WEBHOOK_SECRET } });
+
+    const dataId = `pay_${invoice.id}`;
+    const requestId = "req-dup";
+    const ts = String(Date.now());
+    const xSignature = signManifest(dataId, requestId, ts);
+
+    const paidAt = new Date();
+    const gateway = {
+      createPixPayment: vi.fn(),
+      getPayment: vi.fn().mockResolvedValue({ id: dataId, status: "approved", dateApproved: paidAt, externalReference: invoice.id }),
+    };
+
+    const first = await handleMercadoPagoWebhook({ xSignature, xRequestId: requestId, dataId, gateway });
+    expect(first.status).toBe("processed");
+
+    const afterFirst = await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } });
+    expect(afterFirst.status).toBe("ACTIVE");
+    const firstPeriodEnd = afterFirst.currentPeriodEnd.getTime();
+
+    // Mercado Pago reentrega a MESMA notificação (mesmo data.id).
+    const second = await handleMercadoPagoWebhook({ xSignature, xRequestId: requestId, dataId, gateway });
+    expect(second.status).toBe("already_processed");
+
+    const afterSecond = await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } });
+    expect(afterSecond.currentPeriodEnd.getTime()).toBe(firstPeriodEnd); // não avançou de novo
+
+    const reloadedInvoice = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(reloadedInvoice.status).toBe("PAID");
+    expect(gateway.getPayment).toHaveBeenCalledTimes(2); // reconsulta sempre, mas só aplica 1x
+  });
+
+  it("chamar applyInvoicePayment de novo (fora do webhook) também é idempotente", async () => {
+    const { tenant, subscription, invoice } = await makeSubscriptionWithOpenInvoice("direct-apply");
+    cleanupTenantIds.push(tenant.id);
+
+    const { applyInvoicePayment } = await import("@/modules/billing/service");
+    const first = await applyInvoicePayment(invoice.id, new Date());
+    expect(first.alreadyProcessed).toBe(false);
+    const second = await applyInvoicePayment(invoice.id, new Date());
+    expect(second.alreadyProcessed).toBe(true);
+
+    const reloaded = await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } });
+    expect(reloaded.status).toBe("ACTIVE");
+  });
+});

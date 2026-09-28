@@ -2,6 +2,7 @@ import { getPrisma } from "@/lib/db/prisma";
 import { forTenant } from "@/lib/db/tenant-client";
 import { DomainError } from "@/lib/errors";
 import type { ScheduleExceptionType } from "@/lib/db/types";
+import { assertCanAddProfessional } from "@/modules/billing/plan-limits";
 
 // ---------------------------------------------------------------------------
 // Service
@@ -72,7 +73,13 @@ export async function listProfessionals(tenantId: string) {
   });
 }
 
+/**
+ * Limite de profissionais por plano (docs/arquitetura.md §7.2, Fase 7): checado no servidor,
+ * não só escondido no botão — `assertCanAddProfessional` lança `PLAN_LIMIT_REACHED` antes do
+ * `create` se a empresa já está no limite (override de `Tenant` tem precedência sobre o `Plan`).
+ */
 export async function createProfessional(tenantId: string, input: ProfessionalInput) {
+  await assertCanAddProfessional(tenantId);
   return forTenant(tenantId).professional.create({ data: { ...input, tenantId } });
 }
 

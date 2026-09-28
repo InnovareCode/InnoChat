@@ -42,6 +42,24 @@ export async function requirePlatformAdmin(): Promise<SessionUser> {
 }
 
 /**
+ * Guarda de e-mail verificado (docs/arquitetura.md §7.3 regra 2, Fase 7): "sem e-mail
+ * verificado, não é possível conectar WhatsApp" — o resto do painel funciona sem isso. Relê
+ * `emailVerifiedAt` do banco (nunca confia em campo de sessão). Quem for implementar a conexão
+ * de número (Fase 3) chama isto ANTES de criar/religar uma `WhatsappInstance`.
+ */
+export async function requireVerifiedEmail(): Promise<SessionUser> {
+  const sessionUser = await requireSessionUser();
+  const user = await getPrisma().user.findUnique({
+    where: { id: sessionUser.id },
+    select: { id: true, emailVerifiedAt: true },
+  });
+  if (!user?.emailVerifiedAt) {
+    throw new DomainError("EMAIL_NOT_VERIFIED", "Confirme seu e-mail antes de conectar o WhatsApp.");
+  }
+  return { id: user.id };
+}
+
+/**
  * Guarda de tenant (docs/arquitetura.md §5, §11): resolve o tenant pelo `slug` — nunca por um
  * id vindo do client — e confirma que o usuário da sessão tem `Membership` nele. Se `roles` for
  * passado, também exige que o papel do usuário esteja na lista.

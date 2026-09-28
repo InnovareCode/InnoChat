@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { requireTenantMember } from "@/lib/auth/guards";
 import { runAction, type Result } from "@/lib/result";
+import { assertTenantCanWrite } from "@/modules/billing/service";
 import {
   createProfessional,
   createScheduleException,
@@ -42,6 +43,7 @@ export async function listServicesAction(tenantSlug: string): Promise<Result<unk
 export async function createServiceAction(tenantSlug: string, input: unknown): Promise<Result<unknown>> {
   return runAction(async () => {
     const { tenant } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     const data = serviceSchema.parse(input);
     return createService(tenant.id, { ...data, priceCents: data.priceCents ?? null });
   });
@@ -50,6 +52,7 @@ export async function createServiceAction(tenantSlug: string, input: unknown): P
 export async function updateServiceAction(tenantSlug: string, serviceId: string, input: unknown): Promise<Result<unknown>> {
   return runAction(async () => {
     const { tenant } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     const data = serviceSchema.partial().parse(input);
     return updateService(tenant.id, serviceId, data);
   });
@@ -58,6 +61,7 @@ export async function updateServiceAction(tenantSlug: string, serviceId: string,
 export async function deleteServiceAction(tenantSlug: string, serviceId: string): Promise<Result<{ id: string }>> {
   return runAction(async () => {
     const { tenant } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     await deleteService(tenant.id, serviceId);
     return { id: serviceId };
   });
@@ -83,6 +87,7 @@ export async function listProfessionalsAction(tenantSlug: string): Promise<Resul
 export async function createProfessionalAction(tenantSlug: string, input: unknown): Promise<Result<unknown>> {
   return runAction(async () => {
     const { tenant } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     const data = professionalSchema.parse(input);
     return createProfessional(tenant.id, data);
   });
@@ -91,6 +96,7 @@ export async function createProfessionalAction(tenantSlug: string, input: unknow
 export async function updateProfessionalAction(tenantSlug: string, professionalId: string, input: unknown): Promise<Result<unknown>> {
   return runAction(async () => {
     const { tenant } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     const data = professionalSchema.partial().parse(input);
     return updateProfessional(tenant.id, professionalId, data);
   });
@@ -99,6 +105,7 @@ export async function updateProfessionalAction(tenantSlug: string, professionalI
 export async function deleteProfessionalAction(tenantSlug: string, professionalId: string): Promise<Result<{ id: string }>> {
   return runAction(async () => {
     const { tenant } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     await deleteProfessional(tenant.id, professionalId);
     return { id: professionalId };
   });
@@ -109,6 +116,7 @@ const serviceIdsSchema = z.object({ serviceIds: z.array(z.string().min(1)) });
 export async function setProfessionalServicesAction(tenantSlug: string, professionalId: string, input: unknown): Promise<Result<unknown>> {
   return runAction(async () => {
     const { tenant } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     const data = serviceIdsSchema.parse(input);
     return setProfessionalServices(tenant.id, professionalId, data.serviceIds);
   });
@@ -124,6 +132,7 @@ const workingHoursSchema = z.object({ hours: z.array(workingHourSchema).max(7 * 
 export async function setProfessionalWorkingHoursAction(tenantSlug: string, professionalId: string, input: unknown): Promise<Result<unknown>> {
   return runAction(async () => {
     const { tenant } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     const data = workingHoursSchema.parse(input);
     return setProfessionalWorkingHours(tenant.id, professionalId, data.hours);
   });
@@ -155,6 +164,7 @@ export async function listScheduleExceptionsAction(
 export async function createScheduleExceptionAction(tenantSlug: string, input: unknown): Promise<Result<unknown>> {
   return runAction(async () => {
     const { tenant } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     const data = scheduleExceptionSchema.parse(input);
     return createScheduleException(tenant.id, { ...data, reason: data.reason ?? null });
   });
@@ -163,6 +173,7 @@ export async function createScheduleExceptionAction(tenantSlug: string, input: u
 export async function deleteScheduleExceptionAction(tenantSlug: string, exceptionId: string): Promise<Result<{ id: string }>> {
   return runAction(async () => {
     const { tenant } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     await deleteScheduleException(tenant.id, exceptionId);
     return { id: exceptionId };
   });

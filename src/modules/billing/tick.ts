@@ -1,0 +1,248 @@
+import { addDays, addMonths } from "date-fns";
+import { getPrisma } from "@/lib/db/prisma";
+import { logger } from "@/lib/logger";
+import { sendMail, invoiceDueReminderEmail } from "@/lib/email";
+import { effectiveStatus } from "@/core/billing";
+import {
+  billingUrlFor,
+  createInvoiceForPeriodTracked,
+  findBillingRecipientEmail,
+  generateInvoiceDescription,
+  sendInvoiceGeneratedEmail,
+  sendSubscriptionSuspendedEmail,
+} from "./service";
+import { formatCentsBRL, formatDateBR } from "./format";
+import { getMercadoPagoGateway, type MercadoPagoGateway } from "./mercadopago";
+
+/**
+ * `POST /api/internal/v1/billing/tick` (docs/contratos.md — Fase 7). Roda periodicamente
+ * (n8n/cron, fora deste código) e faz, nesta ordem:
+ *
+ * 1. Gera a próxima fatura 5 dias antes de vencer (§7.1), para assinaturas que já passaram do
+ *    trial (`ACTIVE`/`PAST_DUE` — a fatura do trial já foi criada no cadastro, ver
+ *    `src/modules/signup/service.ts`; incluir `TRIALING` aqui geraria uma segunda fatura quase
+ *    junto da primeira, já que o trial dura só 1 dia — menos que a janela de 5 dias).
+ * 2. Regenera o Pix de faturas `OPEN` com Pix expirado (ou nunca gerado, se o Mercado Pago
+ *    estava fora do ar na criação).
+ * 3. Envia lembrete de vencimento (1 dia antes e no dia — §7.1), uma vez por fatura
+ *    (`dueReminderEmailSentAt`/`dueTodayEmailSentAt`).
+ * 4. Recalcula `effectiveStatus` de toda assinatura não-`CANCELED` e persiste se mudou; ao
+ *    entrar em `SUSPENDED`, dispara o e-mail de suspensão (uma vez por suspensão —
+ *    `suspendedEmailSentAt`, resetado quando sai de `SUSPENDED`).
+ *
+ * Idempotente por desenho, não só "na prática": rodar 2x seguidas não duplica fatura (unique
+ * `(subscriptionId, periodStart)`), não duplica e-mail (marcas `*SentAt`) e não desconta 2 meses
+ * de ninguém (o pagamento, não o tick, avança `currentPeriodEnd` — `applyInvoicePayment`).
+ */
+
+const INVOICE_LEAD_DAYS = 5;
+
+export type BillingTickSummary = {
+  invoicesCreated: number;
+  pixRegenerated: number;
+  remindersSent: number;
+  statusChanges: number;
+  suspensionEmailsSent: number;
+};
+
+export async function runBillingTick(now: Date = new Date(), gateway?: MercadoPagoGateway): Promise<BillingTickSummary> {
+  const prisma = getPrisma();
+  const summary: BillingTickSummary = {
+    invoicesCreated: 0,
+    pixRegenerated: 0,
+    remindersSent: 0,
+    statusChanges: 0,
+    suspensionEmailsSent: 0,
+  };
+
+  // Resolve o gateway do MP uma vez só (evita reler PlatformSettings a cada fatura/Pix). Se não
+  // estiver configurado ainda, cada tentativa individual loga e segue (nunca derruba o tick
+  // inteiro — docs/arquitetura.md, "nunca crash").
+  let resolvedGateway = gateway;
+  if (!resolvedGateway) {
+    try {
+      resolvedGateway = await getMercadoPagoGateway();
+    } catch {
+      resolvedGateway = undefined; // segue sem Pix — faturas nascem OPEN sem QR, regeráveis depois
+    }
+  }
+
+  await generateUpcomingInvoices(prisma, now, resolvedGateway, summary);
+  await regenerateExpiredPix(prisma, now, resolvedGateway, summary);
+  await sendDueReminders(prisma, now, summary);
+  await reconcileStatuses(prisma, now, summary);
+
+  logger.info("billing.tick.completed", { ...summary });
+  return summary;
+}
+
+async function generateUpcomingInvoices(
+  prisma: ReturnType<typeof getPrisma>,
+  now: Date,
+  gateway: MercadoPagoGateway | undefined,
+  summary: BillingTickSummary,
+) {
+  const leadWindow = addDays(now, INVOICE_LEAD_DAYS);
+  const subscriptions = await prisma.subscription.findMany({
+    where: { status: { in: ["ACTIVE", "PAST_DUE"] }, currentPeriodEnd: { lte: leadWindow } },
+    include: { plan: true, tenant: true },
+  });
+
+  for (const subscription of subscriptions) {
+    const payerEmail = await findBillingRecipientEmail(subscription.tenantId);
+    if (!payerEmail) {
+      logger.warn("billing.tick.invoice.no_owner_email", { tenantId: subscription.tenantId });
+      continue;
+    }
+
+    const periodStart = subscription.currentPeriodEnd;
+    const periodEnd = addMonths(periodStart, 1);
+
+    const { invoice, created } = await createInvoiceForPeriodTracked({
+      subscriptionId: subscription.id,
+      amountCents: subscription.plan.priceCents,
+      periodStart,
+      periodEnd,
+      dueAt: periodEnd,
+      payerEmail,
+      description: generateInvoiceDescription(subscription.tenant.name),
+      gateway,
+    });
+
+    if (created) {
+      summary.invoicesCreated += 1;
+      await sendInvoiceGeneratedEmail({
+        toEmail: payerEmail,
+        tenantName: subscription.tenant.name,
+        tenantSlug: subscription.tenant.slug,
+        amountCents: invoice.amountCents,
+        dueAt: invoice.dueAt,
+        pixCopyPaste: invoice.pixCopyPaste,
+        timezone: subscription.tenant.timezone,
+      });
+    }
+  }
+}
+
+async function regenerateExpiredPix(
+  prisma: ReturnType<typeof getPrisma>,
+  now: Date,
+  gateway: MercadoPagoGateway | undefined,
+  summary: BillingTickSummary,
+) {
+  if (!gateway) return; // sem gateway configurado, não há como gerar Pix — próximo tick tenta de novo
+
+  const expired = await prisma.invoice.findMany({
+    where: { status: "OPEN", OR: [{ pixExpiresAt: { lt: now } }, { pixExpiresAt: null }] },
+    include: { subscription: { include: { tenant: true } } },
+  });
+
+  for (const invoice of expired) {
+    const payerEmail = await findBillingRecipientEmail(invoice.subscription.tenantId);
+    if (!payerEmail) continue;
+
+    try {
+      const pix = await gateway.createPixPayment({
+        externalReference: invoice.id,
+        amountCents: invoice.amountCents,
+        description: generateInvoiceDescription(invoice.subscription.tenant.name),
+        payerEmail,
+        idempotencyKey: `${invoice.id}:${now.getTime()}`, // Pix anterior expirou — precisa de cobrança nova no MP
+        expiresInDays: 3,
+      });
+      await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { mpPaymentId: pix.paymentId, pixQrCode: pix.qrCode, pixCopyPaste: pix.copyPaste, pixExpiresAt: pix.expiresAt },
+      });
+      summary.pixRegenerated += 1;
+    } catch (error) {
+      logger.warn("billing.tick.pix_regenerate_failed", {
+        invoiceId: invoice.id,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+}
+
+async function sendDueReminders(prisma: ReturnType<typeof getPrisma>, now: Date, summary: BillingTickSummary) {
+  const oneDayOut = addDays(now, 1);
+
+  const dueTomorrow = await prisma.invoice.findMany({
+    where: { status: "OPEN", dueReminderEmailSentAt: null, dueAt: { lte: oneDayOut, gt: now } },
+    include: { subscription: { include: { tenant: true } } },
+  });
+  for (const invoice of dueTomorrow) {
+    await notifyDue(invoice, false, prisma, summary, "dueReminderEmailSentAt");
+  }
+
+  const dueToday = await prisma.invoice.findMany({
+    where: { status: "OPEN", dueTodayEmailSentAt: null, dueAt: { lte: now } },
+    include: { subscription: { include: { tenant: true } } },
+  });
+  for (const invoice of dueToday) {
+    await notifyDue(invoice, true, prisma, summary, "dueTodayEmailSentAt");
+  }
+}
+
+type InvoiceWithTenant = {
+  id: string;
+  amountCents: number;
+  dueAt: Date;
+  subscription: { tenantId: string; tenant: { name: string; slug: string; timezone: string } };
+};
+
+async function notifyDue(
+  invoice: InvoiceWithTenant,
+  dueToday: boolean,
+  prisma: ReturnType<typeof getPrisma>,
+  summary: BillingTickSummary,
+  field: "dueReminderEmailSentAt" | "dueTodayEmailSentAt",
+) {
+  const payerEmail = await findBillingRecipientEmail(invoice.subscription.tenantId);
+  if (!payerEmail) return;
+
+  const { subject, html, text } = invoiceDueReminderEmail({
+    tenantName: invoice.subscription.tenant.name,
+    amountReais: formatCentsBRL(invoice.amountCents),
+    dueDateBr: formatDateBR(invoice.dueAt, invoice.subscription.tenant.timezone),
+    billingUrl: billingUrlFor(invoice.subscription.tenant.slug),
+    dueToday,
+  });
+  await sendMail({ to: payerEmail, subject, html, text }).catch((error) => {
+    logger.error("billing.tick.due_reminder_failed", { errorMessage: error instanceof Error ? error.message : String(error) });
+  });
+
+  await prisma.invoice.update({ where: { id: invoice.id }, data: { [field]: new Date() } });
+  summary.remindersSent += 1;
+}
+
+async function reconcileStatuses(prisma: ReturnType<typeof getPrisma>, now: Date, summary: BillingTickSummary) {
+  const subscriptions = await prisma.subscription.findMany({
+    where: { status: { not: "CANCELED" } },
+    include: { tenant: true },
+  });
+
+  for (const subscription of subscriptions) {
+    const next = effectiveStatus(subscription, now);
+    if (next === subscription.status) continue;
+
+    await prisma.subscription.update({
+      where: { id: subscription.id },
+      data: {
+        status: next,
+        // Sai de SUSPENDED (pagou/reativou) → zera a marca, para avisar de novo numa suspensão futura.
+        suspendedEmailSentAt: next === "SUSPENDED" ? subscription.suspendedEmailSentAt : null,
+      },
+    });
+    summary.statusChanges += 1;
+
+    if (next === "SUSPENDED" && !subscription.suspendedEmailSentAt) {
+      const payerEmail = await findBillingRecipientEmail(subscription.tenantId);
+      if (payerEmail) {
+        await sendSubscriptionSuspendedEmail({ toEmail: payerEmail, tenantName: subscription.tenant.name, tenantSlug: subscription.tenant.slug });
+        await prisma.subscription.update({ where: { id: subscription.id }, data: { suspendedEmailSentAt: now } });
+        summary.suspensionEmailsSent += 1;
+      }
+    }
+  }
+}

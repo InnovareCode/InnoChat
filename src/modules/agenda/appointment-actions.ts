@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { requireTenantMember } from "@/lib/auth/guards";
 import { runAction, type Result } from "@/lib/result";
+import { assertTenantCanWrite } from "@/modules/billing/service";
 import { cancelAppointment, createAppointmentManual, listAppointments, rescheduleAppointment } from "./appointments";
 
 const listSchema = z.object({
@@ -33,6 +34,7 @@ const createAppointmentSchema = z.object({
 export async function createAppointmentAction(tenantSlug: string, input: unknown): Promise<Result<unknown>> {
   return runAction(async () => {
     const { tenant, user } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     const data = createAppointmentSchema.parse(input);
     return createAppointmentManual(tenant.id, data, user.id);
   });
@@ -43,6 +45,7 @@ const cancelSchema = z.object({ note: z.string().trim().max(500).optional() });
 export async function cancelAppointmentAction(tenantSlug: string, appointmentId: string, input?: unknown): Promise<Result<unknown>> {
   return runAction(async () => {
     const { tenant, user } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     const data = cancelSchema.parse(input ?? {});
     return cancelAppointment(tenant.id, appointmentId, user.id, data.note);
   });
@@ -53,6 +56,7 @@ const rescheduleSchema = z.object({ startsAt: z.coerce.date() });
 export async function rescheduleAppointmentAction(tenantSlug: string, appointmentId: string, input: unknown): Promise<Result<unknown>> {
   return runAction(async () => {
     const { tenant, user } = await requireTenantMember(tenantSlug);
+    await assertTenantCanWrite(tenant.id);
     const data = rescheduleSchema.parse(input);
     return rescheduleAppointment(tenant.id, appointmentId, data.startsAt, user.id);
   });

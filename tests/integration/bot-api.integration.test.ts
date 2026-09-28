@@ -44,6 +44,18 @@ function nextWeekdayAt(daysAhead: number, hourUTCLocal: string): { date: Date; w
 }
 
 const createdTenantIds: string[] = [];
+let botPlanId: string | null = null;
+
+/** O claim bloqueia empresa sem assinatura válida (subscription-gate), então toda empresa de teste nasce ACTIVE. */
+async function getBotPlanId() {
+  if (!botPlanId) {
+    const plan = await prisma.plan.create({
+      data: { code: `it-bot-${Date.now()}-${randomUUID().slice(0, 6)}`, name: "Plano IT bot", priceCents: 0, maxWhatsappNumbers: 3, maxProfessionals: null, active: false, sortOrder: 999 },
+    });
+    botPlanId = plan.id;
+  }
+  return botPlanId;
+}
 
 async function makeTenantWithInstance(label: string, sandbox = false) {
   const tenant = await prisma.tenant.create({
@@ -56,6 +68,9 @@ async function makeTenantWithInstance(label: string, sandbox = false) {
     },
   });
   createdTenantIds.push(tenant.id);
+  await prisma.subscription.create({
+    data: { tenantId: tenant.id, planId: await getBotPlanId(), status: "ACTIVE", currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000) },
+  });
 
   const instance = await prisma.whatsappInstance.create({
     data: {
@@ -85,6 +100,7 @@ async function ensureInternalSecret() {
 
 afterAll(async () => {
   await prisma.tenant.deleteMany({ where: { id: { in: createdTenantIds } } });
+  if (botPlanId) await prisma.plan.delete({ where: { id: botPlanId } });
   await prisma.$disconnect();
 });
 

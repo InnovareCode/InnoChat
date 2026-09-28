@@ -13,4 +13,8 @@ export type {
   AppointmentEventAction,
   AppointmentEventAuthorType,
   ScheduleExceptionType,
+  WhatsappInstanceStatus,
+  InboundOutcome,
+  InboundIgnoreReason,
+  BotTextKey,
 } from "@prisma/client";

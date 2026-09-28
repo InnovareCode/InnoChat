@@ -567,6 +567,12 @@ model Subscription {
 
   canceledAt DateTime?
 
+  // Marca de e-mail já enviado (Vega, Fase 7 — billing/tick): sem isto, rodar o tick de hora em
+  // hora reenviaria o aviso de "atendimento suspenso" a cada rodada enquanto o tenant continuar
+  // SUSPENDED. Nulo = ainda não avisado NESTA suspensão; volta a nulo quando a assinatura sai de
+  // SUSPENDED (reativação/pagamento), para avisar de novo numa suspensão futura.
+  suspendedEmailSentAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -614,6 +620,13 @@ model Invoice {
   pixCopyPaste String?
   pixExpiresAt DateTime?
   paidAt       DateTime?
+
+  // Marcas de e-mail já enviado (Vega, Fase 7 — billing/tick, §7.1 "aviso... 1 dia antes do
+  // vencimento e no vencimento"): sem isto, um tick de hora em hora reenviaria o mesmo lembrete
+  // várias vezes no mesmo dia. Nulo = ainda não enviado; nunca voltam a nulo (é por fatura, e
+  // cada fatura só tem 1 vencimento).
+  dueReminderEmailSentAt DateTime?
+  dueTodayEmailSentAt    DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
