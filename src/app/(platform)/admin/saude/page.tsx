@@ -6,7 +6,7 @@ export default function AdminSaudePage() {
   return (
     <div>
       <PageHeader title="Saúde" description="Instâncias, erros do bot e último billing/tick." />
-      <EmptyState icon={Activity} title="Tela chega na Fase 8" description="Depende de InboundEvent e métricas do n8n." />
+      <EmptyState icon={Activity} title="Em breve" description="Instâncias, erros do bot e métricas ainda estão a caminho." />
     </div>
   );
 }

@@ -1,21 +1,31 @@
 import { UserRound } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Button } from "@/components/ui/button";
+import { listProfessionalsAction } from "@/modules/agenda/catalog-actions";
+import { ProfissionaisClient, type ProfessionalRow } from "./profissionais-client";
 
-export default function ProfissionaisPage() {
+export default async function ProfissionaisPage({
+  params,
+}: {
+  params: Promise<{ tenantSlug: string }>;
+}) {
+  const { tenantSlug } = await params;
+  const result = await listProfessionalsAction(tenantSlug);
+
+  if (!result.ok) {
+    return (
+      <div>
+        <PageHeader title="Profissionais" description="Expediente semanal e serviços de cada um." />
+        <EmptyState
+          icon={UserRound}
+          title="Não deu para carregar os profissionais"
+          description={result.error.message}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <PageHeader
-        title="Profissionais"
-        description="Expediente semanal e serviços de cada um."
-        action={<Button disabled>Novo profissional</Button>}
-      />
-      <EmptyState
-        icon={UserRound}
-        title="Cadastro de profissionais chega na Fase 2"
-        description="Respeita o limite do plano contratado. Placeholder do shell por enquanto."
-      />
-    </div>
+    <ProfissionaisClient tenantSlug={tenantSlug} initialProfessionals={result.data as ProfessionalRow[]} />
   );
 }

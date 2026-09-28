@@ -1,0 +1,239 @@
+"use client";
+
+import Link from "next/link";
+import { useState, useTransition } from "react";
+import { Plus, Trash2, UserRound } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
+import {
+  createProfessionalAction,
+  deleteProfessionalAction,
+  updateProfessionalAction,
+} from "@/modules/agenda/catalog-actions";
+
+export type ProfessionalRow = {
+  id: string;
+  name: string;
+  active: boolean;
+  sortOrder: number;
+  professionalServices: { serviceId: string }[];
+  workingHours: { id: string; weekday: number; startTime: string; endTime: string }[];
+};
+
+export function ProfissionaisClient({
+  tenantSlug,
+  initialProfessionals,
+}: {
+  tenantSlug: string;
+  initialProfessionals: ProfessionalRow[];
+}) {
+  const [professionals, setProfessionals] = useState<ProfessionalRow[]>(initialProfessionals);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ProfessionalRow | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const { notify } = useToast();
+
+  function openCreate() {
+    setName("");
+    setFormError(null);
+    setDialogOpen(true);
+  }
+
+  function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+    startTransition(async () => {
+      const result = await createProfessionalAction(tenantSlug, { name: name.trim() });
+      if (!result.ok) {
+        setFormError(result.error.message);
+        return;
+      }
+      const created = result.data as Omit<ProfessionalRow, "professionalServices" | "workingHours">;
+      setProfessionals((prev) =>
+        [...prev, { ...created, professionalServices: [], workingHours: [] }].sort(
+          (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+        ),
+      );
+      setDialogOpen(false);
+      notify({ variant: "success", title: "Profissional criado.", description: "Agora defina o expediente e os serviços dele." });
+    });
+  }
+
+  function toggleActive(professional: ProfessionalRow) {
+    startTransition(async () => {
+      const result = await updateProfessionalAction(tenantSlug, professional.id, { active: !professional.active });
+      if (!result.ok) {
+        notify({ variant: "error", title: "Não foi possível atualizar", description: result.error.message });
+        return;
+      }
+      setProfessionals((prev) =>
+        prev.map((p) => (p.id === professional.id ? { ...p, active: !professional.active } : p)),
+      );
+      notify({ variant: "success", title: !professional.active ? "Profissional ativado." : "Profissional desativado." });
+    });
+  }
+
+  function handleDelete() {
+    if (!confirmDelete) return;
+    const target = confirmDelete;
+    startTransition(async () => {
+      const result = await deleteProfessionalAction(tenantSlug, target.id);
+      if (!result.ok) {
+        if (result.error.code === "HAS_APPOINTMENTS") {
+          notify({
+            variant: "error",
+            title: "Não é possível excluir",
+            description: "Este profissional tem agendamentos. Desative-o em vez de excluir.",
+          });
+        } else {
+          notify({ variant: "error", title: "Não foi possível excluir", description: result.error.message });
+        }
+        setConfirmDelete(null);
+        return;
+      }
+      setProfessionals((prev) => prev.filter((p) => p.id !== target.id));
+      notify({ variant: "success", title: "Profissional excluído." });
+      setConfirmDelete(null);
+    });
+  }
+
+  return (
+    <div>
+      <PageHeader
+        title="Profissionais"
+        description="Expediente semanal e serviços de cada um."
+        action={
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Novo profissional
+          </Button>
+        }
+      />
+
+      {professionals.length === 0 ? (
+        <EmptyState
+          icon={UserRound}
+          title="Nenhum profissional cadastrado ainda"
+          description="Crie o primeiro profissional para definir expediente e serviços."
+          action={<Button onClick={openCreate}>Novo profissional</Button>}
+        />
+      ) : (
+        <Card>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeadCell>Nome</TableHeadCell>
+                <TableHeadCell>Serviços</TableHeadCell>
+                <TableHeadCell>Expediente</TableHeadCell>
+                <TableHeadCell>Status</TableHeadCell>
+                <TableHeadCell className="text-right">Ações</TableHeadCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {professionals.map((professional) => (
+                <TableRow key={professional.id}>
+                  <TableCell className="font-medium">
+                    <Link
+                      href={`/${tenantSlug}/profissionais/${professional.id}`}
+                      className="hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                    >
+                      {professional.name}
+                    </Link>
+                  </TableCell>
+                  <TableCell>{professional.professionalServices.length}</TableCell>
+                  <TableCell>
+                    {professional.workingHours.length > 0
+                      ? `${new Set(professional.workingHours.map((h) => h.weekday)).size} dia(s)`
+                      : "Não definido"}
+                  </TableCell>
+                  <TableCell>
+                    <button
+                      type="button"
+                      onClick={() => toggleActive(professional)}
+                      disabled={isPending}
+                      className="cursor-pointer"
+                      aria-label={professional.active ? `Desativar ${professional.name}` : `Ativar ${professional.name}`}
+                    >
+                      <Badge variant={professional.active ? "success" : "neutral"}>
+                        {professional.active ? "Ativo" : "Inativo"}
+                      </Badge>
+                    </button>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="sm" asChild>
+                        <Link href={`/${tenantSlug}/profissionais/${professional.id}`}>Editar</Link>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Excluir ${professional.name}`}
+                        onClick={() => setConfirmDelete(professional)}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogTitle>Novo profissional</DialogTitle>
+          <DialogDescription>Depois de criar, defina os serviços e o expediente dele.</DialogDescription>
+          <form onSubmit={handleCreate} className="mt-4 flex flex-col gap-4">
+            {formError ? (
+              <p role="alert" className="text-sm text-danger">
+                {formError}
+              </p>
+            ) : null}
+            <Field label="Nome" required>
+              {(fieldProps) => (
+                <Input {...fieldProps} value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} />
+              )}
+            </Field>
+            <DialogFooter>
+              <Button type="button" variant="secondary" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" isLoading={isPending}>
+                Criar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>
+        <DialogContent>
+          <DialogTitle>Excluir profissional</DialogTitle>
+          <DialogDescription>
+            Tem certeza que quer excluir &ldquo;{confirmDelete?.name}&rdquo;? Essa ação não pode ser desfeita.
+          </DialogDescription>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setConfirmDelete(null)}>
+              Cancelar
+            </Button>
+            <Button type="button" variant="danger" onClick={handleDelete} isLoading={isPending}>
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

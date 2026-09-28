@@ -1,0 +1,357 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { Pencil, Plus, Scissors, Trash2 } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
+import {
+  createServiceAction,
+  deleteServiceAction,
+  updateServiceAction,
+} from "@/modules/agenda/catalog-actions";
+
+export type ServiceRow = {
+  id: string;
+  name: string;
+  durationMin: number;
+  bufferAfterMin: number;
+  priceCents: number | null;
+  active: boolean;
+  sortOrder: number;
+};
+
+function formatPrice(cents: number | null): string {
+  if (cents === null) return "—";
+  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+type FormState = {
+  name: string;
+  durationMin: string;
+  bufferAfterMin: string;
+  priceReais: string;
+  active: boolean;
+  sortOrder: string;
+};
+
+const EMPTY_FORM: FormState = {
+  name: "",
+  durationMin: "30",
+  bufferAfterMin: "0",
+  priceReais: "",
+  active: true,
+  sortOrder: "0",
+};
+
+export function ServicosClient({ tenantSlug, initialServices }: { tenantSlug: string; initialServices: ServiceRow[] }) {
+  const [services, setServices] = useState<ServiceRow[]>(initialServices);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<ServiceRow | null>(null);
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<ServiceRow | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const { notify } = useToast();
+
+  function openCreate() {
+    setEditing(null);
+    setForm(EMPTY_FORM);
+    setFormError(null);
+    setDialogOpen(true);
+  }
+
+  function openEdit(service: ServiceRow) {
+    setEditing(service);
+    setForm({
+      name: service.name,
+      durationMin: String(service.durationMin),
+      bufferAfterMin: String(service.bufferAfterMin),
+      priceReais: service.priceCents !== null ? (service.priceCents / 100).toFixed(2) : "",
+      active: service.active,
+      sortOrder: String(service.sortOrder),
+    });
+    setFormError(null);
+    setDialogOpen(true);
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+
+    const durationMin = Number(form.durationMin);
+    const bufferAfterMin = Number(form.bufferAfterMin) || 0;
+    const sortOrder = Number(form.sortOrder) || 0;
+    const priceCents = form.priceReais.trim() === "" ? null : Math.round(Number(form.priceReais.replace(",", ".")) * 100);
+
+    const payload = {
+      name: form.name.trim(),
+      durationMin,
+      bufferAfterMin,
+      priceCents,
+      active: form.active,
+      sortOrder,
+    };
+
+    startTransition(async () => {
+      const result = editing
+        ? await updateServiceAction(tenantSlug, editing.id, payload)
+        : await createServiceAction(tenantSlug, payload);
+
+      if (!result.ok) {
+        setFormError(result.error.message);
+        return;
+      }
+
+      const saved = result.data as ServiceRow;
+      setServices((prev) => {
+        if (editing) return prev.map((s) => (s.id === saved.id ? saved : s));
+        return [...prev, saved].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+      });
+      setDialogOpen(false);
+      notify({ variant: "success", title: editing ? "Serviço atualizado." : "Serviço criado." });
+    });
+  }
+
+  function handleDelete() {
+    if (!confirmDelete) return;
+    const target = confirmDelete;
+    startTransition(async () => {
+      const result = await deleteServiceAction(tenantSlug, target.id);
+      if (!result.ok) {
+        if (result.error.code === "HAS_APPOINTMENTS") {
+          notify({
+            variant: "error",
+            title: "Não é possível excluir",
+            description: "Este serviço tem agendamentos. Desative-o em vez de excluir.",
+          });
+        } else {
+          notify({ variant: "error", title: "Não foi possível excluir", description: result.error.message });
+        }
+        setConfirmDelete(null);
+        return;
+      }
+      setServices((prev) => prev.filter((s) => s.id !== target.id));
+      notify({ variant: "success", title: "Serviço excluído." });
+      setConfirmDelete(null);
+    });
+  }
+
+  function toggleActive(service: ServiceRow) {
+    startTransition(async () => {
+      const result = await updateServiceAction(tenantSlug, service.id, { active: !service.active });
+      if (!result.ok) {
+        notify({ variant: "error", title: "Não foi possível atualizar", description: result.error.message });
+        return;
+      }
+      const saved = result.data as ServiceRow;
+      setServices((prev) => prev.map((s) => (s.id === saved.id ? saved : s)));
+      notify({ variant: "success", title: saved.active ? "Serviço ativado." : "Serviço desativado." });
+    });
+  }
+
+  return (
+    <div>
+      <PageHeader
+        title="Serviços"
+        description="Nome, duração, intervalo, preço opcional e ordem."
+        action={
+          <Button onClick={openCreate}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Novo serviço
+          </Button>
+        }
+      />
+
+      {services.length === 0 ? (
+        <EmptyState
+          icon={Scissors}
+          title="Nenhum serviço cadastrado ainda"
+          description="Crie o primeiro serviço para começar a montar a agenda."
+          action={<Button onClick={openCreate}>Novo serviço</Button>}
+        />
+      ) : (
+        <Card>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeadCell>Nome</TableHeadCell>
+                <TableHeadCell>Duração</TableHeadCell>
+                <TableHeadCell>Intervalo</TableHeadCell>
+                <TableHeadCell>Preço</TableHeadCell>
+                <TableHeadCell>Status</TableHeadCell>
+                <TableHeadCell className="text-right">Ações</TableHeadCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {services.map((service) => (
+                <TableRow key={service.id}>
+                  <TableCell className="font-medium">{service.name}</TableCell>
+                  <TableCell>{service.durationMin} min</TableCell>
+                  <TableCell>{service.bufferAfterMin > 0 ? `${service.bufferAfterMin} min` : "—"}</TableCell>
+                  <TableCell>{formatPrice(service.priceCents)}</TableCell>
+                  <TableCell>
+                    <button
+                      type="button"
+                      onClick={() => toggleActive(service)}
+                      disabled={isPending}
+                      className="cursor-pointer"
+                      aria-label={service.active ? `Desativar ${service.name}` : `Ativar ${service.name}`}
+                    >
+                      <Badge variant={service.active ? "success" : "neutral"}>
+                        {service.active ? "Ativo" : "Inativo"}
+                      </Badge>
+                    </button>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="icon" aria-label={`Editar ${service.name}`} onClick={() => openEdit(service)}>
+                        <Pencil className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Excluir ${service.name}`}
+                        onClick={() => setConfirmDelete(service)}
+                      >
+                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogTitle>{editing ? "Editar serviço" : "Novo serviço"}</DialogTitle>
+          <DialogDescription>Duração e intervalo entram no cálculo dos horários livres.</DialogDescription>
+
+          <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
+            {formError ? (
+              <p role="alert" className="text-sm text-danger">
+                {formError}
+              </p>
+            ) : null}
+
+            <Field label="Nome" required>
+              {(fieldProps) => (
+                <Input
+                  {...fieldProps}
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  required
+                  maxLength={120}
+                />
+              )}
+            </Field>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Duração (min)" required>
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    type="number"
+                    min={5}
+                    max={1440}
+                    value={form.durationMin}
+                    onChange={(e) => setForm((f) => ({ ...f, durationMin: e.target.value }))}
+                    required
+                  />
+                )}
+              </Field>
+              <Field label="Intervalo após (min)" hint="Tempo de folga depois do atendimento.">
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    type="number"
+                    min={0}
+                    max={1440}
+                    value={form.bufferAfterMin}
+                    onChange={(e) => setForm((f) => ({ ...f, bufferAfterMin: e.target.value }))}
+                  />
+                )}
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Preço (R$)" hint="Deixe em branco para não mostrar preço.">
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    inputMode="decimal"
+                    placeholder="0,00"
+                    value={form.priceReais}
+                    onChange={(e) => setForm((f) => ({ ...f, priceReais: e.target.value }))}
+                  />
+                )}
+              </Field>
+              <Field label="Ordem de exibição">
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    type="number"
+                    value={form.sortOrder}
+                    onChange={(e) => setForm((f) => ({ ...f, sortOrder: e.target.value }))}
+                  />
+                )}
+              </Field>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm text-text">
+              <input
+                type="checkbox"
+                checked={form.active}
+                onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))}
+                className="h-4 w-4 rounded border-border accent-primary"
+              />
+              Ativo (aparece para agendamento)
+            </label>
+
+            <DialogFooter>
+              <Button type="button" variant="secondary" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" isLoading={isPending}>
+                {editing ? "Salvar" : "Criar"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>
+        <DialogContent>
+          <DialogTitle>Excluir serviço</DialogTitle>
+          <DialogDescription>
+            Tem certeza que quer excluir &ldquo;{confirmDelete?.name}&rdquo;? Essa ação não pode ser desfeita.
+          </DialogDescription>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setConfirmDelete(null)}>
+              Cancelar
+            </Button>
+            <Button type="button" variant="danger" onClick={handleDelete} isLoading={isPending}>
+              Excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

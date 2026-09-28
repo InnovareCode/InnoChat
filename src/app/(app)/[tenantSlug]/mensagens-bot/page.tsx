@@ -8,8 +8,8 @@ export default function MensagensBotPage() {
       <PageHeader title="Mensagens do bot" description="Edite os textos que o bot envia no WhatsApp." />
       <EmptyState
         icon={Bot}
-        title="Edição de textos chega na Fase 4"
-        description="Depende do modelo BotText e da API interna do bot (docs/arquitetura.md §6.7). Placeholder do shell por enquanto."
+        title="Em breve"
+        description="A edição dos textos do bot ainda está a caminho."
       />
     </div>
   );

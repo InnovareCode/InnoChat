@@ -6,7 +6,7 @@ export default function AdminPlanosPage() {
   return (
     <div>
       <PageHeader title="Planos" description="Limites, preço e ativação de cada plano." />
-      <EmptyState icon={Layers} title="CRUD de planos chega na Fase 7" description="Depende do modelo Plan." />
+      <EmptyState icon={Layers} title="Em breve" description="O cadastro de planos ainda está a caminho." />
     </div>
   );
 }

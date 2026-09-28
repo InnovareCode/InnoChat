@@ -1,16 +1,52 @@
+import { notFound } from "next/navigation";
 import { Calendar } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { getPrisma } from "@/lib/db/prisma";
+import { listProfessionalsAction, listServicesAction } from "@/modules/agenda/catalog-actions";
+import { AgendaClient } from "./agenda-client";
+import type { ProfessionalRow } from "../profissionais/profissionais-client";
+import type { ServiceRow } from "../servicos/servicos-client";
 
-export default function AgendaPage() {
+export default async function AgendaPage({
+  params,
+}: {
+  params: Promise<{ tenantSlug: string }>;
+}) {
+  const { tenantSlug } = await params;
+
+  const tenant = await getPrisma().tenant.findUnique({ where: { slug: tenantSlug }, select: { timezone: true } });
+  if (!tenant) {
+    notFound();
+  }
+
+  const [professionalsResult, servicesResult] = await Promise.all([
+    listProfessionalsAction(tenantSlug),
+    listServicesAction(tenantSlug),
+  ]);
+
+  const professionals = professionalsResult.ok ? (professionalsResult.data as ProfessionalRow[]) : [];
+  const services = servicesResult.ok ? (servicesResult.data as ServiceRow[]) : [];
+
+  if (professionals.filter((p) => p.active).length === 0) {
+    return (
+      <div>
+        <PageHeader title="Agenda" description="Dia e semana por profissional." />
+        <EmptyState
+          icon={Calendar}
+          title="Cadastre um profissional ativo para começar"
+          description="A agenda mostra os horários de cada profissional ativo. Vá em Profissionais para criar o primeiro."
+        />
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <PageHeader title="Agenda" description="Dia e semana por profissional." />
-      <EmptyState
-        icon={Calendar}
-        title="Agenda chega na Fase 2"
-        description="Serviços, profissionais e horários entram junto (docs/arquitetura.md §13). Por enquanto, esta tela é só um placeholder do shell."
-      />
-    </div>
+    <AgendaClient
+      tenantSlug={tenantSlug}
+      timezone={tenant.timezone}
+      professionals={professionals}
+      services={services}
+    />
   );
 }

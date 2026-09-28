@@ -13,8 +13,8 @@ export default function WhatsappPage() {
       />
       <EmptyState
         icon={MessageCircle}
-        title="Conexão com a Evolution chega na Fase 3"
-        description="QR code, status e limite de números por plano (docs/arquitetura.md §4). Placeholder do shell por enquanto."
+        title="Em breve"
+        description="A conexão com o WhatsApp (QR code e status) ainda está a caminho."
       />
     </div>
   );

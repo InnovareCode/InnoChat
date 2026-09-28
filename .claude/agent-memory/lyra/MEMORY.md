@@ -5,3 +5,4 @@
 - [Sistema de temas em runtime (Tailwind v4)](sistema-de-temas-tailwind-v4.md) — arquitetura de tokens/fontes/root layouts implementada na Fase 1; pendência de cor de alerta do Âmbar.
 - [Bug: ícone como prop server→client quebra o build](bug-icone-server-para-client.md) — nunca passar componente React (ex. LucideIcon) como prop de Server para Client Component.
 - [Auth.js v5 signIn redirect:false lança, não retorna](authjs-v5-signin-redirect-false.md) — sempre `try/catch AuthError`, não confiar só na leitura do código-fonte da lib.
+- [eslint react-hooks/set-state-in-effect bloqueia fetch-on-mount direto](react-hooks-set-state-in-effect.md) — envolver em `setTimeout(fn, 0)` + `clearTimeout` no cleanup.

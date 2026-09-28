@@ -8,8 +8,8 @@ export default function AdminEmpresasPage() {
       <PageHeader title="Empresas" description="Status da assinatura, limites e trial de cada empresa." />
       <EmptyState
         icon={Building2}
-        title="Lista de empresas chega na Fase 7"
-        description="Depende de Subscription (Cronos/Vega). Placeholder do shell por enquanto."
+        title="Em breve"
+        description="A lista de empresas com status de assinatura e limites ainda está a caminho."
       />
     </div>
   );

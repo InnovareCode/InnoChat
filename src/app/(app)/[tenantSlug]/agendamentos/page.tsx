@@ -1,16 +1,22 @@
-import { ClipboardList } from "lucide-react";
-import { PageHeader } from "@/components/ui/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
+import { listProfessionalsAction, listServicesAction } from "@/modules/agenda/catalog-actions";
+import { AgendamentosClient } from "./agendamentos-client";
+import type { ProfessionalRow } from "../profissionais/profissionais-client";
+import type { ServiceRow } from "../servicos/servicos-client";
 
-export default function AgendamentosPage() {
-  return (
-    <div>
-      <PageHeader title="Agendamentos" description="Lista com filtros — útil no celular." />
-      <EmptyState
-        icon={ClipboardList}
-        title="Lista chega na Fase 2"
-        description="Depende do modelo de Appointment (Cronos/Vega). Placeholder do shell por enquanto."
-      />
-    </div>
-  );
+export default async function AgendamentosPage({
+  params,
+}: {
+  params: Promise<{ tenantSlug: string }>;
+}) {
+  const { tenantSlug } = await params;
+
+  const [professionalsResult, servicesResult] = await Promise.all([
+    listProfessionalsAction(tenantSlug),
+    listServicesAction(tenantSlug),
+  ]);
+
+  const professionals = professionalsResult.ok ? (professionalsResult.data as ProfessionalRow[]) : [];
+  const services = servicesResult.ok ? (servicesResult.data as ServiceRow[]) : [];
+
+  return <AgendamentosClient tenantSlug={tenantSlug} professionals={professionals} services={services} />;
 }

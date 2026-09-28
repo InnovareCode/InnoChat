@@ -1,21 +1,31 @@
 import { Scissors } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Button } from "@/components/ui/button";
+import { listServicesAction } from "@/modules/agenda/catalog-actions";
+import { ServicosClient, type ServiceRow } from "./servicos-client";
 
-export default function ServicosPage() {
+export default async function ServicosPage({
+  params,
+}: {
+  params: Promise<{ tenantSlug: string }>;
+}) {
+  const { tenantSlug } = await params;
+  const result = await listServicesAction(tenantSlug);
+
+  if (!result.ok) {
+    return (
+      <div>
+        <PageHeader title="Serviços" description="Nome, duração, intervalo, preço opcional e ordem." />
+        <EmptyState
+          icon={Scissors}
+          title="Não deu para carregar os serviços"
+          description={result.error.message}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <PageHeader
-        title="Serviços"
-        description="Nome, duração, intervalo, preço e quem realiza."
-        action={<Button disabled>Novo serviço</Button>}
-      />
-      <EmptyState
-        icon={Scissors}
-        title="Cadastro de serviços chega na Fase 2"
-        description="CRUD completo depende do modelo Service (Cronos) e das Server Actions da Vega. Placeholder do shell por enquanto."
-      />
-    </div>
+    <ServicosClient tenantSlug={tenantSlug} initialServices={result.data as ServiceRow[]} />
   );
 }

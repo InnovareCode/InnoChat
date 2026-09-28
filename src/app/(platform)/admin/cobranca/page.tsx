@@ -6,7 +6,7 @@ export default function AdminCobrancaPage() {
   return (
     <div>
       <PageHeader title="Cobrança" description="Faturas abertas, vencidas e eventos do Mercado Pago." />
-      <EmptyState icon={Receipt} title="Cobrança chega na Fase 7" description="Depende de Invoice e ProviderEvent." />
+      <EmptyState icon={Receipt} title="Em breve" description="Faturas e eventos de cobrança ainda estão a caminho." />
     </div>
   );
 }

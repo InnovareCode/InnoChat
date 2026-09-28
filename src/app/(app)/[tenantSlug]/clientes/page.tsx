@@ -8,8 +8,8 @@ export default function ClientesPage() {
       <PageHeader title="Clientes" description="Lista, agendamentos e pausa do bot por cliente." />
       <EmptyState
         icon={Users}
-        title="Lista de clientes chega na Fase 8"
-        description="Depende do modelo Contact e da tela de Atendimentos (docs/arquitetura.md §9). Placeholder do shell por enquanto."
+        title="Em breve"
+        description="A lista de clientes e o histórico de atendimentos ainda estão a caminho."
       />
     </div>
   );

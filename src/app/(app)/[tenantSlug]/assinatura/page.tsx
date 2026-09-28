@@ -8,8 +8,8 @@ export default function AssinaturaPage() {
       <PageHeader title="Assinatura" description="Plano atual, fatura em aberto e histórico." />
       <EmptyState
         icon={CreditCard}
-        title="Cobrança chega na Fase 7"
-        description="Depende de Plan/Subscription/Invoice e do Mercado Pago (docs/arquitetura.md §7). Placeholder do shell por enquanto."
+        title="Em breve"
+        description="Plano atual, faturas e histórico de cobrança ainda estão a caminho."
       />
     </div>
   );
