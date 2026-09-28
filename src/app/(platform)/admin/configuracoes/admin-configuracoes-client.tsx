@@ -27,6 +27,9 @@ export function AdminConfiguracoesClient({ initialSettings }: { initialSettings:
   const [evolutionApiKey, setEvolutionApiKey] = useState("");
   const [n8nWebhookBaseUrl, setN8nWebhookBaseUrl] = useState(settings.n8nWebhookBaseUrl ?? "");
 
+  const [mercadoPagoAccessToken, setMercadoPagoAccessToken] = useState("");
+  const [mercadoPagoWebhookSecret, setMercadoPagoWebhookSecret] = useState("");
+
   const [smtpHost, setSmtpHost] = useState(settings.smtpHost ?? "");
   const [smtpPort, setSmtpPort] = useState(settings.smtpPort ? String(settings.smtpPort) : "");
   const [smtpSecure, setSmtpSecure] = useState(!!settings.smtpSecure);
@@ -54,6 +57,25 @@ export function AdminConfiguracoesClient({ initialSettings }: { initialSettings:
       setSettings(result.data);
       setEvolutionApiKey("");
       notify({ variant: "success", title: "Configurações salvas." });
+    });
+  }
+
+  function handleSaveMercadoPago(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    startTransition(async () => {
+      const result = await updatePlatformSettingsAction({
+        mercadoPagoAccessToken: mercadoPagoAccessToken || undefined,
+        mercadoPagoWebhookSecret: mercadoPagoWebhookSecret || undefined,
+      });
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+      setSettings(result.data);
+      setMercadoPagoAccessToken("");
+      setMercadoPagoWebhookSecret("");
+      notify({ variant: "success", title: "Mercado Pago salvo." });
     });
   }
 
@@ -153,6 +175,60 @@ export function AdminConfiguracoesClient({ initialSettings }: { initialSettings:
                   value={n8nWebhookBaseUrl}
                   onChange={(e) => setN8nWebhookBaseUrl(e.target.value)}
                   placeholder="https://n8n.exemplo.com/webhook"
+                />
+              )}
+            </Field>
+          </CardContent>
+          <CardFooter>
+            <Button type="submit" isLoading={isPending}>
+              Salvar
+            </Button>
+          </CardFooter>
+        </form>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Mercado Pago</CardTitle>
+          <CardDescription>Usado para gerar o Pix das faturas e validar o webhook de pagamento.</CardDescription>
+        </CardHeader>
+        <form onSubmit={handleSaveMercadoPago}>
+          <CardContent className="flex flex-col gap-4">
+            <Field
+              label="Access token"
+              hint={
+                settings.mercadoPagoAccessTokenMasked
+                  ? `Token atual: ${settings.mercadoPagoAccessTokenMasked}. Deixe em branco para manter.`
+                  : "Nenhum token configurado ainda — sem ele, o Pix das faturas não é gerado."
+              }
+            >
+              {(fieldProps) => (
+                <Input
+                  {...fieldProps}
+                  type="password"
+                  autoComplete="off"
+                  value={mercadoPagoAccessToken}
+                  onChange={(e) => setMercadoPagoAccessToken(e.target.value)}
+                  placeholder="••••••••"
+                />
+              )}
+            </Field>
+            <Field
+              label="Segredo do webhook"
+              hint={
+                settings.mercadoPagoWebhookSecretMasked
+                  ? `Segredo atual: ${settings.mercadoPagoWebhookSecretMasked}. Deixe em branco para manter.`
+                  : "Nenhum segredo configurado ainda — sem ele, notificações de pagamento são rejeitadas."
+              }
+            >
+              {(fieldProps) => (
+                <Input
+                  {...fieldProps}
+                  type="password"
+                  autoComplete="off"
+                  value={mercadoPagoWebhookSecret}
+                  onChange={(e) => setMercadoPagoWebhookSecret(e.target.value)}
+                  placeholder="••••••••"
                 />
               )}
             </Field>

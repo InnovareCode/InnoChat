@@ -30,7 +30,7 @@ const SECTIONS = [
     icon: Users2,
     title: "Equipe",
     description: "Convide colegas para o painel.",
-    ready: false,
+    ready: true,
   },
 ];
 

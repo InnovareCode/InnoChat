@@ -8,6 +8,7 @@ import {
   Layers,
   MessageCircle,
   Receipt,
+  Rocket,
   Scissors,
   Settings,
   Activity,
@@ -40,12 +41,24 @@ const TENANT_NAV_DEF: { label: string; path: string; icon: LucideIcon }[] = [
   { label: "Assinatura", path: "assinatura", icon: CreditCard },
 ];
 
-export function tenantNavItems(tenantSlug: string): NavItem[] {
-  return TENANT_NAV_DEF.map(({ label, path, icon }) => ({
+/**
+ * `includeOnboarding` (docs/arquitetura.md §13, decisão do dono): o link para o assistente de
+ * primeiros passos só aparece enquanto a configuração inicial (serviços, profissionais e
+ * expediente) não está completa — calculado no `layout.tsx` do tenant, que já consulta o banco
+ * para o banner de assinatura.
+ */
+export function tenantNavItems(tenantSlug: string, options: { includeOnboarding?: boolean } = {}): NavItem[] {
+  const items = TENANT_NAV_DEF.map(({ label, path, icon }) => ({
     label,
     icon,
     href: `/${tenantSlug}/${path}`,
   }));
+
+  if (options.includeOnboarding) {
+    items.unshift({ label: "Primeiros passos", icon: Rocket, href: `/${tenantSlug}/onboarding` });
+  }
+
+  return items;
 }
 
 /** Itens da sidebar do admin da plataforma (docs/arquitetura.md §9, "Plataforma"). */

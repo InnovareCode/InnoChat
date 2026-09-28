@@ -4,6 +4,7 @@ import "@/app/globals.css";
 import { fontVariables } from "@/app/fonts";
 import { auth } from "@/lib/auth";
 import { getPrisma } from "@/lib/db/prisma";
+import { effectiveStatus } from "@/core/billing";
 import { ToastProvider } from "@/components/ui/toast";
 import { PanelShell } from "@/components/shell/panel-shell";
 
@@ -49,6 +50,31 @@ export default async function TenantLayout({
     notFound();
   }
 
+  // Status efetivo da assinatura (docs/arquitetura.md §7.4) para o banner global do painel —
+  // sempre calculado sob demanda (`effectiveStatus`, puro), nunca confiando só no `status`
+  // persistido (que só o `billing/tick` de hora em hora mantém em dia).
+  const subscription = await getPrisma().subscription.findUnique({
+    where: { tenantId: membership.tenant.id },
+    select: { status: true, trialEndsAt: true, currentPeriodEnd: true },
+  });
+  const now = new Date();
+  const status = subscription ? effectiveStatus(subscription, now) : null;
+  const trialHoursLeft =
+    status === "TRIALING" && subscription?.trialEndsAt
+      ? Math.max(0, Math.ceil((subscription.trialEndsAt.getTime() - now.getTime()) / (60 * 60 * 1000)))
+      : null;
+
+  // Onboarding (docs/arquitetura.md §13): incompleto enquanto não houver nenhum serviço OU
+  // nenhum profissional com expediente cadastrado — o link "Primeiros passos" some da sidebar
+  // assim que os dois existirem (WhatsApp fica de fora da checagem: ainda não tem tela).
+  const [serviceCount, professionalWithHoursCount] = await Promise.all([
+    getPrisma().service.count({ where: { tenantId: membership.tenant.id } }),
+    getPrisma().professional.count({
+      where: { tenantId: membership.tenant.id, workingHours: { some: {} } },
+    }),
+  ]);
+  const onboardingIncomplete = serviceCount === 0 || professionalWithHoursCount === 0;
+
   return (
     <html lang="pt-BR" data-theme={membership.tenant.theme} className={fontVariables}>
       <body>
@@ -57,6 +83,9 @@ export default async function TenantLayout({
             tenantName={membership.tenant.name}
             tenantSlug={tenantSlug}
             userEmail={session.user.email ?? ""}
+            subscriptionStatus={status}
+            trialHoursLeft={trialHoursLeft}
+            onboardingIncomplete={onboardingIncomplete}
           >
             {children}
           </PanelShell>

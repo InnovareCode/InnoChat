@@ -10,7 +10,7 @@ import { TenantSidebarNav, AdminSidebarNav } from "./sidebar-nav";
 type MobileNavProps = {
   brand: React.ReactNode;
   footer: React.ReactNode;
-} & ({ variant: "tenant"; tenantSlug: string } | { variant: "admin" });
+} & ({ variant: "tenant"; tenantSlug: string; onboardingIncomplete?: boolean } | { variant: "admin" });
 
 /**
  * Hambúrguer + gaveta (drawer) para telas < 1024px (`lg`). Recebe `brand` e
@@ -41,7 +41,11 @@ export function MobileNav(props: MobileNavProps) {
           <div className="mb-8 px-2">{props.brand}</div>
           <div className="flex-1 overflow-y-auto">
             {props.variant === "tenant" ? (
-              <TenantSidebarNav tenantSlug={props.tenantSlug} onNavigate={() => setOpen(false)} />
+              <TenantSidebarNav
+                tenantSlug={props.tenantSlug}
+                onboardingIncomplete={props.onboardingIncomplete}
+                onNavigate={() => setOpen(false)}
+              />
             ) : (
               <AdminSidebarNav onNavigate={() => setOpen(false)} />
             )}

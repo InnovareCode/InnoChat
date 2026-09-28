@@ -19,7 +19,7 @@ function activeLabel(items: NavItem[], pathname: string | null): string | null {
 
 export function TenantSectionLabel({ tenantSlug }: { tenantSlug: string }) {
   const pathname = usePathname();
-  const label = activeLabel(tenantNavItems(tenantSlug), pathname);
+  const label = activeLabel(tenantNavItems(tenantSlug, { includeOnboarding: true }), pathname);
   if (!label) return null;
   return <p className="hidden font-display text-sm font-bold text-text lg:block">{label}</p>;
 }

@@ -9,9 +9,9 @@ export const metadata: Metadata = { title: "Entrar — InnoChat" };
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string }>;
+  searchParams: Promise<{ erro?: string; redefinida?: string }>;
 }) {
-  const { erro } = await searchParams;
+  const { erro, redefinida } = await searchParams;
 
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
@@ -30,7 +30,17 @@ export default async function LoginPage({
                 Sua conta ainda não está ligada a nenhuma empresa no InnoChat.
               </Alert>
             ) : null}
+            {redefinida === "1" ? (
+              <Alert variant="success" title="Senha redefinida">
+                Já pode entrar com a nova senha.
+              </Alert>
+            ) : null}
             <LoginForm />
+            <p className="text-center text-sm text-text-secondary">
+              <Link href="/recuperar-senha" className="text-primary hover:underline">
+                Esqueci minha senha
+              </Link>
+            </p>
             <p className="text-center text-sm text-text-secondary">
               Ainda não tem conta?{" "}
               <Link href="/cadastro" className="text-primary hover:underline">

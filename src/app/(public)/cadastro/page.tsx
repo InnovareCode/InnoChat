@@ -1,21 +1,24 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { UserPlus } from "lucide-react";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Button } from "@/components/ui/button";
+import { CadastroForm } from "./cadastro-form";
+
+export const metadata: Metadata = { title: "Criar conta — InnoChat" };
 
 export default function CadastroPage() {
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
-      <EmptyState
-        icon={UserPlus}
-        title="Cadastro chega na próxima fase"
-        description="O cadastro público e a assinatura entram no painel na Fase 7 (docs/arquitetura.md §13). Por enquanto, quem já tem conta pode entrar."
-        action={
-          <Button asChild>
-            <Link href="/login">Ir para o login</Link>
-          </Button>
-        }
-      />
+      <div className="w-full max-w-md">
+        <div className="mb-6 text-center">
+          <span className="font-display text-lg font-bold text-text">InnoChat</span>
+        </div>
+        <CadastroForm />
+        <p className="mt-4 text-center text-sm text-text-secondary">
+          Já tem conta?{" "}
+          <Link href="/login" className="text-primary hover:underline">
+            Entrar
+          </Link>
+        </p>
+      </div>
     </main>
   );
 }

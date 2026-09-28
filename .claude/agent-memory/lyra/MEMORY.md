@@ -7,3 +7,4 @@
 - [Auth.js v5 signIn redirect:false lança, não retorna](authjs-v5-signin-redirect-false.md) — sempre `try/catch AuthError`, não confiar só na leitura do código-fonte da lib.
 - [eslint react-hooks/set-state-in-effect bloqueia fetch-on-mount direto](react-hooks-set-state-in-effect.md) — envolver em `setTimeout(fn, 0)` + `clearTimeout` no cleanup.
 - [Bug: `capitalize` do Tailwind em data por extenso](bug-tailwind-capitalize-em-data-por-extenso.md) — maiuscula CADA palavra, não a frase; capitalizar em JS. Util central: `src/components/lib/format-date.ts`.
+- [Fase 7 — cobrança e cadastro público](fase7-cobranca-e-cadastro-publico.md) — leitura direta em Server Component, `router.refresh()` como polling, QR Pix gerado no cliente com `qrcode`, nav condicional por booleano.

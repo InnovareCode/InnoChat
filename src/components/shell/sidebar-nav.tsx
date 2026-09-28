@@ -44,8 +44,18 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
   );
 }
 
-export function TenantSidebarNav({ tenantSlug, onNavigate }: { tenantSlug: string; onNavigate?: () => void }) {
-  return <NavList items={tenantNavItems(tenantSlug)} onNavigate={onNavigate} />;
+export function TenantSidebarNav({
+  tenantSlug,
+  onboardingIncomplete,
+  onNavigate,
+}: {
+  tenantSlug: string;
+  onboardingIncomplete?: boolean;
+  onNavigate?: () => void;
+}) {
+  return (
+    <NavList items={tenantNavItems(tenantSlug, { includeOnboarding: onboardingIncomplete })} onNavigate={onNavigate} />
+  );
 }
 
 export function AdminSidebarNav({ onNavigate }: { onNavigate?: () => void }) {
