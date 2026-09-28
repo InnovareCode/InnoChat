@@ -1,10 +1,33 @@
-// Seed de dev: 1 tenant demo, serviços e profissionais, expediente básico e um agendamento
-// SCHEDULED de exemplo. Não roda em produção (chamar só via `npm run db:seed`).
+// Seed de dev: 1 usuário dono (também admin da plataforma), 1 tenant demo, serviços e
+// profissionais, expediente básico e um agendamento SCHEDULED de exemplo. Não roda em produção
+// (chamar só via `npm run db:seed`). Credenciais de dev documentadas em `.env.example` — NUNCA
+// uma senha real.
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+// Mesmo custo de src/modules/auth/service.ts (SALT_ROUNDS = 12) — só duplicado aqui porque
+// prisma/seed.ts roda fora do bundler do Next (via tsx) e não importa de src/ de propósito,
+// para não acoplar o seed aos módulos da aplicação.
+const DEV_PASSWORD_HASH_ROUNDS = 12;
+const DEV_USER_EMAIL = "dev@innochat.local";
+const DEV_USER_PASSWORD = "innochat-dev-2026"; // dev-only — troque em qualquer ambiente real.
+
 async function main() {
+  const devUser = await prisma.user.upsert({
+    where: { email: DEV_USER_EMAIL },
+    update: {},
+    create: {
+      email: DEV_USER_EMAIL,
+      passwordHash: await bcrypt.hash(DEV_USER_PASSWORD, DEV_PASSWORD_HASH_ROUNDS),
+      emailVerifiedAt: new Date(),
+      isPlatformAdmin: true,
+      termsAcceptedAt: new Date(),
+      termsVersion: "dev",
+    },
+  });
+
   const tenant = await prisma.tenant.upsert({
     where: { slug: "studio-demo" },
     update: {},
@@ -14,6 +37,12 @@ async function main() {
       timezone: "America/Sao_Paulo",
       segment: "Salão de beleza",
     },
+  });
+
+  await prisma.membership.upsert({
+    where: { userId_tenantId: { userId: devUser.id, tenantId: tenant.id } },
+    update: { role: "OWNER" },
+    create: { userId: devUser.id, tenantId: tenant.id, role: "OWNER" },
   });
 
   const [corte, coloracao] = await Promise.all([
@@ -123,7 +152,7 @@ async function main() {
     },
   });
 
-  console.log(`Seed ok: tenant "${tenant.slug}" (${tenant.id})`);
+  console.log(`Seed ok: tenant "${tenant.slug}" (${tenant.id}) — login de dev: ${DEV_USER_EMAIL} / ${DEV_USER_PASSWORD}`);
 }
 
 main()
