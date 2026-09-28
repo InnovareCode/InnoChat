@@ -67,7 +67,7 @@ export default async function TenantLayout({
   // Onboarding (docs/arquitetura.md §13): incompleto enquanto não houver nenhum serviço OU
   // nenhum profissional com expediente cadastrado — o link "Primeiros passos" some da sidebar
   // assim que os dois existirem (WhatsApp fica de fora da checagem: ainda não tem tela).
-  const [serviceCount, professionalWithHoursCount, disconnectedWhatsappCount] = await Promise.all([
+  const [serviceCount, professionalWithHoursCount, disconnectedWhatsappCount, sessionUserRecord] = await Promise.all([
     getPrisma().service.count({ where: { tenantId: membership.tenant.id } }),
     getPrisma().professional.count({
       where: { tenantId: membership.tenant.id, workingHours: { some: {} } },
@@ -75,12 +75,17 @@ export default async function TenantLayout({
     getPrisma().whatsappInstance.count({
       where: { tenantId: membership.tenant.id, deletedAt: null, status: "DISCONNECTED" },
     }),
+    // `emailVerifiedAt` nunca vem da sessão (não é lido no `session.user`) — relido aqui, direto
+    // do banco, para o banner discreto de "confirme seu e-mail" (mesma regra de
+    // `requireVerifiedEmail`, src/lib/auth/guards.ts).
+    getPrisma().user.findUnique({ where: { id: session.user.id }, select: { emailVerifiedAt: true } }),
   ]);
   const onboardingIncomplete = serviceCount === 0 || professionalWithHoursCount === 0;
   // Ponto de alerta discreto na sidebar (mission): só para instância que já esteve conectada e
   // caiu — uma instância recém-criada nasce em `QRCODE` (esperando o primeiro scan), o que NÃO é
   // "queda" e não deveria acender o alerta.
   const whatsappNeedsAttention = disconnectedWhatsappCount > 0;
+  const emailVerified = !!sessionUserRecord?.emailVerifiedAt;
 
   return (
     <html lang="pt-BR" data-theme={membership.tenant.theme} className={fontVariables}>
@@ -94,6 +99,7 @@ export default async function TenantLayout({
             trialHoursLeft={trialHoursLeft}
             onboardingIncomplete={onboardingIncomplete}
             whatsappNeedsAttention={whatsappNeedsAttention}
+            emailVerified={emailVerified}
           >
             {children}
           </PanelShell>

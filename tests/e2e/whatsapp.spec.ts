@@ -145,18 +145,16 @@ test.describe.serial("WhatsApp: conexão por QR com Evolution fake", () => {
     fakeEvolution.setState(instanceName!, "open");
     fakeEvolution.setOwnerJid(instanceName!, PHONE_JID_OK);
 
-    // BUG encontrado (reprodução mínima, para a Lyra — não corrigido aqui): ao conectar o
-    // PRIMEIRO número da empresa, o diálogo de sucesso ("Número conectado" / "Concluir") nunca
-    // aparece — ele SOME instantaneamente assim que a conexão é detectada. Causa: o gatilho
-    // "Conectar número" que abriu o diálogo mora dentro do `EmptyState` (`instances.length ===
-    // 0`, `whatsapp-client.tsx`); o `onConnected` do próprio diálogo atualiza a lista PARA a
-    // empresa deixar de estar vazia, o que desmonta o `EmptyState` (e o `ConnectWhatsappDialog`
-    // aberto dentro dele) no mesmo instante — um NOVO `ConnectWhatsappDialog` nasce no cabeçalho
-    // (`action={isOwner && hasInstances ? ...}`), mas fechado por padrão. Quem conecta o segundo
-    // número em diante NÃO sofre isso (o diálogo já vive no cabeçalho, que não desmonta). O card
-    // atualiza corretamente (prova abaixo) — só a confirmação visual "Número conectado" se perde
-    // exatamente na primeira conexão.
-    await expect(page.getByText("Conectado", { exact: true })).toBeVisible({ timeout: 8_000 });
+    // Corrigido pela Lyra: o `ConnectWhatsappDialog` agora fica SEMPRE montado em
+    // `whatsapp-client.tsx` (estado `open` no componente pai), então o passo de sucesso aparece
+    // mesmo ao conectar o PRIMEIRO número — antes ele desmontava junto com o `EmptyState` no
+    // instante em que a lista deixava de estar vazia.
+    await expect(page.getByRole("dialog").getByText("Número conectado", { exact: true })).toBeVisible({
+      timeout: 8_000,
+    });
+    await page.getByRole("button", { name: "Concluir" }).click();
+
+    await expect(page.getByText("Conectado", { exact: true })).toBeVisible();
     await expect(page.getByText(PHONE_E164_OK_DISPLAY)).toBeVisible();
 
     expect(violations).toEqual([]);

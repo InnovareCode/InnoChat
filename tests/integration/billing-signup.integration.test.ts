@@ -152,7 +152,7 @@ describe("signUp — cadastro público completo", () => {
 
 describe("resendVerificationEmail — reenvio pelo usuário logado", () => {
   it("usuário não verificado recebe um novo link; depois de verificado, não envia mais", async () => {
-    const result = await signUp(signupInput(), createMockMercadoPagoGateway());
+    const result = await signUp(signupInput(), createMockMercadoPagoGateway().gateway);
     createdTenantIds.push((await prisma.tenant.findUniqueOrThrow({ where: { slug: result.tenantSlug } })).id);
     createdUserIds.push(result.userId);
     sentEmails.length = 0;

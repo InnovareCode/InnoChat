@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { AlertTriangle, Clock, Lock } from "lucide-react";
+import { AlertTriangle, Clock, Lock, Mail } from "lucide-react";
 import { TenantSidebarNav } from "./sidebar-nav";
 import { MobileNav } from "./mobile-nav";
 import { LogoutButton } from "./logout-button";
 import { TenantSectionLabel } from "./section-label";
+import { ResendVerificationButton } from "@/components/account/resend-verification-button";
 
 type SubscriptionStatus = "TRIALING" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELED" | null;
 
@@ -15,8 +16,28 @@ type PanelShellProps = {
   trialHoursLeft?: number | null;
   onboardingIncomplete?: boolean;
   whatsappNeedsAttention?: boolean;
+  /** `User.emailVerifiedAt` do dono da sessão, já resolvido como booleano pelo layout do tenant
+   * (nunca lido daqui — o layout relê do banco, mesma regra de `requireVerifiedEmail`). */
+  emailVerified?: boolean;
   children: React.ReactNode;
 };
+
+/**
+ * Banner discreto — não bloqueia nada, só lembra (o resto do painel funciona sem o e-mail
+ * confirmado; só conectar WhatsApp exige, `requireVerifiedEmail`). Some assim que
+ * `emailVerified` virar `true` numa navegação seguinte (o layout relê do banco a cada request).
+ */
+function EmailVerificationBanner() {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-bg px-4 py-2 text-sm sm:px-6">
+      <span className="flex items-center gap-2 text-text-secondary">
+        <Mail className="h-4 w-4 shrink-0 text-text-secondary" aria-hidden="true" />
+        Confirme seu e-mail para poder conectar um número de WhatsApp.
+      </span>
+      <ResendVerificationButton variant="ghost" size="sm" />
+    </div>
+  );
+}
 
 /**
  * Banner global de status da assinatura (docs/arquitetura.md §7.4, decisão do dono
@@ -111,6 +132,7 @@ export function PanelShell({
   trialHoursLeft = null,
   onboardingIncomplete = false,
   whatsappNeedsAttention = false,
+  emailVerified = true,
   children,
 }: PanelShellProps) {
   return (
@@ -151,6 +173,7 @@ export function PanelShell({
         </header>
 
         <SubscriptionBanner tenantSlug={tenantSlug} status={subscriptionStatus} trialHoursLeft={trialHoursLeft} />
+        {!emailVerified ? <EmailVerificationBanner /> : null}
 
         <main className="flex-1 p-4 sm:p-6">{children}</main>
       </div>

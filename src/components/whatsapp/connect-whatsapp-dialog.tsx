@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } f
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { ResendVerificationButton } from "@/components/account/resend-verification-button";
 import {
   createWhatsappInstanceAction,
   getQrCodeAction,
@@ -29,7 +30,12 @@ const POLL_TIMEOUT_MS = 2 * 60 * 1000;
 
 type Step = "label" | "qr" | "success";
 
-type ErrorView = { title: string; description: React.ReactNode; showAssinaturaLink?: boolean };
+type ErrorView = {
+  title: string;
+  description: React.ReactNode;
+  showAssinaturaLink?: boolean;
+  showResendVerification?: boolean;
+};
 
 function mapCreateError(code: string, message: string, details: unknown): ErrorView {
   switch (code) {
@@ -38,6 +44,7 @@ function mapCreateError(code: string, message: string, details: unknown): ErrorV
         title: "Confirme seu e-mail antes de conectar",
         description:
           "Enviamos um link de confirmação para o seu e-mail quando a conta foi criada. Verifique sua caixa de entrada (e o spam) e clique nele antes de conectar um número.",
+        showResendVerification: true,
       };
     case "PLAN_LIMIT_REACHED": {
       const d = details as { limit?: number; current?: number } | undefined;
@@ -88,15 +95,34 @@ export function ConnectWhatsappDialog({
   trigger,
   disabled,
   disabledHint,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
 }: {
   tenantSlug: string;
   onConnected?: (instance: WhatsappInstanceView) => void;
-  /** Elemento que abre o diálogo. Padrão: botão "Conectar número". */
+  /** Elemento que abre o diálogo. Padrão: botão "Conectar número". Ignorado no modo controlado
+   * (quando `open`/`onOpenChange` são passados) — quem chama cuida do próprio gatilho visual. */
   trigger?: React.ReactNode;
   disabled?: boolean;
   disabledHint?: string;
+  /**
+   * Modo controlado: quem chama guarda o `open` (ex.: para manter UMA instância deste
+   * componente sempre montada, mesmo quando o gatilho visual precisa migrar de lugar na tela —
+   * ver `whatsapp-client.tsx`, bug do EmptyState desmontando o diálogo na 1ª conexão).
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const isControlled = openProp !== undefined;
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isControlled ? openProp : internalOpen;
+  function setOpen(next: boolean) {
+    if (isControlled) {
+      onOpenChangeProp?.(next);
+    } else {
+      setInternalOpen(next);
+    }
+  }
   const [step, setStep] = useState<Step>("label");
   const [label, setLabel] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -249,7 +275,7 @@ export function ConnectWhatsappDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      {trigger ? (
+      {isControlled ? null : trigger ? (
         <span
           onClick={() => {
             if (!disabled) setOpen(true);
@@ -281,6 +307,11 @@ export function ConnectWhatsappDialog({
                         Ver assinatura
                       </Link>
                     </>
+                  ) : null}
+                  {createError.showResendVerification ? (
+                    <div className="mt-3">
+                      <ResendVerificationButton />
+                    </div>
                   ) : null}
                 </Alert>
               ) : null}

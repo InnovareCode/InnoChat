@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, Smartphone } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Alert } from "@/components/ui/alert";
@@ -42,6 +42,12 @@ export function WhatsappClient({
   const [confirmRemove, setConfirmRemove] = useState<WhatsappInstanceView | null>(null);
   const [removeConfirmText, setRemoveConfirmText] = useState("");
   const [isPending, startTransition] = useTransition();
+  // Estado do diálogo de conexão mora aqui (não dentro do EmptyState) para o `ConnectWhatsappDialog`
+  // ficar SEMPRE montado — se ele morasse dentro do `instances.length === 0 ? <EmptyState .../> :
+  // ...`, o `onConnected` do próprio diálogo atualiza a lista e desmonta o EmptyState (e o diálogo
+  // aberto dentro dele) no exato instante em que a 1ª conexão termina, sumindo com o passo de
+  // sucesso. Ver bug reproduzido em `tests/e2e/whatsapp.spec.ts`.
+  const [connectOpen, setConnectOpen] = useState(false);
 
   function upsertInstance(next: WhatsappInstanceView) {
     setInstances((prev) => {
@@ -100,12 +106,14 @@ export function WhatsappClient({
 
   function renderConnectTrigger() {
     return (
-      <ConnectWhatsappDialog
-        tenantSlug={tenantSlug}
-        onConnected={upsertInstance}
+      <Button
+        onClick={() => setConnectOpen(true)}
         disabled={writeBlocked}
-        disabledHint={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
-      />
+        title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+      >
+        <Smartphone className="h-4 w-4" aria-hidden="true" />
+        Conectar número
+      </Button>
     );
   }
   const hasInstances = instances.length > 0;
@@ -152,6 +160,15 @@ export function WhatsappClient({
           ))}
         </div>
       )}
+
+      <ConnectWhatsappDialog
+        tenantSlug={tenantSlug}
+        onConnected={upsertInstance}
+        disabled={writeBlocked}
+        disabledHint={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+        open={connectOpen}
+        onOpenChange={setConnectOpen}
+      />
 
       <Dialog open={!!confirmDisconnect} onOpenChange={(open) => !open && setConfirmDisconnect(null)}>
         <DialogContent>
