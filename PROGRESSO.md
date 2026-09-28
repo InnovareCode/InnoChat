@@ -4,7 +4,9 @@ Chatbot de agendamento via WhatsApp (n8n + Evolution API) com painel web
 multiempresa para clínicas, salões e qualquer negócio de serviços com horário marcado.
 
 ## Estado atual
-- 2026-09-28 — Marco zero. Decisões iniciais fechadas com o dono; Nova desenhando arquitetura e plano faseado.
+- 2026-09-28 — Arquitetura aprovada e revisada (`docs/arquitetura.md`: fases na §13, decisões na §15).
+  Em andamento, em paralelo: Vega (esqueleto), Cronos (schema + EXCLUDE), Lyra (3 direções visuais para o dono escolher).
+- Segunda rodada de decisões: menu nos nós do n8n; cadastro público + cobrança (Mercado Pago Pix); lembrete pós-v1; sem histórico de conversa na v1.
 
 ## Decisões fechadas (2026-09-28)
 - Produto **separado** do InnoAtendente (reaproveita lições e padrão visual, não código/banco).
@@ -19,4 +21,12 @@ multiempresa para clínicas, salões e qualquer negócio de serviços com horár
 - Nova: arquitetura, stack, contrato painel↔n8n↔Evolution e plano faseado.
 
 ## Decisões em aberto
-- (nenhuma ainda)
+Pendentes com o dono (§15 da arquitetura):
+1. 🔑 Evolution (versão, URL, chave global), URL do n8n (mesma rede do Easypanel?), domínio do painel.
+2. Preços dos planos (adiado pelo dono; limites JÁ aprovados: Essencial 1 número/3 profissionais, Profissional 2/10, Clínica 3/ilimitado). Preço fica editável no admin de Planos, sem valor fixo no código.
+3. Credenciais do Mercado Pago (produção + sandbox).
+4. Dados do SMTP próprio (host, porta, usuário, senha, remetente).
+5. Termos de uso e política de privacidade.
+6. Direção visual (Lyra vai apresentar 3).
+
+Fechadas em 2026-09-28: Mercado Pago (Pix) confirmado; e-mail por SMTP próprio; trial de 1 dia; carência de 1 dia; sem nota fiscal.

@@ -43,8 +43,9 @@ Base: decisões do dono (`PROGRESSO.md`) e lições do InnoAtendente
 - **zod** nas bordas (gera o OpenAPI da API interna, §6.8).
 - **date-fns + date-fns-tz**.
 - **Vitest** (Postgres real no CI) + **Playwright**.
-- **E-mail transacional** (verificação de conta, redefinição de senha, cobrança): Resend ou SMTP
-  do domínio, com a credencial em `PlatformSettings`. Escolha do dono (§13).
+- **E-mail transacional** (verificação de conta, redefinição de senha, cobrança): **SMTP próprio
+  do dono** (decidido em 2026-09-28), via nodemailer, com host, porta, usuário, senha e remetente
+  em `PlatformSettings` (senha mascarada na UI, como a chave da Evolution).
 - **Sem Redis e sem worker.** O que é agendado (geração de faturas, e depois lembretes) é
   disparado por um **Schedule do n8n** chamando um endpoint idempotente do painel. Como segunda
   rede, o status da assinatura é calculado sob demanda (§7.4): se o cron falhar, ninguém ganha
@@ -539,10 +540,11 @@ número das opções e o rodapé "0. Menu principal" **não** são editáveis (s
 | Contras | Sem débito automático: o cliente paga ativamente a cada mês, então a inadimplência depende de lembrete | Gateway novo para o dono homologar; duplicaria o fornecedor em relação ao InnoAtendente | Pix no Brasil é limitado e não é o foco do Stripe |
 | Veredito | **Recomendado** | Plano B se a inadimplência do Pix pontual incomodar | Descartado para o Brasil |
 
-Ciclo **mensal** em BRL. A fatura é gerada **5 dias antes** de `currentPeriodEnd` (no trial, no
-dia 10). O Pix vale 3 dias e é **regerado** sob demanda se expirar. Aviso por e-mail na geração,
-1 dia antes do vencimento e no vencimento, mais banner no painel. Nota fiscal não está no escopo
-(§13).
+Ciclo **mensal** em BRL. A fatura é gerada **5 dias antes** de `currentPeriodEnd`. **No trial
+(1 dia), a primeira fatura é gerada já no cadastro**, para a empresa poder pagar desde o primeiro
+minuto. O Pix vale 3 dias e é **regerado** sob demanda se expirar. Aviso por e-mail na geração,
+1 dia antes do vencimento e no vencimento, mais banner no painel. **Nota fiscal: fora do escopo**
+(decisão do dono, 2026-09-28).
 
 Pagamento confirmado → `currentPeriodEnd += 1 mês` a partir do vencimento anterior (mantém o
 dia-âncora). Se a empresa estava `SUSPENDED`, o novo período conta a partir de `paidAt`.
@@ -566,7 +568,7 @@ dia-âncora). Se a empresa estava `SUSPENDED`, o novo período conta a partir de
 
 1. `/cadastro`: nome da empresa, segmento, seu nome, e-mail, senha, aceite de termos e privacidade
    (versão gravada). Cria `User(OWNER)` + `Tenant` + `Subscription(TRIALING, plano Essencial,
-   trialEndsAt = +14 dias)`.
+   trialEndsAt = +1 dia)` e a primeira fatura (Pix).
 2. E-mail de verificação. **Sem e-mail verificado, não é possível conectar WhatsApp** (o resto do
    painel funciona).
 3. Onboarding guiado em 4 passos: serviços → profissionais e expediente → conectar WhatsApp →
@@ -585,9 +587,9 @@ continua correto.
 
 | Status | Quando | Bot | Painel |
 |---|---|---|---|
-| `TRIALING` | 14 dias após o cadastro | Funciona | Completo + banner "faltam N dias" |
+| `TRIALING` | **1 dia** (24 h) após o cadastro | Funciona | Completo + banner "teste termina em N h" com o Pix |
 | `ACTIVE` | Pago | Funciona | Completo |
-| `PAST_DUE` | Venceu sem pagar: **3 dias de carência** (também no fim do trial) | Funciona | Completo + banner vermelho com o Pix |
+| `PAST_DUE` | Venceu sem pagar: **1 dia (24 h) de carência** (também no fim do trial) | Funciona | Completo + banner vermelho com o Pix |
 | `SUSPENDED` | Após a carência | **Para de responder** (`claim` → `ignore/TENANT_SUSPENDED`). As mensagens continuam chegando ao celular da empresa, então ninguém fica sem canal | **Somente leitura** da agenda e dos clientes (a empresa precisa ver quem está marcado) + tela de Assinatura para pagar. Não cria, edita nem conecta nada |
 | `CANCELED` | 60 dias em `SUSPENDED`, ou cancelamento pelo dono da empresa ao fim do período | Instâncias recebem **logout** (libera a Evolution) | Só a tela de Assinatura (reativar). Dados guardados 90 dias e depois anonimizados (LGPD) |
 
@@ -764,10 +766,7 @@ não bloqueia o bot, mas **bloqueia o lançamento público**.
    mesma rede do Easypanel (afeta a latência, risco 4); domínio do painel (sugestão:
    `innochat.innovarecode.com.br`).
 2. **Preços** dos três planos, e se os **limites** propostos (§7.2) servem.
-3. **Gateway:** confirmar Mercado Pago Pix pontual (recomendado) e fornecer as credenciais (conta
-   de produção + sandbox).
-4. **Provedor de e-mail** (Resend ou SMTP do domínio) e remetente.
-5. **Trial de 14 dias** no plano Essencial, com carência de 3 dias: confirmar os números.
-6. **Nota fiscal** do serviço: emissão manual pelo dono ou integração (fora da v1 como proposta).
-7. **Termos de uso e política de privacidade:** o texto é responsabilidade do dono (o sistema só
+3. **Credenciais do Mercado Pago** (produção + sandbox). Gateway confirmado: Mercado Pago Pix pontual.
+4. **Dados do SMTP próprio** (host, porta, usuário, senha, remetente). Cadastrados na tela de admin.
+5. **Termos de uso e política de privacidade:** o texto é responsabilidade do dono (o sistema só
    versiona o aceite).

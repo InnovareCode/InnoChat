@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>InnoChat — Direções visuais</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Sora:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  html { scroll-behavior: smooth; }
+  .swatch { width: 100%; height: 2.5rem; border-radius: 0.5rem; }
+  .picker-btn[data-active="true"] { background: #111827; color: #fff; }
+  .picker-btn[data-active="false"] { background: transparent; color: #6B7280; }
+  .direction { display: none; }
+  .direction[data-visible="true"] { display: block; }
+
+  /* ---------- Direção 1: Índigo Clínico ---------- */
+  .d1 { font-family: 'Inter', sans-serif; background:#F8FAFC; color:#0F172A; }
+  .d1 .font-display { font-family: 'Manrope', sans-serif; }
+  .d1 .card { background:#FFFFFF; border:1px solid #E2E8F0; border-radius:0.75rem; box-shadow:0 4px 16px -4px rgb(37 99 235 / 0.10); }
+  .d1 .sidebar { background:#0F172A; }
+  .d1 .slot-booked { background:#EFF6FF; border:1px solid #BFDBFE; }
+  .d1 .slot-empty { border:1.5px dashed #CBD5E1; }
+
+  /* ---------- Direção 2: Âmbar Estúdio ---------- */
+  .d2 { font-family: 'Inter', sans-serif; background:#FBF4EC; color:#241A14; }
+  .d2 .font-display { font-family: 'Fraunces', serif; font-optical-sizing: auto; }
+  .d2 .card { background:#FFFFFF; border:1px solid #EAD9C2; border-radius:1.25rem; box-shadow:0 10px 28px -8px rgb(120 72 20 / 0.16); }
+  .d2 .sidebar { background:#1C1410; }
+  .d2 .slot-booked { background:#F6E9D8; border:1px solid #E2C7A0; }
+  .d2 .slot-empty { border:1.5px dashed #E2C7A0; }
+
+  /* ---------- Direção 3: Verde Slate ---------- */
+  .d3 { font-family: 'Inter', sans-serif; background:#F7F9F7; color:#16241C; }
+  .d3 .font-display { font-family: 'Sora', sans-serif; }
+  .d3 .card { background:#FFFFFF; border:1px solid #DCE5DE; border-radius:0.5rem; box-shadow:0 1px 2px 0 rgb(22 36 28 / 0.05); }
+  .d3 .sidebar { background:#FFFFFF; border-right:1px solid #DCE5DE; }
+  .d3 .slot-booked { background:#E7F0EA; border:1px solid #BFD9CB; }
+  .d3 .slot-empty { border:1.5px dashed #DCE5DE; }
+</style>
+</head>
+<body class="bg-gray-100">
+
+<!-- Seletor de direção -->
+<div class="sticky top-0 z-50 bg-white border-b border-gray-200 shadow-sm">
+  <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
+    <span class="text-xs font-semibold uppercase tracking-wider text-gray-400">InnoChat · Direções visuais</span>
+    <div class="flex flex-wrap gap-2 ml-auto" role="tablist" aria-label="Escolher direção visual">
+      <button class="picker-btn" data-active="true" data-target="dir-1" onclick="showDir('dir-1', this)" role="tab" aria-selected="true">
+        <span class="px-3 py-1.5 rounded-full text-sm font-medium inline-block">1 · Índigo Clínico</span>
+      </button>
+      <button class="picker-btn" data-active="false" data-target="dir-2" onclick="showDir('dir-2', this)" role="tab" aria-selected="false">
+        <span class="px-3 py-1.5 rounded-full text-sm font-medium inline-block">2 · Âmbar Estúdio</span>
+      </button>
+      <button class="picker-btn" data-active="false" data-target="dir-3" onclick="showDir('dir-3', this)" role="tab" aria-selected="false">
+        <span class="px-3 py-1.5 rounded-full text-sm font-medium inline-block">3 · Verde Slate</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showDir(id, btn) {
+    document.querySelectorAll('.direction').forEach(el => el.setAttribute('data-visible', el.id === id ? 'true' : 'false'));
+    document.querySelectorAll('.picker-btn').forEach(b => {
+      const active = b === btn;
+      b.setAttribute('data-active', active);
+      b.setAttribute('aria-selected', active);
+    });
+  }
+</script>
+
+<!-- ============================================================ -->
+<!-- DIREÇÃO 1 — ÍNDIGO CLÍNICO                                    -->
+<!-- ============================================================ -->
+<section id="dir-1" class="direction d1" data-visible="true">
+
+  <!-- Ficha de tokens -->
+  <div class="max-w-7xl mx-auto px-4 pt-8 pb-6">
+    <h2 class="font-display font-extrabold text-2xl mb-1">1 · Índigo Clínico</h2>
+    <p class="text-sm text-slate-500 mb-5 max-w-2xl">Minimalista e institucional. Azul confiável, cantos médios, sombra azulada bem sutil, densidade confortável — o tom de "sistema de gestão sério" sem parecer frio.</p>
+    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-5">
+      <div><div class="swatch" style="background:#2563EB"></div><p class="text-[11px] mt-1 text-slate-500">Primária<br><span class="font-mono">#2563EB</span></p></div>
+      <div><div class="swatch" style="background:#1D4ED8"></div><p class="text-[11px] mt-1 text-slate-500">Primária 700<br><span class="font-mono">#1D4ED8</span></p></div>
+      <div><div class="swatch" style="background:#0EA5E9"></div><p class="text-[11px] mt-1 text-slate-500">Acento<br><span class="font-mono">#0EA5E9</span></p></div>
+      <div><div class="swatch" style="background:#0F172A"></div><p class="text-[11px] mt-1 text-slate-500">Texto<br><span class="font-mono">#0F172A</span></p></div>
+      <div><div class="swatch" style="background:#475569"></div><p class="text-[11px] mt-1 text-slate-500">Texto sec.<br><span class="font-mono">#475569</span></p></div>
+      <div><div class="swatch border" style="background:#F8FAFC"></div><p class="text-[11px] mt-1 text-slate-500">Fundo<br><span class="font-mono">#F8FAFC</span></p></div>
+      <div><div class="swatch border" style="background:#E2E8F0"></div><p class="text-[11px] mt-1 text-slate-500">Borda<br><span class="font-mono">#E2E8F0</span></p></div>
+      <div><div class="swatch" style="background:#15803D"></div><p class="text-[11px] mt-1 text-slate-500">Sucesso<br><span class="font-mono">#15803D</span></p></div>
+    </div>
+    <div class="flex flex-wrap gap-6 text-sm text-slate-600">
+      <p><strong class="font-display text-slate-900">Display:</strong> Manrope 700/800</p>
+      <p><strong class="font-display text-slate-900">Corpo:</strong> Inter 400/500/600</p>
+      <p><strong class="font-display text-slate-900">Raio:</strong> 0.75rem (cards), pill (badges)</p>
+      <p><strong class="font-display text-slate-900">Sombra:</strong> azulada 10% opacidade</p>
+      <p><strong class="font-display text-slate-900">Densidade:</strong> confortável</p>
+    </div>
+  </div>
+
+  <!-- App shell -->
+  <div class="max-w-7xl mx-auto px-4 pb-16">
+    <div class="card overflow-hidden">
+      <div class="flex">
+        <!-- Sidebar desktop -->
+        <aside class="sidebar hidden lg:flex flex-col w-60 shrink-0 py-6 px-4 text-slate-300">
+          <div class="flex items-center gap-2 px-2 mb-8">
+            <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-display font-bold text-white text-sm">IC</div>
+            <span class="font-display font-bold text-white">InnoChat</span>
+          </div>
+          <nav class="flex flex-col gap-1 text-sm">
+            <a class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-blue-600/20 text-white font-medium" href="#">📅 Agenda</a>
+            <a class="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5" href="#">🗒️ Agendamentos</a>
+            <a class="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5" href="#">✂️ Serviços</a>
+            <a class="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5" href="#">🧑‍💼 Profissionais</a>
+            <a class="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5" href="#">👥 Clientes</a>
+            <a class="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5" href="#">💬 WhatsApp</a>
+            <a class="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5" href="#">⚙️ Configurações</a>
+          </nav>
+          <div class="mt-auto pt-6 border-t border-white/10 text-xs text-slate-400">Studio Bela<br>Plano Profissional</div>
+        </aside>
+
+        <!-- Conteúdo -->
+        <div class="flex-1 min-w-0">
+          <!-- Topbar -->
+          <div class="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-slate-200">
+            <div class="flex items-center gap-3">
+              <button class="lg:hidden w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center" aria-label="Abrir menu">☰</button>
+              <div>
+                <h1 class="font-display font-bold text-lg leading-tight">Agenda do dia</h1>
+                <p class="text-xs text-slate-500">Terça-feira, 30 de setembro</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="hidden sm:inline-flex px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-medium hover:bg-slate-50" aria-label="Dia anterior">‹</button>
+              <button class="hidden sm:inline-flex px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-medium hover:bg-slate-50">Hoje</button>
+              <button class="hidden sm:inline-flex px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-medium hover:bg-slate-50" aria-label="Próximo dia">›</button>
+              <button class="px-3.5 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-semibold shadow-sm hover:bg-blue-700">+ Agendar</button>
+            </div>
+          </div>
+
+          <!-- Grid agenda + próximos -->
+          <div class="grid lg:grid-cols-[1fr_280px] gap-0">
+            <div class="p-4 sm:p-6 overflow-x-auto">
+              <div class="grid grid-cols-3 gap-3 min-w-[600px]">
+                <!-- Coluna profissional -->
+                <div>
+                  <div class="flex items-center gap-2 mb-3">
+                    <div class="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">AN</div>
+                    <span class="text-sm font-semibold">Ana</span>
+                  </div>
+                  <div class="flex flex-col gap-1.5 text-xs">
+                    <div class="rounded-lg px-2.5 py-2 slot-booked"><p class="font-semibold text-blue-900">09:00 · Corte feminino</p><p class="text-blue-700/70">Maria Souza</p></div>
+                    <div class="rounded-lg px-2.5 py-2 slot-empty text-slate-400">10:00 · Disponível</div>
+                    <div class="rounded-lg px-2.5 py-2 slot-booked"><p class="font-semibold text-blue-900">11:00 · Coloração</p><p class="text-blue-700/70">Júlia Lima</p></div>
+                    <div class="rounded-lg px-2.5 py-2 slot-empty text-slate-400">12:00 · Disponível</div>
+                    <div class="rounded-lg px-2.5 py-2 slot-booked"><p class="font-semibold text-blue-900">14:00 · Escova</p><p class="text-blue-700/70">Renata Alves</p></div>
+                    <div class="rounded-lg px-2.5 py-2 slot-empty text-slate-400">15:00 · Disponível</div>
+                  </div>
+                </div>
+                <!-- Coluna profissional -->
+                <div>
+                  <div class="flex items-center gap-2 mb-3">
+                    <div class="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">CA</div>
+                    <span class="text-sm font-semibold">Carla</span>
+                  </div>
+                  <div class="flex flex-col gap-1.5 text-xs">
+                    <div class="rounded-lg px-2.5 py-2 slot-empty text-slate-400">09:00 · Disponível</div>
+                    <div class="rounded-lg px-2.5 py-2 slot-booked"><p class="font-semibold text-blue-900">10:00 · Manicure</p><p class="text-blue-700/70">Fernanda Dias</p></div>
+                    <div class="rounded-lg px-2.5 py-2 slot-booked"><p class="font-semibold text-blue-900">11:00 · Pedicure</p><p class="text-blue-700/70">Fernanda Dias</p></div>
+                    <div class="rounded-lg px-2.5 py-2 slot-empty text-slate-400">12:00 · Disponível</div>
+                    <div class="rounded-lg px-2.5 py-2 slot-empty text-slate-400">14:00 · Disponível</div>
+                    <div class="rounded-lg px-2.5 py-2 slot-booked"><p class="font-semibold text-blue-900">15:00 · Design de sobrancelha</p><p class="text-blue-700/70">Paula Nogueira</p></div>
+                  </div>
+                </div>
+                <!-- Coluna profissional -->
+                <div>
+                  <div class="flex items-center gap-2 mb-3">
+                    <div class="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">BI</div>
+                    <span class="text-sm font-semibold">Bianca</span>
+                  </div>
+                  <div class="flex flex-col gap-1.5 text-xs">
+                    <div class="rounded-lg px-2.5 py-2 slot-booked"><p class="font-semibold text-blue-900">09:00 · Corte masculino</p><p class="text-blue-700/70">Roberto Nunes</p></div>
+                    <div class="rounded-lg px-2.5 py-2 slot-empty text-slate-400">10:00 · Disponível</div>
+                    <div class="rounded-lg px-2.5 py-2 slot-empty text-slate-400">11:00 · Disponível</div>
+                    <div class="rounded-lg px-2.5 py-2 slot-booked"><p class="font-semibold text-blue-900">12:00 · Barba</p><p class="text-blue-700/70">Diego Prado</p></div>
+                    <div class="rounded-lg px-2.5 py-2 slot-empty text-slate-400">14:00 · Disponível</div>
+                    <div class="rounded-lg px-2.5 py-2 slot-empty text-slate-400">15:00 · Disponível</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Próximos agendamentos -->
+            <aside class="border-t lg:border-t-0 lg:border-l border-slate-200 p-4 sm:p-6">
+              <h3 class="font-display font-bold text-sm mb-3">Próximos agendamentos</h3>
+              <div class="flex flex-col gap-2.5">
+                <div class="flex gap-2.5 items-start">
+                  <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-[11px] font-bold flex items-center justify-center shrink-0">MS</div>
+                  <div class="text-xs"><p class="font-semibold">Maria Souza</p><p class="text-slate-500">Corte feminino · Ana · 09:00</p></div>
+                </div>
+                <div class="flex gap-2.5 items-start">
+                  <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-[11px] font-bold flex items-center justify-center shrink-0">FD</div>
+                  <div class="text-xs"><p class="font-semibold">Fernanda Dias</p><p class="text-slate-500">Manicure · Carla · 10:00</p></div>
+                </div>
+                <div class="flex gap-2.5 items-start">
+                  <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-[11px] font-bold flex items-center justify-center shrink-0">JL</div>
+                  <div class="text-xs"><p class="font-semibold">Júlia Lima</p><p class="text-slate-500">Coloração · Ana · 11:00</p></div>
+                </div>
+                <div class="flex gap-2.5 items-start">
+                  <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-[11px] font-bold flex items-center justify-center shrink-0">DP</div>
+                  <div class="text-xs"><p class="font-semibold">Diego Prado</p><p class="text-slate-500">Barba · Bianca · 12:00</p></div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mini recorte WhatsApp -->
+    <h3 class="font-display font-bold text-base mt-8 mb-3">WhatsApp — números conectados</h3>
+    <div class="grid sm:grid-cols-2 gap-4">
+      <div class="card p-5">
+        <div class="flex items-center justify-between mb-3">
+          <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700"><span class="w-2 h-2 rounded-full bg-emerald-500"></span>Conectado</span>
+          <button class="text-xs font-medium text-slate-500 hover:text-red-600">Desconectar</button>
+        </div>
+        <p class="font-display font-bold">+55 11 99999-0000</p>
+        <p class="text-xs text-slate-500 mt-1">Conectado há 3 dias · Recepção</p>
+      </div>
+      <div class="card p-5">
+        <div class="flex items-center gap-4">
+          <div class="w-20 h-20 rounded-lg border-2 border-dashed border-slate-300 flex items-center justify-center text-[10px] text-slate-400 shrink-0">QR code</div>
+          <div>
+            <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 mb-1"><span class="w-2 h-2 rounded-full bg-slate-300"></span>Desconectado</span>
+            <p class="text-sm font-medium">Segunda unidade</p>
+            <button class="mt-2 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700">Conectar número</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- DIREÇÃO 2 — ÂMBAR ESTÚDIO                                     -->
+<!-- ============================================================ -->
+<section id="dir-2" class="direction d2" data-visible="false">
+
+  <div class="max-w-7xl mx-auto px-4 pt-8 pb-6">
+    <h2 class="font-display font-bold text-2xl mb-1">2 · Âmbar Estúdio</h2>
+    <p class="text-sm mb-5 max-w-2xl" style="color:#7A5230">Acolhedor e boutique — para salões e clínicas de estética. Terracota quente, serifada no título, cantos generosos, sombra tingida mais presente, densidade relaxada.</p>
+    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-5">
+      <div><div class="swatch" style="background:#8A5423"></div><p class="text-[11px] mt-1" style="color:#7A5230">Primária<br><span class="font-mono">#8A5423</span></p></div>
+      <div><div class="swatch" style="background:#C99A5B"></div><p class="text-[11px] mt-1" style="color:#7A5230">Acento<br><span class="font-mono">#C99A5B</span></p></div>
+      <div><div class="swatch" style="background:#1C1410"></div><p class="text-[11px] mt-1" style="color:#7A5230">Sidebar<br><span class="font-mono">#1C1410</span></p></div>
+      <div><div class="swatch" style="background:#241A14"></div><p class="text-[11px] mt-1" style="color:#7A5230">Texto<br><span class="font-mono">#241A14</span></p></div>
+      <div><div class="swatch" style="background:#7A5230"></div><p class="text-[11px] mt-1" style="color:#7A5230">Texto sec.<br><span class="font-mono">#7A5230</span></p></div>
+      <div><div class="swatch border" style="background:#FBF4EC"></div><p class="text-[11px] mt-1" style="color:#7A5230">Fundo<br><span class="font-mono">#FBF4EC</span></p></div>
+      <div><div class="swatch border" style="background:#EAD9C2"></div><p class="text-[11px] mt-1" style="color:#7A5230">Borda<br><span class="font-mono">#EAD9C2</span></p></div>
+      <div><div class="swatch" style="background:#2A6B45"></div><p class="text-[11px] mt-1" style="color:#7A5230">Sucesso<br><span class="font-mono">#2A6B45</span></p></div>
+    </div>
+    <div class="flex flex-wrap gap-6 text-sm" style="color:#7A5230">
+      <p><strong class="font-display" style="color:#241A14">Display:</strong> Fraunces 600/700 (serifada)</p>
+      <p><strong class="font-display" style="color:#241A14">Corpo:</strong> Inter 400/500/600</p>
+      <p><strong class="font-display" style="color:#241A14">Raio:</strong> 1.25rem (cards)</p>
+      <p><strong class="font-display" style="color:#241A14">Sombra:</strong> âmbar 16% opacidade, mais alta</p>
+      <p><strong class="font-display" style="color:#241A14">Densidade:</strong> relaxada</p>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-4 pb-16">
+    <div class="card overflow-hidden">
+      <div class="flex">
+        <aside class="sidebar hidden lg:flex flex-col w-64 shrink-0 py-7 px-5" style="color:#D8C4AC">
+          <div class="flex items-center gap-2.5 px-1 mb-9">
+            <div class="w-9 h-9 rounded-xl flex items-center justify-center font-display font-bold text-white text-sm" style="background:#8A5423">IC</div>
+            <span class="font-display font-bold text-white text-lg">InnoChat</span>
+          </div>
+          <nav class="flex flex-col gap-1.5 text-sm">
+            <a class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl font-medium text-white" style="background:rgba(201,154,91,0.18)" href="#">📅 Agenda</a>
+            <a class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-white/5" href="#">🗒️ Agendamentos</a>
+            <a class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-white/5" href="#">✂️ Serviços</a>
+            <a class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-white/5" href="#">🧑‍💼 Profissionais</a>
+            <a class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-white/5" href="#">👥 Clientes</a>
+            <a class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-white/5" href="#">💬 WhatsApp</a>
+            <a class="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl hover:bg-white/5" href="#">⚙️ Configurações</a>
+          </nav>
+          <div class="mt-auto pt-7 border-t text-xs" style="border-color:rgba(255,255,255,0.1); color:#B99B7C">Studio Bela<br>Plano Profissional</div>
+        </aside>
+
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between px-5 sm:px-7 py-5 border-b" style="border-color:#EAD9C2">
+            <div class="flex items-center gap-3">
+              <button class="lg:hidden w-9 h-9 rounded-xl border flex items-center justify-center" style="border-color:#EAD9C2" aria-label="Abrir menu">☰</button>
+              <div>
+                <h1 class="font-display font-semibold text-xl leading-tight">Agenda do dia</h1>
+                <p class="text-xs mt-0.5" style="color:#7A5230">Terça-feira, 30 de setembro</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="hidden sm:inline-flex px-3.5 py-2 rounded-xl border text-sm font-medium" style="border-color:#EAD9C2" aria-label="Dia anterior">‹</button>
+              <button class="hidden sm:inline-flex px-3.5 py-2 rounded-xl border text-sm font-medium" style="border-color:#EAD9C2">Hoje</button>
+              <button class="hidden sm:inline-flex px-3.5 py-2 rounded-xl border text-sm font-medium" style="border-color:#EAD9C2" aria-label="Próximo dia">›</button>
+              <button class="px-4 py-2 rounded-xl text-white text-sm font-semibold" style="background:#8A5423">+ Agendar</button>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-[1fr_290px] gap-0">
+            <div class="p-5 sm:p-7 overflow-x-auto">
+              <div class="grid grid-cols-3 gap-4 min-w-[640px]">
+                <div>
+                  <div class="flex items-center gap-2 mb-3.5">
+                    <div class="w-8 h-8 rounded-full text-white text-xs font-bold flex items-center justify-center" style="background:#8A5423">AN</div>
+                    <span class="text-sm font-semibold">Ana</span>
+                  </div>
+                  <div class="flex flex-col gap-2 text-xs">
+                    <div class="rounded-xl px-3 py-2.5 slot-booked"><p class="font-semibold" style="color:#5C3A15">09:00 · Corte feminino</p><p style="color:#8A6640">Maria Souza</p></div>
+                    <div class="rounded-xl px-3 py-2.5 slot-empty" style="color:#B4936C">10:00 · Disponível</div>
+                    <div class="rounded-xl px-3 py-2.5 slot-booked"><p class="font-semibold" style="color:#5C3A15">11:00 · Coloração</p><p style="color:#8A6640">Júlia Lima</p></div>
+                    <div class="rounded-xl px-3 py-2.5 slot-empty" style="color:#B4936C">12:00 · Disponível</div>
+                    <div class="rounded-xl px-3 py-2.5 slot-booked"><p class="font-semibold" style="color:#5C3A15">14:00 · Escova</p><p style="color:#8A6640">Renata Alves</p></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2 mb-3.5">
+                    <div class="w-8 h-8 rounded-full text-white text-xs font-bold flex items-center justify-center" style="background:#8A5423">CA</div>
+                    <span class="text-sm font-semibold">Carla</span>
+                  </div>
+                  <div class="flex flex-col gap-2 text-xs">
+                    <div class="rounded-xl px-3 py-2.5 slot-empty" style="color:#B4936C">09:00 · Disponível</div>
+                    <div class="rounded-xl px-3 py-2.5 slot-booked"><p class="font-semibold" style="color:#5C3A15">10:00 · Manicure</p><p style="color:#8A6640">Fernanda Dias</p></div>
+                    <div class="rounded-xl px-3 py-2.5 slot-booked"><p class="font-semibold" style="color:#5C3A15">11:00 · Pedicure</p><p style="color:#8A6640">Fernanda Dias</p></div>
+                    <div class="rounded-xl px-3 py-2.5 slot-empty" style="color:#B4936C">12:00 · Disponível</div>
+                    <div class="rounded-xl px-3 py-2.5 slot-booked"><p class="font-semibold" style="color:#5C3A15">15:00 · Sobrancelha</p><p style="color:#8A6640">Paula Nogueira</p></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2 mb-3.5">
+                    <div class="w-8 h-8 rounded-full text-white text-xs font-bold flex items-center justify-center" style="background:#8A5423">BI</div>
+                    <span class="text-sm font-semibold">Bianca</span>
+                  </div>
+                  <div class="flex flex-col gap-2 text-xs">
+                    <div class="rounded-xl px-3 py-2.5 slot-booked"><p class="font-semibold" style="color:#5C3A15">09:00 · Corte masculino</p><p style="color:#8A6640">Roberto Nunes</p></div>
+                    <div class="rounded-xl px-3 py-2.5 slot-empty" style="color:#B4936C">10:00 · Disponível</div>
+                    <div class="rounded-xl px-3 py-2.5 slot-empty" style="color:#B4936C">11:00 · Disponível</div>
+                    <div class="rounded-xl px-3 py-2.5 slot-booked"><p class="font-semibold" style="color:#5C3A15">12:00 · Barba</p><p style="color:#8A6640">Diego Prado</p></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="border-t lg:border-t-0 lg:border-l p-5 sm:p-7" style="border-color:#EAD9C2">
+              <h3 class="font-display font-semibold text-sm mb-3.5">Próximos agendamentos</h3>
+              <div class="flex flex-col gap-3">
+                <div class="flex gap-3 items-start">
+                  <div class="w-9 h-9 rounded-full text-white text-[11px] font-bold flex items-center justify-center shrink-0" style="background:#8A5423">MS</div>
+                  <div class="text-xs"><p class="font-semibold">Maria Souza</p><p style="color:#7A5230">Corte feminino · Ana · 09:00</p></div>
+                </div>
+                <div class="flex gap-3 items-start">
+                  <div class="w-9 h-9 rounded-full text-white text-[11px] font-bold flex items-center justify-center shrink-0" style="background:#8A5423">FD</div>
+                  <div class="text-xs"><p class="font-semibold">Fernanda Dias</p><p style="color:#7A5230">Manicure · Carla · 10:00</p></div>
+                </div>
+                <div class="flex gap-3 items-start">
+                  <div class="w-9 h-9 rounded-full text-white text-[11px] font-bold flex items-center justify-center shrink-0" style="background:#8A5423">JL</div>
+                  <div class="text-xs"><p class="font-semibold">Júlia Lima</p><p style="color:#7A5230">Coloração · Ana · 11:00</p></div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="font-display font-semibold text-lg mt-8 mb-3.5">WhatsApp — números conectados</h3>
+    <div class="grid sm:grid-cols-2 gap-4">
+      <div class="card p-6">
+        <div class="flex items-center justify-between mb-3.5">
+          <span class="inline-flex items-center gap-1.5 text-xs font-semibold" style="color:#2A6B45"><span class="w-2 h-2 rounded-full" style="background:#2A6B45"></span>Conectado</span>
+          <button class="text-xs font-medium" style="color:#7A5230">Desconectar</button>
+        </div>
+        <p class="font-display font-semibold text-lg">+55 11 99999-0000</p>
+        <p class="text-xs mt-1" style="color:#7A5230">Conectado há 3 dias · Recepção</p>
+      </div>
+      <div class="card p-6">
+        <div class="flex items-center gap-4">
+          <div class="w-20 h-20 rounded-xl border-2 border-dashed flex items-center justify-center text-[10px] shrink-0" style="border-color:#E2C7A0; color:#B4936C">QR code</div>
+          <div>
+            <span class="inline-flex items-center gap-1.5 text-xs font-semibold mb-1" style="color:#B4936C"><span class="w-2 h-2 rounded-full" style="background:#D8C4AC"></span>Desconectado</span>
+            <p class="text-sm font-medium">Segunda unidade</p>
+            <button class="mt-2 px-3.5 py-2 rounded-xl text-white text-xs font-semibold" style="background:#8A5423">Conectar número</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- DIREÇÃO 3 — VERDE SLATE                                        -->
+<!-- ============================================================ -->
+<section id="dir-3" class="direction d3" data-visible="false">
+
+  <div class="max-w-7xl mx-auto px-4 pt-8 pb-6">
+    <h2 class="font-display font-bold text-2xl mb-1">3 · Verde Slate</h2>
+    <p class="text-sm mb-5 max-w-2xl" style="color:#3F5B4C">Ultra minimalista e denso — para quem opera o painel o dia inteiro. Verde-sálvia discreto, quase sem sombra, cantos pequenos, mais informação por tela.</p>
+    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-5">
+      <div><div class="swatch" style="background:#2F6B4F"></div><p class="text-[11px] mt-1" style="color:#3F5B4C">Primária<br><span class="font-mono">#2F6B4F</span></p></div>
+      <div><div class="swatch" style="background:#1F4A36"></div><p class="text-[11px] mt-1" style="color:#3F5B4C">Primária 700<br><span class="font-mono">#1F4A36</span></p></div>
+      <div><div class="swatch" style="background:#16241C"></div><p class="text-[11px] mt-1" style="color:#3F5B4C">Texto<br><span class="font-mono">#16241C</span></p></div>
+      <div><div class="swatch" style="background:#3F5B4C"></div><p class="text-[11px] mt-1" style="color:#3F5B4C">Texto sec.<br><span class="font-mono">#3F5B4C</span></p></div>
+      <div><div class="swatch border" style="background:#F7F9F7"></div><p class="text-[11px] mt-1" style="color:#3F5B4C">Fundo<br><span class="font-mono">#F7F9F7</span></p></div>
+      <div><div class="swatch border" style="background:#DCE5DE"></div><p class="text-[11px] mt-1" style="color:#3F5B4C">Borda<br><span class="font-mono">#DCE5DE</span></p></div>
+      <div><div class="swatch" style="background:#A16207"></div><p class="text-[11px] mt-1" style="color:#3F5B4C">Alerta<br><span class="font-mono">#A16207</span></p></div>
+      <div><div class="swatch" style="background:#B3261E"></div><p class="text-[11px] mt-1" style="color:#3F5B4C">Erro<br><span class="font-mono">#B3261E</span></p></div>
+    </div>
+    <div class="flex flex-wrap gap-6 text-sm" style="color:#3F5B4C">
+      <p><strong class="font-display" style="color:#16241C">Display:</strong> Sora 600/700</p>
+      <p><strong class="font-display" style="color:#16241C">Corpo:</strong> Inter 400/500/600</p>
+      <p><strong class="font-display" style="color:#16241C">Raio:</strong> 0.5rem</p>
+      <p><strong class="font-display" style="color:#16241C">Sombra:</strong> quase nenhuma, contorno faz o trabalho</p>
+      <p><strong class="font-display" style="color:#16241C">Densidade:</strong> compacta</p>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-4 pb-16">
+    <div class="card overflow-hidden">
+      <div class="flex">
+        <aside class="sidebar hidden lg:flex flex-col w-52 shrink-0 py-5 px-3.5">
+          <div class="flex items-center gap-2 px-1.5 mb-7">
+            <div class="w-7 h-7 rounded-md flex items-center justify-center font-display font-bold text-white text-xs" style="background:#2F6B4F">IC</div>
+            <span class="font-display font-bold text-sm">InnoChat</span>
+          </div>
+          <nav class="flex flex-col gap-0.5 text-[13px]">
+            <a class="flex items-center gap-2 px-2.5 py-2 rounded-md font-semibold" style="background:#E7F0EA; color:#1F4A36" href="#">📅 Agenda</a>
+            <a class="flex items-center gap-2 px-2.5 py-2 rounded-md hover:bg-slate-50" style="color:#3F5B4C" href="#">🗒️ Agendamentos</a>
+            <a class="flex items-center gap-2 px-2.5 py-2 rounded-md hover:bg-slate-50" style="color:#3F5B4C" href="#">✂️ Serviços</a>
+            <a class="flex items-center gap-2 px-2.5 py-2 rounded-md hover:bg-slate-50" style="color:#3F5B4C" href="#">🧑‍💼 Profissionais</a>
+            <a class="flex items-center gap-2 px-2.5 py-2 rounded-md hover:bg-slate-50" style="color:#3F5B4C" href="#">👥 Clientes</a>
+            <a class="flex items-center gap-2 px-2.5 py-2 rounded-md hover:bg-slate-50" style="color:#3F5B4C" href="#">💬 WhatsApp</a>
+            <a class="flex items-center gap-2 px-2.5 py-2 rounded-md hover:bg-slate-50" style="color:#3F5B4C" href="#">⚙️ Configurações</a>
+          </nav>
+          <div class="mt-auto pt-5 border-t text-[11px]" style="border-color:#DCE5DE; color:#3F5B4C">Studio Bela<br>Plano Profissional</div>
+        </aside>
+
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b" style="border-color:#DCE5DE">
+            <div class="flex items-center gap-3">
+              <button class="lg:hidden w-8 h-8 rounded-md border flex items-center justify-center" style="border-color:#DCE5DE" aria-label="Abrir menu">☰</button>
+              <div>
+                <h1 class="font-display font-bold text-base leading-tight">Agenda do dia</h1>
+                <p class="text-[11px]" style="color:#3F5B4C">Terça-feira, 30 de setembro</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button class="hidden sm:inline-flex px-2.5 py-1.5 rounded-md border text-xs font-medium" style="border-color:#DCE5DE" aria-label="Dia anterior">‹</button>
+              <button class="hidden sm:inline-flex px-2.5 py-1.5 rounded-md border text-xs font-medium" style="border-color:#DCE5DE">Hoje</button>
+              <button class="hidden sm:inline-flex px-2.5 py-1.5 rounded-md border text-xs font-medium" style="border-color:#DCE5DE" aria-label="Próximo dia">›</button>
+              <button class="px-3 py-1.5 rounded-md text-white text-xs font-semibold" style="background:#2F6B4F">+ Agendar</button>
+            </div>
+          </div>
+
+          <div class="grid lg:grid-cols-[1fr_250px] gap-0">
+            <div class="p-4 sm:p-5 overflow-x-auto">
+              <div class="grid grid-cols-3 gap-2.5 min-w-[560px]">
+                <div>
+                  <div class="flex items-center gap-1.5 mb-2.5">
+                    <div class="w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center" style="background:#2F6B4F">AN</div>
+                    <span class="text-xs font-semibold">Ana</span>
+                  </div>
+                  <div class="flex flex-col gap-1 text-[11px]">
+                    <div class="rounded-md px-2 py-1.5 slot-booked"><p class="font-semibold" style="color:#1F4A36">09:00 Corte fem.</p><p style="color:#3F5B4C">Maria Souza</p></div>
+                    <div class="rounded-md px-2 py-1.5 slot-empty" style="color:#8AA398">10:00 Disponível</div>
+                    <div class="rounded-md px-2 py-1.5 slot-booked"><p class="font-semibold" style="color:#1F4A36">11:00 Coloração</p><p style="color:#3F5B4C">Júlia Lima</p></div>
+                    <div class="rounded-md px-2 py-1.5 slot-empty" style="color:#8AA398">12:00 Disponível</div>
+                    <div class="rounded-md px-2 py-1.5 slot-booked"><p class="font-semibold" style="color:#1F4A36">14:00 Escova</p><p style="color:#3F5B4C">Renata Alves</p></div>
+                    <div class="rounded-md px-2 py-1.5 slot-empty" style="color:#8AA398">15:00 Disponível</div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex items-center gap-1.5 mb-2.5">
+                    <div class="w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center" style="background:#2F6B4F">CA</div>
+                    <span class="text-xs font-semibold">Carla</span>
+                  </div>
+                  <div class="flex flex-col gap-1 text-[11px]">
+                    <div class="rounded-md px-2 py-1.5 slot-empty" style="color:#8AA398">09:00 Disponível</div>
+                    <div class="rounded-md px-2 py-1.5 slot-booked"><p class="font-semibold" style="color:#1F4A36">10:00 Manicure</p><p style="color:#3F5B4C">Fernanda Dias</p></div>
+                    <div class="rounded-md px-2 py-1.5 slot-booked"><p class="font-semibold" style="color:#1F4A36">11:00 Pedicure</p><p style="color:#3F5B4C">Fernanda Dias</p></div>
+                    <div class="rounded-md px-2 py-1.5 slot-empty" style="color:#8AA398">12:00 Disponível</div>
+                    <div class="rounded-md px-2 py-1.5 slot-empty" style="color:#8AA398">14:00 Disponível</div>
+                    <div class="rounded-md px-2 py-1.5 slot-booked"><p class="font-semibold" style="color:#1F4A36">15:00 Sobrancelha</p><p style="color:#3F5B4C">Paula Nogueira</p></div>
+                  </div>
+                </div>
+                <div>
+                  <div class="flex items-center gap-1.5 mb-2.5">
+                    <div class="w-6 h-6 rounded-full text-white text-[10px] font-bold flex items-center justify-center" style="background:#2F6B4F">BI</div>
+                    <span class="text-xs font-semibold">Bianca</span>
+                  </div>
+                  <div class="flex flex-col gap-1 text-[11px]">
+                    <div class="rounded-md px-2 py-1.5 slot-booked"><p class="font-semibold" style="color:#1F4A36">09:00 Corte masc.</p><p style="color:#3F5B4C">Roberto Nunes</p></div>
+                    <div class="rounded-md px-2 py-1.5 slot-empty" style="color:#8AA398">10:00 Disponível</div>
+                    <div class="rounded-md px-2 py-1.5 slot-empty" style="color:#8AA398">11:00 Disponível</div>
+                    <div class="rounded-md px-2 py-1.5 slot-booked"><p class="font-semibold" style="color:#1F4A36">12:00 Barba</p><p style="color:#3F5B4C">Diego Prado</p></div>
+                    <div class="rounded-md px-2 py-1.5 slot-empty" style="color:#8AA398">14:00 Disponível</div>
+                    <div class="rounded-md px-2 py-1.5 slot-empty" style="color:#8AA398">15:00 Disponível</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside class="border-t lg:border-t-0 lg:border-l p-4 sm:p-5" style="border-color:#DCE5DE">
+              <h3 class="font-display font-bold text-xs mb-2.5">Próximos agendamentos</h3>
+              <div class="flex flex-col gap-2">
+                <div class="flex gap-2 items-start">
+                  <div class="w-7 h-7 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0" style="background:#2F6B4F">MS</div>
+                  <div class="text-[11px]"><p class="font-semibold">Maria Souza</p><p style="color:#3F5B4C">Corte fem. · Ana · 09:00</p></div>
+                </div>
+                <div class="flex gap-2 items-start">
+                  <div class="w-7 h-7 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0" style="background:#2F6B4F">FD</div>
+                  <div class="text-[11px]"><p class="font-semibold">Fernanda Dias</p><p style="color:#3F5B4C">Manicure · Carla · 10:00</p></div>
+                </div>
+                <div class="flex gap-2 items-start">
+                  <div class="w-7 h-7 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0" style="background:#2F6B4F">JL</div>
+                  <div class="text-[11px]"><p class="font-semibold">Júlia Lima</p><p style="color:#3F5B4C">Coloração · Ana · 11:00</p></div>
+                </div>
+                <div class="flex gap-2 items-start">
+                  <div class="w-7 h-7 rounded-full text-white text-[10px] font-bold flex items-center justify-center shrink-0" style="background:#2F6B4F">DP</div>
+                  <div class="text-[11px]"><p class="font-semibold">Diego Prado</p><p style="color:#3F5B4C">Barba · Bianca · 12:00</p></div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="font-display font-bold text-sm mt-6 mb-2.5">WhatsApp — números conectados</h3>
+    <div class="grid sm:grid-cols-2 gap-3">
+      <div class="card p-4">
+        <div class="flex items-center justify-between mb-2.5">
+          <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold" style="color:#1F4A36"><span class="w-1.5 h-1.5 rounded-full" style="background:#2F6B4F"></span>Conectado</span>
+          <button class="text-[11px] font-medium" style="color:#3F5B4C">Desconectar</button>
+        </div>
+        <p class="font-display font-bold text-sm">+55 11 99999-0000</p>
+        <p class="text-[11px] mt-0.5" style="color:#3F5B4C">Conectado há 3 dias · Recepção</p>
+      </div>
+      <div class="card p-4">
+        <div class="flex items-center gap-3">
+          <div class="w-16 h-16 rounded-md border-2 border-dashed flex items-center justify-center text-[9px] shrink-0" style="border-color:#DCE5DE; color:#8AA398">QR code</div>
+          <div>
+            <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold mb-1" style="color:#8AA398"><span class="w-1.5 h-1.5 rounded-full" style="background:#DCE5DE"></span>Desconectado</span>
+            <p class="text-xs font-medium">Segunda unidade</p>
+            <button class="mt-1.5 px-2.5 py-1.5 rounded-md text-white text-[11px] font-semibold" style="background:#2F6B4F">Conectar número</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>
