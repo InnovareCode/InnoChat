@@ -161,6 +161,10 @@ model PlatformSettings {
   n8nCredApiId       String?
   n8nWorkflowBotId    String?
   n8nWorkflowErrosId  String?
+  // `innochat-cron` (Schedule de hora em hora → POST /billing/tick, ver src/modules/platform/
+  // n8n-sync.ts) — opcional: pode não existir ainda no n8n do dono, `syncN8n` não falha por
+  // isso, só avisa no resumo.
+  n8nWorkflowCronId   String?
 
   mercadoPagoAccessToken   String?
   mercadoPagoWebhookSecret String?

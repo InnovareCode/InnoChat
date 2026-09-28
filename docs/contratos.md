@@ -314,9 +314,10 @@ da Fase 4 — corrigidos de forma ADITIVA (nada do que o workflow já usa mudou 
 
 ## Rotas HTTP do navegador previstas (Fase 2+)
 
-Reservadas em `src/app/api/`, ainda não implementadas:
-
-- `GET /api/whatsapp/instances/{id}/state` (Fase 3)
+- `GET /api/whatsapp/instances/{id}/state` cogitada em docs/arquitetura.md §6.10 — **não virou
+  rota HTTP**: implementada como Server Action (`getQrCodeAction`/`refreshConnectionStatusAction`,
+  ver "WhatsApp (Fase 3)" abaixo), mesmo raciocínio de `listAvailableSlotsAction` (Fase 2):
+  Server Actions já servem Client Components, sem precisar de uma rota HTTP separada.
 - `GET /api/agenda/slots?…` (Fase 2 — na prática coberto por `listAvailableSlotsAction`, ver
   seção "Catálogo e agenda" acima; não virou rota HTTP separada)
 
@@ -324,6 +325,221 @@ Implementadas na Fase 7 (ver seção "Cobrança e cadastro público" mais abaixo
 
 - `POST /api/webhooks/mercadopago`
 - `POST /api/internal/v1/billing/tick`
+
+---
+
+## WhatsApp (Fase 3) — conexão por QR code
+
+Implementado. Contrato completo em docs/arquitetura.md §4, §7.3 regra 4, §8 "Configuração pela
+plataforma". Modelos (`WhatsappInstance`, `TrialClaim`) já existiam (Cronos, Fase 1/schema
+inicial) — esta fase implementa o adaptador Evolution, a lógica de negócio e as Server Actions;
+sem tela (a Lyra consome o contrato abaixo).
+
+### `src/modules/whatsapp/evolution-client.ts` — adaptador Evolution API v2
+
+Interface isolada (`EvolutionClient`) e mockável — nenhum outro módulo importa `fetch` para a
+Evolution direto, tudo passa por aqui (mesmo padrão de `MercadoPagoGateway`,
+`src/modules/billing/mercadopago.ts`). Timeout de 15s, até 3 tentativas com retry **só** em 5xx e
+falha de rede/timeout (nunca em 4xx). O corpo de erro da Evolution NUNCA entra em log nem na
+mensagem da exceção (pode ecoar PII do payload) — só status + path + um `correlationId`.
+
+- `createInstance(instanceName)` — `POST /instance/create` (`integration: "WHATSAPP-BAILEYS"`,
+  `qrcode: true`, `groupsIgnore: true`, `readMessages: false`, `alwaysOnline: false`). NÃO
+  configura webhook (passo separado, abaixo) — permite compensar (apagar) a instância se o
+  passo do webhook falhar, sem confundir "criou mas sem webhook útil" com "criou certo".
+- `setWebhook(instanceName, webhookUrl)` — `POST /webhook/set/{instance}`, sempre explícito
+  depois do `createInstance` (docs/arquitetura.md §4): `{ webhook: { enabled: true, url,
+  byEvents: false, base64: false, events: ["MESSAGES_UPSERT", "CONNECTION_UPDATE"] } }`.
+- `connect(instanceName)` — `GET /instance/connect/{instance}` → `{ qrCodeDataUrl: string | null,
+  pairingCode: string | null }`. `qrCodeDataUrl` sempre em formato `data:image/png;base64,...`
+  (aceita base64 cru ou data URL completa da Evolution, normaliza para o mesmo formato). `null`
+  quando a instância já está conectada (não há QR).
+- `connectionState(instanceName)` — `GET /instance/connectionState/{instance}` → string bruta
+  (`"open" | "connecting" | "close" | ...`); mapeamento para o enum do domínio é
+  `mapEvolutionState` (`src/core/whatsapp/connection-event.ts`).
+- `fetchOwnerJid(instanceName)` — `GET /instance/fetchInstances?instanceName=` → JID do dono
+  (`ownerJid`/`owner`/`instance.owner`, conforme a versão) ou `null`.
+- `logout(instanceName)` — `DELETE /instance/logout/{instance}` (mantém a instância, só encerra
+  a sessão — permite reconectar com um QR novo).
+- `deleteInstance(instanceName)` — `DELETE /instance/delete/{instance}` (remove de vez; usado no
+  "Remover" da tela e na compensação de um `create` que falhou no meio).
+
+`getEvolutionClient()` resolve `baseUrl`/`apiKey` de `PlatformSettings` (§8 — nada em env var);
+lança `DomainError("EVOLUTION_NOT_CONFIGURED", …)` se faltar.
+
+⚠️ **HONESTIDADE SOBRE O QUE FOI VERIFICADO**: implementado a partir da documentação pública da
+Evolution API v2 e do adaptador validado AO VIVO no InnoAtendente (2026-09-04,
+`C:\Projetos\Web\InnoAtendente\src\adapters\whatsapp\evolution\index.ts`). **Sem servidor
+Evolution real do InnoChat conectado nesta rodada** — todo formato de resposta está marcado com
+`SUPOSIÇÃO:` no código, e os testes unitários (`evolution-client.test.ts`) usam fixtures **não
+capturadas de um servidor real**. Confirmar contra um servidor de verdade antes de confiar
+cegamente em produção (mesma pendência que a Fase 0 da arquitetura já registra para o resto do
+sistema).
+
+### `src/core/whatsapp/*` — normalização pura (sem I/O)
+
+- `phone.ts#normalizePhoneFromJid(jid)` — `"5511999999999@s.whatsapp.net"` → `"+5511999999999"`,
+  com a MESMA correção do 9º dígito brasileiro validada ao vivo no InnoAtendente (2026-09-05):
+  reconstitui o 9 que falta em `subscriber` de 8 dígitos, só para `+55`. `null` para JID vazio.
+- `instance-name.ts#buildInstanceName(tenantSlug, randomSuffix)` — `innochat-<slug≤20>-<curto>`
+  (prefixo `innochat-` obrigatório: Evolution compartilhada com o InnoAtendente). Recebe o
+  sufixo aleatório já gerado pelo chamador (I/O de `crypto` fica na camada de serviço) — função
+  pura, testável sem mockar `crypto`.
+- `connection-event.ts`:
+  - `mapEvolutionState(state)` — `"open"→CONNECTED`, `"connecting"→QRCODE`,
+    `"close"/"closed"→DISCONNECTED`, resto → `null`.
+  - `resolveNextConnectionStatus(currentStatus, mapped)` — só regride para `DISCONNECTED`
+    quando o status LOCAL já era `CONNECTED` (queda real, §4 passo 5). Uma instância que nunca
+    conectou fica em `close` o tempo todo esperando o QR ser escaneado — isso NÃO é "queda", e
+    regredir confundiria a tela. Usada pelo POLLING (`service.ts`); o webhook
+    (`connection-events.ts`) aplica o status bruto direto, sem essa heurística — um evento da
+    Evolution é fidedigno, uma consulta pode pegar um instante intermediário.
+  - `parseConnectionEvent(rawBody)` — normaliza o webhook `connection.update`/`CONNECTION_UPDATE`
+    para `{ state, ownerJid }`. **Ignora o campo `instance` do corpo de propósito**: quem chama
+    já resolveu a instância pelo `webhookToken` do path (`X-InnoChat-Instance`) — exigir esse
+    campo aqui duplicaria uma verificação que já existe, e um payload real sem ele (ou atrás de
+    `byEvents:true`) não pode virar um falso negativo. Nunca lança; payload irreconhecível → `null`.
+
+### `src/modules/whatsapp/connection.ts` — TrialClaim compartilhado
+
+`applyConnectedNumber({ tenantId, instanceId, instanceName, phoneE164, evolution? })` —
+**compartilhado** pelo polling do dashboard (`getQrCode`/`refreshConnectionStatus`) E pelo
+webhook (`POST /connection-events`), para a regra de "um trial por número" nunca ficar
+desalinhada entre os dois caminhos que podem detectar uma conexão (docs/arquitetura.md §7.3
+regra 4, lição "estender função de domínio compartilhada, não forkar").
+
+- Só age quando `effectiveStatusForTenant(tenantId) === "TRIALING"`. Fora do trial, só aplica
+  `status: CONNECTED` + `phoneE164` + `lastConnectedAt`, sem tocar `TrialClaim`.
+- Em trial: busca `TrialClaim(phoneE164)`.
+  - Não existe → cria `TrialClaim(phoneE164, tenantId)` (corrida entre dois caminhos detectando
+    a mesma conexão ao mesmo tempo — webhook E polling — é absorvida pela constraint
+    `@unique(phoneE164)`, mesmo padrão de `isUniqueViolation` do `claim` da Fase 4).
+  - Existe e é da MESMA empresa (reconectando) → segue normalmente.
+  - Existe e é de OUTRA empresa → **bloqueia**: marca a instância local `DISCONNECTED` (sem
+    telefone), chama `evolution.logout(instanceName)` (melhor esforço — falha só loga, nunca
+    impede o bloqueio local) e devolve `{ blocked: true, reason: "TRIAL_PHONE_ALREADY_USED" }`.
+
+### `src/modules/whatsapp/service.ts` — camada de serviço
+
+- `listWhatsappInstances(tenantId)` — só `deletedAt: null`, ordenado por `createdAt`.
+- `createWhatsappInstance({ tenantId, tenantSlug, label, evolution? })` — ordem deliberada
+  (mission "sem instância órfã: compense ou marque para limpeza"):
+  1. `assertCanAddWhatsappNumber(tenantId)` (`src/modules/billing/plan-limits.ts`, Fase 7) —
+     falha ANTES de qualquer chamada externa.
+  2. `n8nWebhookBaseUrl`/URL pública configuradas (`PUBLIC_URL_UNKNOWN`/`N8N_NOT_CONFIGURADO`
+     unificados em `N8N_NOT_CONFIGURED`, mensagem "configure o n8n na área de administração") —
+     nunca cria uma instância sem webhook por falta de configuração da plataforma (§8).
+  3. `evolution.createInstance(instanceName)`.
+  4. `evolution.setWebhook(instanceName, webhookUrl)` — falhou → compensa (`deleteInstance`) e
+     relança; nada é gravado localmente.
+  5. Grava `WhatsappInstance` local (`status: QRCODE`) — falhou (infra) → compensa a Evolution
+     também: nunca deixa uma instância órfã lá enquanto o painel não sabe que ela existe.
+  A compensação é melhor esforço: se o `deleteInstance` de limpeza também falhar, loga
+  `whatsapp.create.compensation_failed` para o admin limpar manualmente (dívida consciente —
+  não há fila de retry nesta rodada).
+- `getQrCode(tenantId, instanceId, { evolution? })` — o QR expira e o cliente consulta a cada
+  ~3s (docs/arquitetura.md §4): **nunca cacheamos o QR localmente**, sempre `connectionState` +,
+  se ainda não conectado, um `connect()` fresco a cada chamada. Se `connectionState` disser
+  `open`, busca o dono (`fetchOwnerJid`) e aplica via `applyConnectedNumber` — bloqueado por
+  `TrialClaim` vira `{ status: "DISCONNECTED", blockedReason: "TRIAL_PHONE_ALREADY_USED" }` (a
+  Lyra mostra essa mensagem na tela, sem QR novo).
+- `refreshConnectionStatus(tenantId, instanceId, { evolution? })` — igual, sem buscar QR (mais
+  barato; "Verificar agora"/atualização de status pura).
+- `disconnectWhatsapp`/`removeWhatsappInstance` — chamam `logout`/`deleteInstance` na Evolution
+  como MELHOR ESFORÇO (falha remota não impede a atualização local — o usuário pediu para
+  desconectar/remover, e mesmo que a Evolution já não tenha a instância, o painel precisa
+  refletir a intenção). `remove` é soft delete (`deletedAt`), nunca perde o histórico.
+- `setSandbox(tenantId, instanceId, sandbox)` — sem chamada à Evolution, só a coluna local.
+
+### Server Actions (`src/modules/whatsapp/actions.ts`)
+
+Leitura aberta a qualquer membro do tenant; MUTAÇÃO restrita a `OWNER`
+(`requireTenantMember(slug, ["OWNER"])`) — decisão de infraestrutura da empresa, mesmo nível de
+`updateTenantThemeAction`.
+
+- `listWhatsappInstancesAction(tenantSlug): Result<WhatsappInstanceView[]>`
+- `createWhatsappInstanceAction(tenantSlug, { label }): Result<WhatsappInstanceView>` — exige
+  `requireVerifiedEmail()` **ANTES** de `requireTenantMember(..., ["OWNER"])` (docs/arquitetura.md
+  §7.3 regra 2: "sem e-mail verificado, não é possível conectar WhatsApp" — a ordem garante que
+  um usuário sem e-mail verificado recebe sempre `EMAIL_NOT_VERIFIED`, independente de ser ou
+  não `OWNER` ali, sem vazar permissão). Também chama `assertTenantCanWrite` (bloqueado se a
+  assinatura estiver `SUSPENDED`/`CANCELED`). Erros: `EMAIL_NOT_VERIFIED`, `FORBIDDEN` (não é
+  `OWNER`), `NOT_FOUND` (empresa/membership), `TENANT_SUSPENDED`, `PLAN_LIMIT_REACHED` (`details:
+  { rule: "maxWhatsappNumbers", limit, current }`), `N8N_NOT_CONFIGURED`,
+  `EVOLUTION_NOT_CONFIGURED`, `INVALID_PAYLOAD`.
+- `getQrCodeAction(tenantSlug, instanceId): Result<QrCodeView>` — `QrCodeView: { status, 
+  qrCodeDataUrl, pairingCode, phoneE164, blockedReason }`. Consultado pelo Client Component a
+  cada ~3s enquanto `status !== "CONNECTED"` (a Lyra decide o intervalo e o corte em ~2min, ver
+  docs/arquitetura.md §4 passo 2). Erro: `NOT_FOUND` (instância não é deste tenant, ou removida).
+- `refreshConnectionStatusAction(tenantSlug, instanceId): Result<ConnectionStatusView>` —
+  `{ status, phoneE164, blockedReason }`, sem QR.
+- `disconnectWhatsappAction(tenantSlug, instanceId): Result<WhatsappInstanceView>`
+- `removeWhatsappInstanceAction(tenantSlug, instanceId): Result<{ id }>`
+- `setSandboxAction(tenantSlug, instanceId, { sandbox }): Result<WhatsappInstanceView>`
+
+`WhatsappInstanceView`: `{ id, label, instanceName, status, phoneE164, sandbox,
+lastConnectedAt, createdAt }` (datas em ISO string).
+
+### `POST /connection-events` (Fase 4 + Fase 3, completo)
+
+`src/modules/bot-api/connection-events.ts`. Já existia (Fase 4, só `status`); esta rodada
+completa a cobertura pedida: número conectado (`ownerJid`/`wuid`) e `TrialClaim`.
+
+- `state === "CONNECTED"` (evento `open`): se o payload trouxer `wuid`, normaliza o telefone e
+  chama `applyConnectedNumber` (mesma função do polling — TrialClaim incluído). **Sem `wuid`
+  neste evento específico** (a Evolution às vezes manda `connection.update` sem o dono
+  preenchido), aplica só `status: CONNECTED` + `lastConnectedAt` — o telefone/TrialClaim são
+  resolvidos no próximo poll do dashboard (comportamento herdado da Fase 4, mantido para não
+  quebrar o contrato já testado).
+- `state !== "CONNECTED"` (`connecting`/`close`): aplica o status bruto diretamente
+  (`QRCODE`/`DISCONNECTED`) — **sem** a heurística "só regride de CONNECTED" usada pelo polling
+  (`resolveNextConnectionStatus`): um evento da Evolution é fidedigno; a heurística existe só
+  para não regredir por causa de um instante intermediário de uma CONSULTA de polling.
+- Sempre `200`/`{ applied: boolean }`, nunca lança — payload irreconhecível ou `state`
+  desconhecido → `{ applied: false }`.
+
+### Migration
+
+`20260928000008_platform_n8n_cron_workflow` — não é desta feature (ver "Sincronização do n8n"
+abaixo); `WhatsappInstance`/`TrialClaim` já existiam desde o schema inicial (Cronos), sem
+migration nova nesta rodada.
+
+### PENDÊNCIAS (Fase 3)
+
+- **Sem servidor Evolution real conectado** — todo o adaptador foi testado com `fetch` mockado;
+  falta confirmar os formatos de resposta (`connect`, `connectionState`, `fetchInstances`,
+  `webhook/set`) contra uma instância de verdade antes de confiar em produção (mesma pendência
+  da Fase 0 da arquitetura, nunca resolvida por falta de servidor disponível nesta sessão).
+- **Sem tela** — Lyra consome o contrato acima (Server Actions prontas) para montar "Painel ›
+  WhatsApp › Conectar número" (docs/arquitetura.md §4).
+- `emailDomain` de `TrialClaim` nunca é preenchido (`null` sempre) — o schema tem o campo, mas
+  nada nesta rodada o popula; simplificação consciente (o `phoneE164` já é a defesa principal).
+
+## Sincronização do n8n — `innochat-cron` (Fase 3, acréscimo pontual)
+
+`src/modules/platform/n8n-sync.ts` (Fase 5+, já existia) ganhou um terceiro workflow opcional:
+`innochat-cron` (`n8n/README.md` — Schedule de hora em hora → nó `Config cron` → `POST
+{painelUrl}/billing/tick`, credencial "InnoChat Painel (Bearer)", sem `X-InnoChat-Instance`).
+
+- `syncN8n()` agora também resolve `innochat-cron` por id salvo (`PlatformSettings.n8nWorkflowCronId`)
+  → id de fábrica (`dPMhT4MqGglCpFSw`, `n8n/README.md`) → nome — **NUNCA lança se não achar**
+  (`tryResolveWorkflow`, diferente de `resolveWorkflow` usado para bot/erros): o cron é opcional,
+  a sync não pode falhar por causa dele. Quando não encontrado, `N8nSyncSummary.warnings` ganha
+  uma mensagem e `n8nWorkflowCronId` no banco fica como estava (nunca apaga uma referência válida
+  por uma falha transitória de busca).
+- Quando encontrado: escreve `painelUrl` no nó `Config cron` e reata a credencial do painel no
+  nó HTTP `Chamar billing/tick` (só o grupo "painel" — o cron não conhece Evolution nem n8n API).
+- `activateBotWorkflow()`/`deactivateBotWorkflow()` publicam/despublicam o `innochat-cron` JUNTO
+  com o `innochat-bot` (mesma chamada). Sem cron sincronizado ainda, pula essa parte
+  silenciosamente (não é erro — só o bot precisa estar sincronizado).
+- `N8nSyncSummary` ganhou `cronWorkflowId: string | null` e `warnings: string[]`.
+
+Migration `20260928000008_platform_n8n_cron_workflow` — `PlatformSettings.n8nWorkflowCronId`
+(nullable), aplicada em `innochat` e `innochat_test`; `DOWN.sql` presente.
+
+Testado em `tests/integration/platform-n8n-sync.integration.test.ts` (fake server): sincroniza
+`Config cron`/credencial quando o workflow existe; não falha e avisa quando não existe;
+`activateBotWorkflow` não falha quando o cron nunca foi sincronizado.
 
 ---
 

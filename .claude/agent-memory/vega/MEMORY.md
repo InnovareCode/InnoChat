@@ -16,3 +16,6 @@
 - [Chave nova em BOT_TEXT_KEYS quebra Record exaustivo no frontend](bot_text_keys_ripple_to_frontend.md) — checar `Record<BotTextKeyLiteral,...>` (ex.: tela "Mensagens do bot") antes de fechar.
 - [URL pública sem env var + armadilha do prerender estático em /instalacao](public_url_no_env.md) — `getPublicBaseUrl()`, `PlatformSettings.publicBaseUrl`, e por que página pública que decide 200/404 por banco precisa de `dynamic = "force-dynamic"`.
 - [n8n: activate/deactivate deprecated (usar publish/unpublish) + PATCH de credencial com fallback](n8n_public_api_activate_deprecated_credentials_patch.md) — spec oficial conferido pelo Atlas 2026-09-28; padrão geral de fallback por 404/405 entre rota nova e antiga.
+- [parseConnectionEvent não pode exigir `instance` no corpo](connection_event_parser_must_not_require_instance_field.md) — bug real: quebrou 3 testes da Fase 4 já verdes; a instância já vem do webhookToken do path, nunca do corpo.
+- [Heurística de status: evento (webhook) aplica direto, consulta (polling) usa "só regride de CONNECTED"](webhook_event_vs_polling_status_heuristic.md) — mesmo bug do dia acima, lição complementar.
+- [Plan.maxWhatsappNumbers NÃO é nullable](plan_max_whatsapp_numbers_not_nullable.md) — só maxProfessionals e os *Override de Tenant aceitam null=ilimitado; usar número alto em fixtures de teste.

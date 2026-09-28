@@ -66,11 +66,31 @@ function makeErrosWorkflow(): N8nWorkflow {
   return { id: "GZSwTNgvVt4LYnwW", name: "innochat-erros", active: false, nodes, connections: {} };
 }
 
+function makeCronWorkflow(): N8nWorkflow {
+  const nodes: N8nNode[] = [
+    {
+      name: "Config cron",
+      type: "n8n-nodes-base.set",
+      parameters: {
+        assignments: { assignments: [{ id: "painelUrl", name: "painelUrl", value: "https://PAINEL_A_DEFINIR/api/internal/v1", type: "string" }] },
+      },
+    },
+    {
+      name: "Chamar billing/tick",
+      type: "n8n-nodes-base.httpRequest",
+      parameters: { authentication: "genericCredentialType", genericAuthType: "httpHeaderAuth", url: "={{ $('Config cron').first().json.painelUrl }}/billing/tick" },
+    },
+  ];
+  return { id: "dPMhT4MqGglCpFSw", name: "innochat-cron", active: false, nodes, connections: {} };
+}
+
 type FakeServerOptions = {
   /** `true` = instância nova (tem `PATCH /credentials/{id}`); `false` = instância antiga (só POST/DELETE). */
   supportsCredentialPatch: boolean;
   /** `true` = instância nova (tem `publish`/`unpublish`); `false` = instância antiga (só `activate`/`deactivate`, deprecated). */
   supportsPublish: boolean;
+  /** `false` = `innochat-cron` não existe nesta instância (mission: sync não falha, só avisa). Padrão `true`. */
+  hasCronWorkflow?: boolean;
 };
 
 /** Simula a API pública do n8n, com as duas superfícies possíveis controladas por `options` — ver cabeçalho do arquivo. */
@@ -80,10 +100,12 @@ function createFakeN8nServer(options: FakeServerOptions) {
   const createdCredentials: Array<{ id: string; name: string; type: string; data: Record<string, string> }> = [];
   const patchedCredentialIds: string[] = [];
   const activateCalls: Array<{ id: string; route: "publish" | "unpublish" | "activate" | "deactivate" }> = [];
-  const workflows = new Map<string, N8nWorkflow>([
-    ["levHnMSXf1dOR3gS", makeBotWorkflow()],
-    ["GZSwTNgvVt4LYnwW", makeErrosWorkflow()],
-  ]);
+  const workflows = new Map<string, N8nWorkflow>();
+  workflows.set("levHnMSXf1dOR3gS", makeBotWorkflow());
+  workflows.set("GZSwTNgvVt4LYnwW", makeErrosWorkflow());
+  if (options.hasCronWorkflow !== false) {
+    workflows.set("dPMhT4MqGglCpFSw", makeCronWorkflow());
+  }
 
   function jsonResponse(status: number, body: unknown = {}): Response {
     return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -113,6 +135,10 @@ function createFakeN8nServer(options: FakeServerOptions) {
       const body = JSON.parse(String(init?.body)) as { name: string; type: string; data: Record<string, string> };
       patchedCredentialIds.push(id);
       return jsonResponse(200, { id, name: body.name });
+    }
+
+    if (path === "/api/v1/workflows" && method === "GET") {
+      return jsonResponse(200, { data: Array.from(workflows.values()), nextCursor: null });
     }
 
     const workflowMatch = path.match(/^\/api\/v1\/workflows\/([^/]+)$/);
@@ -168,6 +194,7 @@ beforeEach(async () => {
       n8nCredApiId: null,
       n8nWorkflowBotId: null,
       n8nWorkflowErrosId: null,
+      n8nWorkflowCronId: null,
     },
     update: {
       n8nBaseUrl: N8N_BASE_URL,
@@ -179,6 +206,7 @@ beforeEach(async () => {
       n8nCredApiId: null,
       n8nWorkflowBotId: null,
       n8nWorkflowErrosId: null,
+      n8nWorkflowCronId: null,
     },
   });
 });
@@ -257,8 +285,8 @@ describe("syncN8n — sincronização idempotente com o n8n (instância moderna:
     expect(server.deletedCredentialIds.size).toBe(0);
     expect(secondPainelCredId).toBe(firstPainelCredId);
 
-    // Workflow nunca é recriado — mesmo id nas duas rodadas.
-    expect(server.workflows.size).toBe(2);
+    // Workflow nunca é recriado — mesmo id nas duas rodadas (bot + erros + cron, padrão do fake server).
+    expect(server.workflows.size).toBe(3);
   });
 
   it("nunca ativa nenhum workflow na sync (fica sempre `active: false`)", async () => {
@@ -284,10 +312,70 @@ describe("syncN8n — sincronização idempotente com o n8n (instância moderna:
     await activateBotWorkflow();
     await deactivateBotWorkflow();
 
+    // `activateBotWorkflow`/`deactivateBotWorkflow` publicam/despublicam o cron JUNTO com o bot.
     expect(server.activateCalls).toEqual([
       { id: "levHnMSXf1dOR3gS", route: "publish" },
+      { id: "dPMhT4MqGglCpFSw", route: "publish" },
       { id: "levHnMSXf1dOR3gS", route: "unpublish" },
+      { id: "dPMhT4MqGglCpFSw", route: "unpublish" },
     ]);
+  });
+});
+
+describe("syncN8n — innochat-cron (opcional)", () => {
+  it("sincroniza o painelUrl do 'Config cron' e reata a credencial do painel no nó HTTP", async () => {
+    const { syncN8n } = await import("@/modules/platform/n8n-sync");
+    const admin = await makeAdminUser();
+    const server = createFakeN8nServer({ supportsCredentialPatch: true, supportsPublish: true });
+    vi.stubGlobal("fetch", server.fetchMock);
+
+    const summary = await syncN8n(admin.id);
+
+    expect(summary.cronWorkflowId).toBe("dPMhT4MqGglCpFSw");
+    expect(summary.warnings).toEqual([]);
+
+    const cronWorkflow = server.workflows.get("dPMhT4MqGglCpFSw")!;
+    const configCronNode = cronWorkflow.nodes.find((n) => n.name === "Config cron")!;
+    const painelUrlAssignment = (configCronNode.parameters as { assignments: { assignments: Array<{ name: string; value: unknown }> } }).assignments
+      .assignments.find((a) => a.name === "painelUrl")!;
+    expect(String(painelUrlAssignment.value)).toContain("/api/internal/v1");
+
+    const tickNode = cronWorkflow.nodes.find((n) => n.name === "Chamar billing/tick")!;
+    const painelCred = server.createdCredentials.find((c) => c.name === "InnoChat Painel (Bearer)")!;
+    expect(tickNode.credentials?.httpHeaderAuth.id).toBe(painelCred.id);
+
+    const settings = await prisma.platformSettings.findUnique({ where: { id: 1 } });
+    expect(settings?.n8nWorkflowCronId).toBe("dPMhT4MqGglCpFSw");
+  });
+
+  it("não falha quando innochat-cron não existe — só avisa no resumo, sem perder bot/erros", async () => {
+    const { syncN8n } = await import("@/modules/platform/n8n-sync");
+    const admin = await makeAdminUser();
+    const server = createFakeN8nServer({ supportsCredentialPatch: true, supportsPublish: true, hasCronWorkflow: false });
+    vi.stubGlobal("fetch", server.fetchMock);
+
+    const summary = await syncN8n(admin.id);
+
+    expect(summary.cronWorkflowId).toBeNull();
+    expect(summary.warnings).toHaveLength(1);
+    expect(summary.warnings[0]).toContain("innochat-cron");
+    expect(summary.botWorkflowId).toBe("levHnMSXf1dOR3gS");
+    expect(summary.errosWorkflowId).toBe("GZSwTNgvVt4LYnwW");
+
+    const settings = await prisma.platformSettings.findUnique({ where: { id: 1 } });
+    expect(settings?.n8nWorkflowCronId).toBeNull();
+  });
+
+  it("activateBotWorkflow não falha quando o cron nunca foi sincronizado (pula silenciosamente)", async () => {
+    const { syncN8n, activateBotWorkflow } = await import("@/modules/platform/n8n-sync");
+    const admin = await makeAdminUser();
+    const server = createFakeN8nServer({ supportsCredentialPatch: true, supportsPublish: true, hasCronWorkflow: false });
+    vi.stubGlobal("fetch", server.fetchMock);
+
+    await syncN8n(admin.id);
+    await expect(activateBotWorkflow()).resolves.toBeUndefined();
+
+    expect(server.activateCalls).toEqual([{ id: "levHnMSXf1dOR3gS", route: "publish" }]);
   });
 });
 
@@ -322,7 +410,9 @@ describe("syncN8n — compatibilidade com instância antiga (sem PATCH, sem publ
 
     expect(server.activateCalls).toEqual([
       { id: "levHnMSXf1dOR3gS", route: "activate" },
+      { id: "dPMhT4MqGglCpFSw", route: "activate" },
       { id: "levHnMSXf1dOR3gS", route: "deactivate" },
+      { id: "dPMhT4MqGglCpFSw", route: "deactivate" },
     ]);
     expect(server.workflows.get("levHnMSXf1dOR3gS")!.active).toBe(false); // deactivate foi a última chamada
   });

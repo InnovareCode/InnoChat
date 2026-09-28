@@ -20,9 +20,14 @@ import { createN8nClient, N8nApiError, type N8nClient, type N8nNode, type N8nWor
  */
 
 // IDs de fábrica documentados em `n8n/README.md` — usados como primeira tentativa antes de
-// cair para "achar pelo nome" (ver `resolveWorkflow`).
+// cair para "achar pelo nome" (ver `resolveWorkflow`/`tryResolveWorkflow`).
 const DEFAULT_BOT_WORKFLOW_ID = "levHnMSXf1dOR3gS";
 const DEFAULT_ERROS_WORKFLOW_ID = "GZSwTNgvVt4LYnwW";
+// `innochat-cron` (n8n/README.md, "innochat-cron" — confirmado pelo Atlas via MCP): diferente
+// do bot/erros, este workflow é OPCIONAL — pode não existir ainda em instâncias mais antigas do
+// dono, e a sync nunca falha por isso (ver `tryResolveWorkflow`, sem lançar).
+const DEFAULT_CRON_WORKFLOW_ID = "dPMhT4MqGglCpFSw";
+const CRON_WORKFLOW_NAME = "innochat-cron";
 
 const CRED_PAINEL_NAME = "InnoChat Painel (Bearer)";
 const CRED_EVOLUTION_NAME = "Evolution API (apikey)";
@@ -30,13 +35,18 @@ const CRED_N8N_API_NAME = "n8n API (X-N8N-API-KEY)";
 
 const CONFIG_NODE_NAME = "Config";
 const CONFIG_ERROS_NODE_NAME = "Config erros";
+const CONFIG_CRON_NODE_NAME = "Config cron";
 
 export type N8nSyncSummary = {
   painelUrl: string;
   botWorkflowId: string | null;
   errosWorkflowId: string | null;
+  /** `null` quando `innochat-cron` não foi encontrado nesta sincronização — ver `warnings`. */
+  cronWorkflowId: string | null;
   credentialsRotated: number;
   nodesRebound: number;
+  /** Avisos que não impedem a sync de terminar (ex.: `innochat-cron` ausente). */
+  warnings: string[];
 };
 
 type PlatformN8nConfig = {
@@ -129,6 +139,19 @@ async function resolveWorkflow(client: N8nClient, storedId: string | null, defau
   return byName;
 }
 
+/**
+ * Igual a `resolveWorkflow`, mas NUNCA lança — usada para `innochat-cron` (opcional): instância
+ * mais antiga do dono pode não ter esse workflow importado ainda, e isso não deve derrubar o
+ * resto da sincronização (mission: "se o workflow não existir, a sync não falha; só avisa").
+ */
+async function tryResolveWorkflow(client: N8nClient, storedId: string | null, defaultId: string, name: string): Promise<N8nWorkflow | null> {
+  const byId = await client.getWorkflow(storedId ?? defaultId);
+  if (byId) return byId;
+
+  const all = await client.listWorkflows();
+  return all.find((w) => w.name === name) ?? null;
+}
+
 function rebindHttpCredentials(workflow: N8nWorkflow, ids: { painel: string; evolution: string; n8n: string }): number {
   let rebound = 0;
   for (const node of workflow.nodes) {
@@ -152,7 +175,14 @@ export async function syncN8n(updatedByUserId: string): Promise<N8nSyncSummary> 
 
   const current = await prisma.platformSettings.findUnique({
     where: { id: 1 },
-    select: { n8nCredPainelId: true, n8nCredEvolutionId: true, n8nCredApiId: true, n8nWorkflowBotId: true, n8nWorkflowErrosId: true },
+    select: {
+      n8nCredPainelId: true,
+      n8nCredEvolutionId: true,
+      n8nCredApiId: true,
+      n8nWorkflowBotId: true,
+      n8nWorkflowErrosId: true,
+      n8nWorkflowCronId: true,
+    },
   });
 
   // O segredo interno em texto puro só existe no instante em que é gerado (só guardamos o
@@ -199,6 +229,27 @@ export async function syncN8n(updatedByUserId: string): Promise<N8nSyncSummary> 
     settings: errosWorkflow.settings,
   });
 
+  // `innochat-cron` (opcional, ver `tryResolveWorkflow`): só chama `POST /billing/tick` com a
+  // credencial do painel — não conhece Evolution nem n8n API, então só reata o grupo "painel".
+  const warnings: string[] = [];
+  const cronWorkflow = await tryResolveWorkflow(client, current?.n8nWorkflowCronId ?? null, DEFAULT_CRON_WORKFLOW_ID, CRON_WORKFLOW_NAME);
+  let cronRebound = 0;
+  if (cronWorkflow) {
+    const configCronNode = cronWorkflow.nodes.find((n) => n.name === CONFIG_CRON_NODE_NAME);
+    if (configCronNode) {
+      setConfigAssignment(configCronNode, "painelUrl", painelUrl);
+    }
+    cronRebound = rebindHttpCredentials(cronWorkflow, { painel: painelCredId, evolution: evolutionCredId, n8n: n8nCredId });
+    await client.updateWorkflow(cronWorkflow.id, {
+      name: cronWorkflow.name,
+      nodes: cronWorkflow.nodes,
+      connections: cronWorkflow.connections,
+      settings: cronWorkflow.settings,
+    });
+  } else {
+    warnings.push(`Workflow "${CRON_WORKFLOW_NAME}" não encontrado no n8n — importe-o para a cobrança automática (POST /billing/tick) funcionar.`);
+  }
+
   await prisma.platformSettings.update({
     where: { id: 1 },
     data: {
@@ -207,29 +258,42 @@ export async function syncN8n(updatedByUserId: string): Promise<N8nSyncSummary> 
       n8nCredApiId: n8nCredId,
       n8nWorkflowBotId: botWorkflow.id,
       n8nWorkflowErrosId: errosWorkflow.id,
+      // Preserva o id anterior se este round não achou o cron (transitório) — só grava um id
+      // novo/confirmado; nunca apaga uma referência válida por causa de uma falha passageira.
+      ...(cronWorkflow ? { n8nWorkflowCronId: cronWorkflow.id } : {}),
     },
   });
 
-  logger.info("platform.n8n_sync.completed", { botWorkflowId: botWorkflow.id, errosWorkflowId: errosWorkflow.id });
+  logger.info("platform.n8n_sync.completed", {
+    botWorkflowId: botWorkflow.id,
+    errosWorkflowId: errosWorkflow.id,
+    cronWorkflowId: cronWorkflow?.id ?? null,
+  });
 
   return {
     painelUrl,
     botWorkflowId: botWorkflow.id,
     errosWorkflowId: errosWorkflow.id,
+    cronWorkflowId: cronWorkflow?.id ?? null,
     credentialsRotated: 3,
-    nodesRebound: botRebound + errosRebound,
+    nodesRebound: botRebound + errosRebound + cronRebound,
+    warnings,
   };
 }
 
-async function setWorkflowActive(which: "bot" | "erros", active: boolean): Promise<void> {
+async function setWorkflowActive(which: "bot" | "erros" | "cron", active: boolean): Promise<void> {
   const config = await loadConfigOrThrow();
   const client = createN8nClient(config.n8nBaseUrl, config.n8nApiKey);
   const settings = await getPrisma().platformSettings.findUnique({
     where: { id: 1 },
-    select: { n8nWorkflowBotId: true, n8nWorkflowErrosId: true },
+    select: { n8nWorkflowBotId: true, n8nWorkflowErrosId: true, n8nWorkflowCronId: true },
   });
-  const id = which === "bot" ? settings?.n8nWorkflowBotId : settings?.n8nWorkflowErrosId;
+  const id =
+    which === "bot" ? settings?.n8nWorkflowBotId : which === "erros" ? settings?.n8nWorkflowErrosId : settings?.n8nWorkflowCronId;
   if (!id) {
+    // `cron` é opcional (mission: workflow pode não existir ainda na instância do dono) — nunca
+    // bloqueia "Ativar bot" por causa disso, só pula silenciosamente.
+    if (which === "cron") return;
     throw new DomainError("N8N_NOT_SYNCED", "Sincronize o n8n antes de ativar/desativar o bot.");
   }
   if (active) {
@@ -239,11 +303,17 @@ async function setWorkflowActive(which: "bot" | "erros", active: boolean): Promi
   }
 }
 
-/** Ação separada de "Ativar bot" (docs/contratos.md — a sync nunca ativa sozinha). */
+/**
+ * Ação separada de "Ativar bot" (docs/contratos.md — a sync nunca ativa sozinha). Publica o
+ * `innochat-cron` JUNTO com o bot (mission: "publicar/ativar o cron junto com 'Ativar bot'") —
+ * sem cron sincronizado ainda, só pula essa parte (ver `setWorkflowActive`).
+ */
 export async function activateBotWorkflow(): Promise<void> {
   await setWorkflowActive("bot", true);
+  await setWorkflowActive("cron", true);
 }
 
 export async function deactivateBotWorkflow(): Promise<void> {
   await setWorkflowActive("bot", false);
+  await setWorkflowActive("cron", false);
 }
