@@ -1,0 +1,45 @@
+# Reduz o contexto de build e evita que arquivos locais (segredos incluídos) entrem em
+# qualquer estágio via `COPY . .` no Dockerfile. O Easypanel builda a partir de um clone do
+# GitHub (onde .env já não existe, por estar no .gitignore), mas isto também protege quem
+# rodar `docker build .` localmente com um `.env` real na pasta.
+
+# Dependências e build local (reinstalados/reconstruídos dentro da imagem)
+node_modules
+.next
+out
+build
+
+# Ambiente e segredos — nunca no contexto de build
+.env
+.env.*
+!.env.example
+
+# Controle de versão e editor
+.git
+.gitignore
+.github
+.vscode
+.idea
+
+# Documentação e material da squad (não afeta o runtime)
+docs
+*.md
+.claude
+
+# Testes e relatórios
+coverage
+test-results
+playwright-report
+blob-report
+playwright/.cache
+tests/e2e/.e2e-fixture-ids.json
+
+# Logs e estado de sessão
+*.log
+npm-debug.log*
+.missao-atual
+.missoes-quadro.json
+
+# Sistema
+.DS_Store
+Thumbs.db

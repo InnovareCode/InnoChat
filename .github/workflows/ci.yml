@@ -1,0 +1,159 @@
+name: CI
+
+# Roda em toda push/PR contra `main`. O Easypanel faz auto-deploy a cada push em `main`
+# (docs/arquitetura.md), então este workflow é a única rede de segurança ANTES de produção:
+# lint, typecheck, testes unitários e build sempre; integração e E2E contra Postgres real
+# quando o job correspondente rodar. Nenhum job aqui aplica migration em produção — isso
+# continua manual (docs/deploy-easypanel.md).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  # Lint + typecheck + testes unitários + build de produção — o mesmo build que o Dockerfile
+  # roda, sem DATABASE_URL/AUTH_SECRET, para pegar cedo qualquer página que volte a depender de
+  # env de runtime no build (docs/arquitetura.md — nenhuma página pode prerenderizar lendo o
+  # banco).
+  build-and-test:
+    name: Lint, typecheck, testes unitários e build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instala dependências (lockfile exato)
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Gera o Prisma Client
+        run: npm run db:generate
+        env:
+          # Só para o `prisma generate` ler o provider do schema — não conecta em nada.
+          DATABASE_URL: postgresql://user:pass@localhost:5432/innochat_ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Testes unitários
+        run: npm test
+
+      - name: Build de produção (sem env de runtime, igual ao Dockerfile)
+        run: npm run build
+
+  # Testes de integração contra Postgres real (tests/integration/**, requer TEST_DATABASE_URL
+  # com as migrations aplicadas — docs/contratos.md).
+  integration:
+    name: Testes de integração (Postgres real)
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: innochat
+          POSTGRES_PASSWORD: innochat
+          POSTGRES_DB: innochat_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://innochat:innochat@localhost:5432/innochat_test
+      AUTH_SECRET: ci-secret-not-used-in-integration-tests-0000000000
+      AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instala dependências
+        run: npm ci
+
+      - name: Gera o Prisma Client
+        run: npm run db:generate
+
+      - name: Aplica migrations no banco de teste
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+
+      - name: Testes de integração
+        run: npm run test:integration
+
+  # E2E (Playwright) contra `next start` + banco seedado. Best-effort no CI: `webServer` do
+  # playwright.config.ts já sobe o servidor sozinho, então só precisamos do banco pronto e
+  # seedado antes.
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: innochat
+          POSTGRES_PASSWORD: innochat
+          POSTGRES_DB: innochat
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://innochat:innochat@localhost:5432/innochat
+      AUTH_SECRET: ci-secret-not-used-in-e2e-tests-00000000000000
+      AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Instala dependências
+        run: npm ci
+
+      - name: Gera o Prisma Client
+        run: npm run db:generate
+
+      - name: Aplica migrations
+        run: npx prisma migrate deploy
+
+      - name: Popula o banco de dev (seed)
+        run: npm run db:seed
+
+      - name: Instala browsers do Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Testes E2E
+        run: npm run test:e2e
+
+      - name: Sobe evidências em caso de falha
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
