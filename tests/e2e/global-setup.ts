@@ -1,5 +1,17 @@
+import fs from "node:fs";
+import { chromium } from "@playwright/test";
 import { prisma, hashPassword, ensureBotPlan } from "./fixtures/db";
-import { SEED_TENANT_SLUG, TENANT_B_OWNER_PASSWORD, STAFF_PASSWORD, generateRunFixtures, saveRunFixtures } from "./fixtures/test-data";
+import { loginAndWaitForPanel } from "./fixtures/auth";
+import {
+  SEED_TENANT_SLUG,
+  SEED_OWNER_EMAIL,
+  SEED_OWNER_PASSWORD,
+  TENANT_B_OWNER_PASSWORD,
+  STAFF_PASSWORD,
+  generateRunFixtures,
+  saveRunFixtures,
+} from "./fixtures/test-data";
+import { AUTH_DIR, OWNER_STORAGE_STATE, STAFF_STORAGE_STATE, TENANT_B_OWNER_STORAGE_STATE } from "./fixtures/storage-state";
 
 /**
  * Roda UMA vez antes da suíte inteira (`playwright.config.ts`), no processo PRINCIPAL do
@@ -69,4 +81,33 @@ export default async function globalSetup() {
   });
 
   await prisma.$disconnect();
+
+  // `storageState` por papel — logins reais pela UI (3 no total, feitos AQUI, uma vez), para os
+  // specs consumirem via `test.use({ storageState: ... })` em vez de logar de novo em cada teste
+  // (ver `fixtures/storage-state.ts` e `.claude/agent-memory/iris/login_rate_limit_e2e.md`: o
+  // rate limit de login é 8 tentativas/15min por e-mail, e a suíte inteira reusava
+  // `dev@innochat.local` em quase todo spec).
+  fs.mkdirSync(AUTH_DIR, { recursive: true });
+  const browser = await chromium.launch();
+  try {
+    const ownerContext = await browser.newContext({ baseURL: "http://localhost:3000" });
+    const ownerPage = await ownerContext.newPage();
+    await loginAndWaitForPanel(ownerPage, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD, SEED_TENANT_SLUG);
+    await ownerContext.storageState({ path: OWNER_STORAGE_STATE });
+    await ownerContext.close();
+
+    const staffContext = await browser.newContext({ baseURL: "http://localhost:3000" });
+    const staffPage = await staffContext.newPage();
+    await loginAndWaitForPanel(staffPage, generated.staffEmail, STAFF_PASSWORD, SEED_TENANT_SLUG);
+    await staffContext.storageState({ path: STAFF_STORAGE_STATE });
+    await staffContext.close();
+
+    const tenantBContext = await browser.newContext({ baseURL: "http://localhost:3000" });
+    const tenantBPage = await tenantBContext.newPage();
+    await loginAndWaitForPanel(tenantBPage, generated.tenantBOwnerEmail, TENANT_B_OWNER_PASSWORD, generated.tenantBSlug);
+    await tenantBContext.storageState({ path: TENANT_B_OWNER_STORAGE_STATE });
+    await tenantBContext.close();
+  } finally {
+    await browser.close();
+  }
 }

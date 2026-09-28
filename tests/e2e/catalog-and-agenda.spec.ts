@@ -1,16 +1,15 @@
 import { test, expect } from "@playwright/test";
-import { login } from "./fixtures/auth";
-import { SEED_TENANT_SLUG, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD, E2E_RUN_PREFIX } from "./fixtures/test-data";
+import { SEED_TENANT_SLUG, E2E_RUN_PREFIX } from "./fixtures/test-data";
+import { OWNER_STORAGE_STATE } from "./fixtures/storage-state";
 import { prisma } from "./fixtures/db";
 
 const SERVICE_NAME = `${E2E_RUN_PREFIX} Corte Rápido`;
 const PROFESSIONAL_NAME = `${E2E_RUN_PREFIX} Carla`;
 
+// Sessão via `storageState` (ver `admin-secrets.spec.ts` / `login_rate_limit_e2e` na memória).
+test.use({ storageState: OWNER_STORAGE_STATE });
+
 test.describe.serial("Catálogo, profissionais e agenda (docs/contratos.md Fase 2)", () => {
-  test.beforeEach(async ({ page }) => {
-    await login(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-    await page.waitForURL(new RegExp(`/${SEED_TENANT_SLUG}(/|$)`));
-  });
 
   test("cria um serviço novo", async ({ page }) => {
     await page.goto(`/${SEED_TENANT_SLUG}/servicos`);

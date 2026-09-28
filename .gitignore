@@ -41,6 +41,7 @@ Thumbs.db
 /blob-report/
 /playwright/.cache/
 tests/e2e/.e2e-fixture-ids.json
+tests/e2e/.auth/
 
 # Worktrees locais do Claude Code
 .claude/worktrees/

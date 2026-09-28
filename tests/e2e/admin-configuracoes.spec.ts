@@ -1,6 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { login } from "./fixtures/auth";
-import { SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD } from "./fixtures/test-data";
+import { OWNER_STORAGE_STATE } from "./fixtures/storage-state";
 import { startFakeServer, type FakeRoute } from "./fixtures/fake-http-server";
 import { prisma } from "./fixtures/db";
 
@@ -9,11 +8,13 @@ import { prisma } from "./fixtures/db";
  * (sem vazar segredo), "Sincronizar n8n" contra um fake local, e ativar/desativar o bot com
  * confirmação. Complementa `admin-secrets.spec.ts` (que já cobre "segredo nunca volta em texto
  * puro") — aqui o foco é integração com serviços externos.
+ *
+ * Sessão via `storageState` (ver `admin-secrets.spec.ts` / `login_rate_limit_e2e` na memória).
  */
+test.use({ storageState: OWNER_STORAGE_STATE });
+
 test.describe("Admin da plataforma: configurações e integrações", () => {
   test.beforeEach(async ({ page }) => {
-    await login(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-    await page.waitForURL(/\/(studio-demo|admin)/);
     await page.goto("/admin/configuracoes");
   });
 

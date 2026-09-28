@@ -1,7 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { login } from "./fixtures/auth";
-import { SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD, SEED_TENANT_SLUG, E2E_RUN_PREFIX } from "./fixtures/test-data";
+import { SEED_TENANT_SLUG, E2E_RUN_PREFIX } from "./fixtures/test-data";
+import { OWNER_STORAGE_STATE } from "./fixtures/storage-state";
 import { prisma } from "./fixtures/db";
+
+// Sessão via `storageState` (ver `admin-secrets.spec.ts` / `login_rate_limit_e2e` na memória).
+test.use({ storageState: OWNER_STORAGE_STATE });
 
 /**
  * Configurações → Bloqueios: um feriado criado pela tela para a empresa INTEIRA
@@ -47,9 +50,6 @@ test.describe("Bloqueios da empresa inteira aparecem em toda a Agenda", () => {
   });
 
   test("feriado criado em Configurações → Bloqueios aparece nas colunas de Ana E Bruna, e bloqueia o clique", async ({ page }) => {
-    await login(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-    await page.waitForURL(/\/(studio-demo|admin)/);
-
     await page.goto(`/${SEED_TENANT_SLUG}/configuracoes/bloqueios`);
     await page.getByRole("button", { name: "Novo bloqueio/feriado" }).first().click();
     await page.getByLabel("Tipo").selectOption("HOLIDAY");
@@ -95,8 +95,6 @@ test.describe("Bloqueios da empresa inteira aparecem em toda a Agenda", () => {
       },
     });
 
-    await login(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-    await page.waitForURL(/\/(studio-demo|admin)/);
     await page.goto(`/${SEED_TENANT_SLUG}/agenda`);
     await page.getByRole("button", { name: "Semana" }).click();
 

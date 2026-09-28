@@ -1,16 +1,18 @@
 import { test, expect } from "@playwright/test";
-import { login } from "./fixtures/auth";
-import { SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD } from "./fixtures/test-data";
+import { OWNER_STORAGE_STATE } from "./fixtures/storage-state";
 
 /**
  * dev@innochat.local também é platform admin (seed) — usado aqui para testar
  * Configurações da plataforma (docs/contratos.md Fase 1: "salvar segredo e confirmar que nunca
  * volta em texto puro; segredo interno exibido uma vez").
+ *
+ * Sessão já autenticada via `storageState` (gerada uma vez em `global-setup.ts`) — evita logar
+ * de novo pela UI em cada teste (rate limit de login, ver `login_rate_limit_e2e` na memória).
  */
+test.use({ storageState: OWNER_STORAGE_STATE });
+
 test.describe("Admin da plataforma: segredos nunca voltam em texto puro", () => {
   test.beforeEach(async ({ page }) => {
-    await login(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-    await page.waitForURL(/\/(studio-demo|admin)/); // espera o cookie de sessão valer antes de navegar
     await page.goto("/admin/configuracoes");
   });
 

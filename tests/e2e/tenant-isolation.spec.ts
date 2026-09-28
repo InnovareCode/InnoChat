@@ -1,12 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { login } from "./fixtures/auth";
-import { SEED_TENANT_SLUG, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD, loadRunFixtures } from "./fixtures/test-data";
+import { SEED_TENANT_SLUG, loadRunFixtures } from "./fixtures/test-data";
+import { OWNER_STORAGE_STATE } from "./fixtures/storage-state";
+
+// Sessão via `storageState` (ver `admin-secrets.spec.ts` / `login_rate_limit_e2e` na memória).
+test.use({ storageState: OWNER_STORAGE_STATE });
 
 test.describe("Isolamento entre empresas (docs/contratos.md Fase 2 — usuário de A tentando id de B)", () => {
-  test.beforeEach(async ({ page }) => {
-    await login(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-    await page.waitForURL(new RegExp(`/${SEED_TENANT_SLUG}(/|$)`));
-  });
 
   test("profissional de OUTRA empresa na URL (mesmo slug de A) → 404, nunca vê os dados de B", async ({ page }) => {
     const { professionalBId } = loadRunFixtures();

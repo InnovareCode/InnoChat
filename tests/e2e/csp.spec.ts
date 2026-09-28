@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
-import { login } from "./fixtures/auth";
-import { SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD, SEED_TENANT_SLUG } from "./fixtures/test-data";
+import { SEED_TENANT_SLUG, STAFF_PASSWORD, loadRunFixtures } from "./fixtures/test-data";
+import { OWNER_STORAGE_STATE } from "./fixtures/storage-state";
 import { collectCspViolations } from "./fixtures/csp";
 import { prisma } from "./fixtures/db";
 
@@ -10,13 +10,24 @@ import { prisma } from "./fixtures/db";
  * Components) não disparam NENHUMA violação no console do navegador — login, agenda, admin e
  * assinatura (QR do Pix). WhatsApp (QR da Evolution, também `data:`) é coberto em
  * `whatsapp.spec.ts`, que usa o mesmo helper `collectCspViolations`.
+ *
+ * Sessão via `storageState` para as telas que só precisam estar autenticadas (Agenda/Admin/
+ * Assinatura) — ver `login_rate_limit_e2e` na memória. O teste "login" abaixo continua logando
+ * de verdade: é a própria tela de login sob teste, e `/login` renderiza o form independente de
+ * já haver sessão (`src/app/(public)/login/page.tsx` não redireciona), então o `storageState`
+ * prévio não interfere. Usa o STAFF (não o OWNER de seed) nesse login real — cada sessão de
+ * `storageState` abaixo é independente da sessão criada aqui, e evita somar mais uma tentativa
+ * no teto de `dev@innochat.local` (8/15min).
  */
+test.use({ storageState: OWNER_STORAGE_STATE });
+
 test.describe("CSP (next.config.ts): nenhuma violação nas telas principais", () => {
   test("login: sem violação de CSP", async ({ page }) => {
+    const { staffEmail } = loadRunFixtures();
     const { violations } = collectCspViolations(page);
     await page.goto("/login");
-    await page.getByLabel("E-mail").fill(SEED_OWNER_EMAIL);
-    await page.getByLabel("Senha").fill(SEED_OWNER_PASSWORD);
+    await page.getByLabel("E-mail").fill(staffEmail);
+    await page.getByLabel("Senha").fill(STAFF_PASSWORD);
     await page.getByRole("button", { name: "Entrar" }).click();
     await page.waitForURL(/\/(studio-demo|admin)/);
     expect(violations).toEqual([]);
@@ -24,8 +35,6 @@ test.describe("CSP (next.config.ts): nenhuma violação nas telas principais", (
 
   test("Agenda (dia e semana): sem violação de CSP", async ({ page }) => {
     const { violations } = collectCspViolations(page);
-    await login(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-    await page.waitForURL(/\/(studio-demo|admin)/);
     await page.goto(`/${SEED_TENANT_SLUG}/agenda`);
     await page.getByRole("button", { name: "Semana" }).click();
     await page.waitForTimeout(500); // dá tempo de qualquer violação assíncrona (ex.: CSS-in-JS) aparecer
@@ -34,8 +43,6 @@ test.describe("CSP (next.config.ts): nenhuma violação nas telas principais", (
 
   test("Admin → Configurações: sem violação de CSP", async ({ page }) => {
     const { violations } = collectCspViolations(page);
-    await login(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-    await page.waitForURL(/\/(studio-demo|admin)/);
     await page.goto("/admin/configuracoes");
     await page.waitForTimeout(500);
     expect(violations).toEqual([]);
@@ -60,8 +67,6 @@ test.describe("CSP (next.config.ts): nenhuma violação nas telas principais", (
     });
     try {
       const { violations } = collectCspViolations(page);
-      await login(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-      await page.waitForURL(/\/(studio-demo|admin)/);
       await page.goto(`/${SEED_TENANT_SLUG}/assinatura`);
       // Espera o `<img>` do QR (gerado client-side via `qrcode`, `QRCode.toDataURL`) aparecer.
       await expect(page.getByAltText("QR code Pix para pagamento da fatura")).toBeVisible({ timeout: 10_000 });

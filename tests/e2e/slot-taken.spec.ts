@@ -1,6 +1,6 @@
 import { test, expect, type Browser } from "@playwright/test";
-import { login } from "./fixtures/auth";
-import { SEED_TENANT_SLUG, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD, E2E_RUN_PREFIX } from "./fixtures/test-data";
+import { SEED_TENANT_SLUG, E2E_RUN_PREFIX } from "./fixtures/test-data";
+import { OWNER_STORAGE_STATE } from "./fixtures/storage-state";
 
 /**
  * docs/contratos.md Fase 2/4: "dois contextos tentando o mesmo horário → um recebe a mensagem
@@ -10,15 +10,12 @@ import { SEED_TENANT_SLUG, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD, E2E_RUN_PREFIX
  * cru ou uma tela quebrada.
  */
 test("dois contextos disputando o mesmo horário: um agenda, o outro vê a mensagem amigável de SLOT_TAKEN", async ({ browser }: { browser: Browser }) => {
-  const contextA = await browser.newContext();
-  const contextB = await browser.newContext();
+  // Sessão via `storageState` (ver `admin-secrets.spec.ts` / `login_rate_limit_e2e` na memória) —
+  // dois contexts independentes, cada um já autenticado como o mesmo OWNER, sem logar de novo.
+  const contextA = await browser.newContext({ storageState: OWNER_STORAGE_STATE });
+  const contextB = await browser.newContext({ storageState: OWNER_STORAGE_STATE });
   const pageA = await contextA.newPage();
   const pageB = await contextB.newPage();
-
-  await login(pageA, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-  await login(pageB, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-  await pageA.waitForURL(new RegExp(`/${SEED_TENANT_SLUG}(/|$)`));
-  await pageB.waitForURL(new RegExp(`/${SEED_TENANT_SLUG}(/|$)`));
 
   const bookableDay = nextWeekdayISO(4); // quinta — expediente normal, slot ainda não usado por outra spec
   await pageA.goto(`/${SEED_TENANT_SLUG}/agenda`);

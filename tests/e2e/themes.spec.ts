@@ -1,7 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
 import { login } from "./fixtures/auth";
 import { prisma } from "./fixtures/db";
-import { SEED_TENANT_SLUG, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD, STAFF_PASSWORD, E2E_RUN_PREFIX, loadRunFixtures } from "./fixtures/test-data";
+import { SEED_TENANT_SLUG, STAFF_PASSWORD, E2E_RUN_PREFIX, loadRunFixtures } from "./fixtures/test-data";
+import { OWNER_STORAGE_STATE } from "./fixtures/storage-state";
 
 const THEMES = [
   { value: "INDIGO_CLINICO", label: "Índigo Clínico" },
@@ -20,10 +21,11 @@ async function noHorizontalOverflow(page: Page): Promise<{ ok: boolean; scrollWi
 }
 
 test.describe("Temas do painel (docs/contratos.md Fase 1 — Configurações → Aparência)", () => {
-  test("OWNER troca o tema em Configurações → Aparência e o painel reflete no data-theme", async ({ page }) => {
-    await login(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-    await page.waitForURL(new RegExp(`/${SEED_TENANT_SLUG}(/|$)`));
+  // OWNER via `storageState` (gerado uma vez em `global-setup.ts`) — ver `login_rate_limit_e2e`
+  // na memória; STAFF (abaixo) continua com login real de verdade, aparece só 1x na suíte.
+  test.use({ storageState: OWNER_STORAGE_STATE });
 
+  test("OWNER troca o tema em Configurações → Aparência e o painel reflete no data-theme", async ({ page }) => {
     await page.goto(`/${SEED_TENANT_SLUG}/configuracoes/aparencia`);
     await page.getByRole("radio", { name: /Âmbar Estúdio/ }).check({ force: true });
     await page.getByRole("button", { name: "Salvar tema" }).click();
@@ -59,8 +61,6 @@ test.describe("Temas do painel (docs/contratos.md Fase 1 — Configurações →
   ]) {
     test(`3 temas sem overflow horizontal na Agenda (dia e semana) em ${viewport.name}px`, async ({ page }) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
-      await login(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-      await page.waitForURL(new RegExp(`/${SEED_TENANT_SLUG}(/|$)`));
 
       for (const theme of THEMES) {
         await setTheme(page, theme.value);
@@ -84,8 +84,6 @@ test.describe("Temas do painel (docs/contratos.md Fase 1 — Configurações →
 
   test("screenshot de evidência: Agenda com bloqueio visível", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-    await page.waitForURL(new RegExp(`/${SEED_TENANT_SLUG}(/|$)`));
 
     const tenant = await prisma.tenant.findUniqueOrThrow({ where: { slug: SEED_TENANT_SLUG } });
     const targetDay = nextWeekdayISO(3); // quarta — dia de expediente normal

@@ -36,5 +36,11 @@ export default async function globalTeardown() {
     // já não existe — ok.
   }
 
+  try {
+    fs.rmSync("./tests/e2e/.auth", { recursive: true, force: true });
+  } catch {
+    // já não existe — ok.
+  }
+
   await prisma.$disconnect();
 }
