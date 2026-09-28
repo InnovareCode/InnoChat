@@ -1,0 +1,352 @@
+{
+  "id": "dPMhT4MqGglCpFSw",
+  "name": "innochat-cron",
+  "active": false,
+  "isArchived": false,
+  "versionId": "8f41f2c5-0eaa-4f6e-a1ee-a1fb8f3fc3e7",
+  "activeVersionId": null,
+  "triggerCount": 0,
+  "createdAt": "2026-09-28T21:44:32.035Z",
+  "updatedAt": "2026-09-28T21:44:32.035Z",
+  "settings": {
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "timezone": "America/Sao_Paulo",
+    "executionOrder": "v1",
+    "executionTimeout": 300,
+    "errorWorkflow": "GZSwTNgvVt4LYnwW",
+    "availableInMCP": true
+  },
+  "connections": {
+    "De hora em hora": {
+      "main": [
+        [
+          {
+            "node": "Config cron",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config cron": {
+      "main": [
+        [
+          {
+            "node": "Chamar billing/tick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chamar billing/tick": {
+      "main": [
+        [
+          {
+            "node": "Resultado do tick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resultado do tick": {
+      "main": [
+        [
+          {
+            "node": "Tick ok",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tentar de novo? (5xx)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Falha no tick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tentar de novo? (5xx)": {
+      "main": [
+        [
+          {
+            "node": "Esperar (5xx)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Falha no tick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Esperar (5xx)": {
+      "main": [
+        [
+          {
+            "node": "Chamar billing/tick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "nodes": [
+    {
+      "id": "34aa83a3-d0f8-4790-b224-6ae310792fd8",
+      "name": "De hora em hora",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1,
+              "triggerAtMinute": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d2d3f45d-51d9-41c1-9ee8-4eb80f1d0e33",
+      "name": "Config cron",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "painelUrl",
+              "name": "painelUrl",
+              "value": "https://PAINEL_A_DEFINIR/api/internal/v1",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f0d6b123-4df0-4226-8b16-2e9a58933b61",
+      "name": "Chamar billing/tick",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config cron').first().json.painelUrl }}/billing/tick",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "retryOnFail": true
+    },
+    {
+      "id": "149774cb-670b-40f2-8212-4ff5144978b7",
+      "name": "Resultado do tick",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        660,
+        300
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.statusCode }}",
+                    "operator": {
+                      "type": "number",
+                      "operation": "lt"
+                    },
+                    "rightValue": 300
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ok"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.statusCode }}",
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    },
+                    "rightValue": 500
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "5xx"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "erro"
+        }
+      }
+    },
+    {
+      "id": "57402bd5-645e-4e77-be5c-ae66e3dbfb09",
+      "name": "Tick ok",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        880,
+        150
+      ]
+    },
+    {
+      "id": "9877eb27-14dc-406e-a196-31dd929b7642",
+      "name": "Tentar de novo? (5xx)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $runIndex < 2 }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "002d1f74-9d1f-4856-b3fc-158f2b2fae0e",
+      "name": "Esperar (5xx)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        220
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "webhookId": "a9a9e94d-beff-47ed-9d65-4779b050aeef"
+    },
+    {
+      "id": "f00c8ffc-3d56-4f9b-8d45-84e8bd78b825",
+      "name": "Falha no tick",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        450
+      ],
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "=POST /billing/tick respondeu HTTP {{ $json.statusCode }}"
+      }
+    },
+    {
+      "id": "3c644d5e-a583-4f17-bd1b-e7d5537e9b87",
+      "name": "Sticky Note 0c22cee0",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        170,
+        250
+      ],
+      "parameters": {
+        "content": "## innochat-cron\nChama `POST /billing/tick` (idempotente) de hora em hora.\nPreencha `painelUrl` no nó **Config cron** e selecione a credencial **InnoChat Painel (Bearer)**. Não renomeie o nó, o campo nem a credencial (a sincronização do painel depende deles).\nRetry: timeout/rede no próprio nó; 5xx via laço (2 novas tentativas, 5 s); 4xx falha direto.",
+        "color": 4,
+        "width": 300,
+        "height": 200
+      }
+    }
+  ],
+  "activeVersion": null,
+  "tags": [],
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  },
+  "parentFolderId": null,
+  "description": "Cron do InnoChat: de hora em hora chama POST /billing/tick do painel (idempotente). 5xx tenta mais 2 vezes; 4xx/5xx final vira erro."
+}
