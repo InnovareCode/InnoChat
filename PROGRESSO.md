@@ -14,6 +14,13 @@ multiempresa para clínicas, salões e qualquer negócio de serviços com horár
 - Conversa por **menu guiado** (sem IA).
 - Infra: **VPS atual com Easypanel** + Evolution API já existente. n8n conectado via MCP (vazio no início).
 
+- 2026-09-28 (tarde): esqueleto (Vega) e schema com EXCLUDE provado (Cronos) entregues e commitados.
+  Em andamento: Lyra (temas por empresa, kit UI, shell, login, admin shell) ∥ Vega (admin da plataforma, core/agenda, Server Actions, contratos).
+
+- 2026-09-28 (noite): Fases 2 (telas + polimento), 4 (API do bot) e 7 (cobrança backend) commitadas; bot bloqueado por assinatura ligado.
+  Em andamento: workflow n8n (Fase 5), exceções na Agenda (Lyra). Próximo: Íris (QA E2E com Playwright), Órion (revisão), Fase 3 (QR) e deploy dependem das credenciais do dono.
+  Pendências técnicas: validar assinatura do webhook MP contra a doc oficial/sandbox real; fixtures da Evolution ainda não capturadas do servidor real.
+
 ## Concluído
 - Repositório git iniciado; projeto registrado no Painel de Tarefas (PM-AVAN, slug `innochat`).
 

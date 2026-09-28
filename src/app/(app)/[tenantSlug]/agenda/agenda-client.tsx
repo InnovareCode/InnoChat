@@ -19,6 +19,7 @@ import {
   friendlyTimezoneLabel,
 } from "@/components/lib/format-date";
 import { listAppointmentsAction } from "@/modules/agenda/appointment-actions";
+import { listScheduleExceptionsAction } from "@/modules/agenda/catalog-actions";
 import {
   NovoAgendamentoDialog,
   type AgendaProfessional,
@@ -46,6 +47,21 @@ type ApptRaw = {
   contact: { name: string | null; phoneE164: string | null };
   service: { name: string };
   professional: { name: string };
+};
+
+type ScheduleExceptionRow = {
+  id: string;
+  /** `null` = bloqueio/feriado da empresa inteira (afeta todos os profissionais). */
+  professionalId: string | null;
+  type: "BLOCK" | "HOLIDAY";
+  startsAt: string | Date;
+  endsAt: string | Date;
+  reason: string | null;
+};
+
+const EXCEPTION_TYPE_LABEL: Record<ScheduleExceptionRow["type"], string> = {
+  BLOCK: "Bloqueio",
+  HOLIDAY: "Feriado",
 };
 
 /** Cor por status — mesma leitura visual em bloco de agenda e em badge. */
@@ -117,6 +133,7 @@ export function AgendaClient({
   const [view, setView] = useState<"day" | "week">("day");
   const [dateISO, setDateISO] = useState(() => formatInTimeZone(new Date(), timezone, "yyyy-MM-dd"));
   const [appointments, setAppointments] = useState<ApptRaw[]>([]);
+  const [exceptions, setExceptions] = useState<ScheduleExceptionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [novoOpen, setNovoOpen] = useState(false);
   const [novoPrefill, setNovoPrefill] = useState<NovoAgendamentoPrefill | undefined>(undefined);
@@ -135,12 +152,18 @@ export function AgendaClient({
     setLoading(true);
     const from = fromZonedTime(`${rangeFrom}T00:00:00`, timezone);
     const to = fromZonedTime(`${addDaysISO(rangeFrom, rangeDays)}T00:00:00`, timezone);
-    listAppointmentsAction(tenantSlug, { from: from.toISOString(), to: to.toISOString(), limit: 500 })
-      .then((result) => {
-        if (result.ok) {
+    Promise.all([
+      listAppointmentsAction(tenantSlug, { from: from.toISOString(), to: to.toISOString(), limit: 500 }),
+      listScheduleExceptionsAction(tenantSlug, { from: from.toISOString(), to: to.toISOString() }),
+    ])
+      .then(([apptResult, exceptionResult]) => {
+        if (apptResult.ok) {
           setAppointments(
-            (result.data as ApptRaw[]).filter((a) => a.status !== "CANCELED"),
+            (apptResult.data as ApptRaw[]).filter((a) => a.status !== "CANCELED"),
           );
+        }
+        if (exceptionResult.ok) {
+          setExceptions(exceptionResult.data as ScheduleExceptionRow[]);
         }
       })
       .finally(() => setLoading(false));
@@ -296,6 +319,7 @@ export function AgendaClient({
           timezone={timezone}
           professionals={activeProfessionals}
           appointments={appointments}
+          exceptions={exceptions}
           now={nowTick}
           onSlotClick={openNovoAt}
           onApptClick={openDetail}
@@ -306,6 +330,7 @@ export function AgendaClient({
           timezone={timezone}
           professionals={activeProfessionals}
           appointments={appointments}
+          exceptions={exceptions}
           professionalId={weekProfessionalId}
           now={nowTick}
           onDayClick={(d) => {
@@ -370,11 +395,69 @@ const OUT_OF_HOURS_STYLE: React.CSSProperties = {
   backgroundColor: "var(--color-bg)",
 };
 
+/**
+ * Fundo hachurado tingido de "alerta" — sinaliza bloqueio/feriado, diferente
+ * do hachurado neutro de "fora do expediente" (`OUT_OF_HOURS_STYLE`). Fica
+ * por cima do slot livre (bloqueia o clique) mas abaixo de um agendamento
+ * real (z-10) — se por acaso já existir um agendamento marcado ali, ele
+ * continua visível e clicável em vez de ficar escondido atrás do bloqueio.
+ */
+const EXCEPTION_BAND_STYLE: React.CSSProperties = {
+  backgroundImage:
+    "repeating-linear-gradient(135deg, var(--color-warning) 0, var(--color-warning) 1.5px, transparent 1.5px, transparent 8px)",
+  backgroundColor: "var(--color-warning-bg)",
+};
+
+/** Retorna as exceções (bloqueio/feriado) que tocam `dateISO`, dentro do fuso do tenant. */
+function exceptionsOverlappingDay(
+  exceptions: ScheduleExceptionRow[],
+  dateISO: string,
+  timezone: string,
+): ScheduleExceptionRow[] {
+  const dayStart = fromZonedTime(`${dateISO}T00:00:00`, timezone).getTime();
+  const dayEnd = fromZonedTime(`${addDaysISO(dateISO, 1)}T00:00:00`, timezone).getTime();
+  return exceptions.filter((e) => new Date(e.startsAt).getTime() < dayEnd && new Date(e.endsAt).getTime() > dayStart);
+}
+
+/** Posição/altura (px) da parte da exceção que cai dentro da janela visível do dia, ou `null` se não sobra nada. */
+function exceptionBandPosition(
+  exception: ScheduleExceptionRow,
+  dateISO: string,
+  timezone: string,
+  startMin: number,
+  endMin: number,
+  rowHeightPx: number,
+): { top: number; height: number } | null {
+  const dayStartMs = fromZonedTime(`${dateISO}T00:00:00`, timezone).getTime();
+  const dayEndMs = fromZonedTime(`${addDaysISO(dateISO, 1)}T00:00:00`, timezone).getTime();
+  const clippedStartMs = Math.max(new Date(exception.startsAt).getTime(), dayStartMs);
+  const clippedEndMs = Math.min(new Date(exception.endsAt).getTime(), dayEndMs);
+  if (clippedEndMs <= clippedStartMs) return null;
+
+  let startLocalMin = toMinutes(formatInTimeZone(new Date(clippedStartMs), timezone, "HH:mm"));
+  // "00:00" do dia seguinte (fim exatamente na virada) deve valer como fim do dia (24:00), não início.
+  let endLocalMin =
+    clippedEndMs === dayEndMs ? 24 * 60 : toMinutes(formatInTimeZone(new Date(clippedEndMs), timezone, "HH:mm"));
+
+  startLocalMin = Math.max(startLocalMin, startMin);
+  endLocalMin = Math.min(endLocalMin, endMin);
+  if (endLocalMin <= startLocalMin) return null;
+
+  const top = ((startLocalMin - startMin) / SLOT_MIN) * rowHeightPx;
+  const height = Math.max(((endLocalMin - startLocalMin) / SLOT_MIN) * rowHeightPx, rowHeightPx / 2);
+  return { top, height };
+}
+
+function exceptionLabel(exception: ScheduleExceptionRow): string {
+  return exception.reason?.trim() || EXCEPTION_TYPE_LABEL[exception.type];
+}
+
 function DayView({
   dateISO,
   timezone,
   professionals,
   appointments,
+  exceptions,
   now,
   onSlotClick,
   onApptClick,
@@ -383,6 +466,7 @@ function DayView({
   timezone: string;
   professionals: ProfessionalRow[];
   appointments: ApptRaw[];
+  exceptions: ScheduleExceptionRow[];
   now: Date;
   onSlotClick: (professionalId: string, startsAtISO: string) => void;
   onApptClick: (a: ApptRaw) => void;
@@ -411,6 +495,12 @@ function DayView({
   function isWithinWorkingHours(prof: ProfessionalRow, minuteOffset: number): boolean {
     const min = startMin + minuteOffset;
     return prof.workingHours.some((h) => h.weekday === weekday && min >= toMinutes(h.startTime) && min < toMinutes(h.endTime));
+  }
+
+  const dayExceptions = useMemo(() => exceptionsOverlappingDay(exceptions, dateISO, timezone), [exceptions, dateISO, timezone]);
+  /** Bloqueio/feriado da empresa inteira (`professionalId: null`) vale para todo profissional. */
+  function bandsForProfessional(professionalId: string): ScheduleExceptionRow[] {
+    return dayExceptions.filter((e) => e.professionalId === null || e.professionalId === professionalId);
   }
 
   return (
@@ -484,6 +574,22 @@ function DayView({
                     })
                   )}
 
+                  {!isOffToday &&
+                    bandsForProfessional(prof.id).map((exception) => {
+                      const position = exceptionBandPosition(exception, dateISO, timezone, startMin, endMin, ROW_HEIGHT_PX);
+                      if (!position) return null;
+                      return (
+                        <div
+                          key={exception.id}
+                          style={{ top: position.top, height: position.height, ...EXCEPTION_BAND_STYLE }}
+                          className="absolute left-0 right-0 z-[8] flex items-center overflow-hidden px-1.5 text-[11px] font-medium text-warning"
+                          title={`${EXCEPTION_TYPE_LABEL[exception.type]}${exception.reason ? ` — ${exception.reason}` : ""}`}
+                        >
+                          <span className="truncate">{exceptionLabel(exception)}</span>
+                        </div>
+                      );
+                    })}
+
                   {byProfessional(prof.id).map((a) => {
                     const startLocalMin = toMinutes(formatInTimeZone(new Date(a.startsAt), timezone, "HH:mm"));
                     const endLocalMin = toMinutes(formatInTimeZone(new Date(a.endsAt), timezone, "HH:mm"));
@@ -526,12 +632,18 @@ function DayView({
           const items = byProfessional(prof.id).sort((a, b) => a.startsAt.toString().localeCompare(b.startsAt.toString()));
           const todaysHours = workingHoursForWeekday(prof, weekday);
           const isOffToday = todaysHours.length === 0;
+          const bands = bandsForProfessional(prof.id);
           return (
             <Card key={prof.id}>
               <div className="flex items-center justify-between border-b border-border p-4">
                 <div>
                   <p className="font-display text-sm font-bold text-text">{prof.name}</p>
                   <p className="text-xs tabular-nums text-text-secondary">{workingHoursSummary(todaysHours)}</p>
+                  {!isOffToday && bands.length > 0 ? (
+                    <p className="mt-0.5 text-xs font-medium text-warning">
+                      {bands.map((e) => exceptionLabel(e)).join(", ")}
+                    </p>
+                  ) : null}
                 </div>
                 {!isOffToday ? (
                   <Button
@@ -597,6 +709,7 @@ function WeekView({
   timezone,
   professionals,
   appointments,
+  exceptions,
   professionalId,
   now,
   onDayClick,
@@ -606,6 +719,7 @@ function WeekView({
   timezone: string;
   professionals: ProfessionalRow[];
   appointments: ApptRaw[];
+  exceptions: ScheduleExceptionRow[];
   professionalId: string;
   now: Date;
   onDayClick: (dateISO: string) => void;
@@ -617,6 +731,14 @@ function WeekView({
   const filteredAppointments = professionalId
     ? appointments.filter((a) => a.professionalId === professionalId)
     : appointments;
+  // "Todos": mostra bloqueio da empresa OU de qualquer profissional ativo filtrado; com um
+  // profissional selecionado, só o dele + o da empresa inteira.
+  const relevantProfessionalIds = new Set(filteredProfessionals.map((p) => p.id));
+  function bandsForDay(dateISO: string): ScheduleExceptionRow[] {
+    return exceptionsOverlappingDay(exceptions, dateISO, timezone).filter(
+      (e) => e.professionalId === null || relevantProfessionalIds.has(e.professionalId),
+    );
+  }
 
   const { startMin, endMin } = useMemo(
     () => computeWeekWindow(days, filteredProfessionals, filteredAppointments, timezone),
@@ -705,6 +827,21 @@ function WeekView({
                     );
                   })}
 
+                  {bandsForDay(dateISO).map((exception) => {
+                    const position = exceptionBandPosition(exception, dateISO, timezone, startMin, endMin, WEEK_ROW_HEIGHT_PX);
+                    if (!position) return null;
+                    return (
+                      <div
+                        key={exception.id}
+                        style={{ top: position.top, height: position.height, ...EXCEPTION_BAND_STYLE }}
+                        className="absolute left-0 right-0 z-[8] flex items-center overflow-hidden px-1 text-[10px] font-medium text-warning"
+                        title={`${EXCEPTION_TYPE_LABEL[exception.type]}${exception.reason ? ` — ${exception.reason}` : ""}`}
+                      >
+                        <span className="truncate">{exceptionLabel(exception)}</span>
+                      </div>
+                    );
+                  })}
+
                   {dayAppts.map((a) => {
                     const startLocalMin = toMinutes(formatInTimeZone(new Date(a.startsAt), timezone, "HH:mm"));
                     const endLocalMin = toMinutes(formatInTimeZone(new Date(a.endsAt), timezone, "HH:mm"));
@@ -741,16 +878,22 @@ function WeekView({
         {days.map((dateISO) => {
           const isToday = dateISO === todayISO;
           const dayAppts = apptsForDay(dateISO);
+          const bands = bandsForDay(dateISO);
           return (
             <Card key={dateISO} className={cn(isToday && "ring-1 ring-primary")}>
               <button
                 type="button"
                 onClick={() => onDayClick(dateISO)}
-                className="flex w-full items-center justify-between border-b border-border p-3 text-left transition-colors duration-150 hover:bg-bg motion-reduce:transition-none"
+                className="flex w-full items-center justify-between gap-3 border-b border-border p-3 text-left transition-colors duration-150 hover:bg-bg motion-reduce:transition-none"
               >
-                <p className="text-sm font-medium text-text">
-                  {capitalizeFirst(formatShortWeekdayLabel(dateISO))}, {formatDayNumber(dateISO)}
-                </p>
+                <div>
+                  <p className="text-sm font-medium text-text">
+                    {capitalizeFirst(formatShortWeekdayLabel(dateISO))}, {formatDayNumber(dateISO)}
+                  </p>
+                  {bands.length > 0 ? (
+                    <p className="mt-0.5 text-xs font-medium text-warning">{bands.map((e) => exceptionLabel(e)).join(", ")}</p>
+                  ) : null}
+                </div>
                 {isToday ? <Badge variant="primary">Hoje</Badge> : null}
               </button>
               <div className="flex flex-col divide-y divide-border">
