@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { MessageCircle, Smartphone } from "lucide-react";
+import { Smartphone } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { WhatsappEmptyIllustration } from "@/components/ui/empty-illustration";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
@@ -137,7 +138,8 @@ export function WhatsappClient({
 
       {instances.length === 0 ? (
         <EmptyState
-          icon={MessageCircle}
+          variant="highlight"
+          illustration={<WhatsappEmptyIllustration className="h-full w-full" />}
           title="Conecte seu primeiro WhatsApp"
           description="Gere um QR code e escaneie com o celular do número que vai atender seus clientes pelo bot."
           action={isOwner ? renderConnectTrigger() : undefined}

@@ -12,6 +12,7 @@ import { Field } from "@/components/ui/field";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
+import { Avatar } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -184,7 +185,12 @@ export function ProfessionalDetailClient({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title={professional.name}
+        title={
+          <span className="flex items-center gap-3">
+            <Avatar id={professional.id} name={professional.name} />
+            {professional.name}
+          </span>
+        }
         description="Dados, serviços, expediente semanal e bloqueios."
         action={
           <Button variant="ghost" asChild>
@@ -205,7 +211,7 @@ export function ProfessionalDetailClient({
         </Alert>
       ) : null}
 
-      <Card>
+      <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>Dados</CardTitle>
         </CardHeader>
@@ -235,7 +241,7 @@ export function ProfessionalDetailClient({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>Serviços que realiza</CardTitle>
           <CardDescription>Marque os serviços que este profissional atende.</CardDescription>
@@ -272,7 +278,7 @@ export function ProfessionalDetailClient({
         </CardFooter>
       </Card>
 
-      <Card>
+      <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>Expediente semanal</CardTitle>
           <CardDescription>Vários intervalos por dia — por exemplo, manhã e tarde com almoço no meio.</CardDescription>
@@ -342,7 +348,7 @@ export function ProfessionalDetailClient({
         </CardFooter>
       </Card>
 
-      <Card>
+      <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>Bloqueios e folgas</CardTitle>
           <CardDescription>Períodos em que este profissional não atende.</CardDescription>

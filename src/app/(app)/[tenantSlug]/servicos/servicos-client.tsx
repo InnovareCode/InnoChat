@@ -209,68 +209,120 @@ export function ServicosClient({
           }
         />
       ) : (
-        <Card>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeadCell>Nome</TableHeadCell>
-                <TableHeadCell>Duração</TableHeadCell>
-                <TableHeadCell>Intervalo</TableHeadCell>
-                <TableHeadCell>Preço</TableHeadCell>
-                <TableHeadCell>Status</TableHeadCell>
-                <TableHeadCell className="text-right">Ações</TableHeadCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {services.map((service) => (
-                <TableRow key={service.id}>
-                  <TableCell className="font-medium">{service.name}</TableCell>
-                  <TableCell>{service.durationMin} min</TableCell>
-                  <TableCell>{service.bufferAfterMin > 0 ? `${service.bufferAfterMin} min` : "—"}</TableCell>
-                  <TableCell>{formatPrice(service.priceCents)}</TableCell>
-                  <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => toggleActive(service)}
-                      disabled={isPending || writeBlocked}
-                      className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
-                      title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
-                      aria-label={service.active ? `Desativar ${service.name}` : `Ativar ${service.name}`}
-                    >
-                      <Badge variant={service.active ? "success" : "neutral"}>
-                        {service.active ? "Ativo" : "Inativo"}
-                      </Badge>
-                    </button>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Editar ${service.name}`}
-                        onClick={() => openEdit(service)}
-                        disabled={writeBlocked}
-                        title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
-                      >
-                        <Pencil className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Excluir ${service.name}`}
-                        onClick={() => setConfirmDelete(service)}
-                        disabled={writeBlocked}
-                        title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                    </div>
-                  </TableCell>
+        <>
+          <Card className="hidden rounded-hero md:block">
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableHeadCell>Nome</TableHeadCell>
+                  <TableHeadCell>Duração</TableHeadCell>
+                  <TableHeadCell>Intervalo</TableHeadCell>
+                  <TableHeadCell>Preço</TableHeadCell>
+                  <TableHeadCell>Status</TableHeadCell>
+                  <TableHeadCell className="text-right">Ações</TableHeadCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+              </TableHead>
+              <TableBody>
+                {services.map((service) => (
+                  <TableRow key={service.id}>
+                    <TableCell className="font-medium">{service.name}</TableCell>
+                    <TableCell>{service.durationMin} min</TableCell>
+                    <TableCell>{service.bufferAfterMin > 0 ? `${service.bufferAfterMin} min` : "—"}</TableCell>
+                    <TableCell>{formatPrice(service.priceCents)}</TableCell>
+                    <TableCell>
+                      <button
+                        type="button"
+                        onClick={() => toggleActive(service)}
+                        disabled={isPending || writeBlocked}
+                        className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                        title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+                        aria-label={service.active ? `Desativar ${service.name}` : `Ativar ${service.name}`}
+                      >
+                        <Badge variant={service.active ? "success" : "neutral"}>
+                          {service.active ? "Ativo" : "Inativo"}
+                        </Badge>
+                      </button>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Editar ${service.name}`}
+                          onClick={() => openEdit(service)}
+                          disabled={writeBlocked}
+                          title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Excluir ${service.name}`}
+                          onClick={() => setConfirmDelete(service)}
+                          disabled={writeBlocked}
+                          title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+
+          <div className="flex flex-col gap-3 md:hidden">
+            {services.map((service) => (
+              <Card key={service.id} className="rounded-hero p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium text-text">{service.name}</p>
+                  <button
+                    type="button"
+                    onClick={() => toggleActive(service)}
+                    disabled={isPending || writeBlocked}
+                    className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                    title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+                    aria-label={service.active ? `Desativar ${service.name}` : `Ativar ${service.name}`}
+                  >
+                    <Badge variant={service.active ? "success" : "neutral"}>
+                      {service.active ? "Ativo" : "Inativo"}
+                    </Badge>
+                  </button>
+                </div>
+                <p className="mt-1 text-sm text-text-secondary">
+                  {service.durationMin} min
+                  {service.bufferAfterMin > 0 ? ` · ${service.bufferAfterMin} min de intervalo` : ""} ·{" "}
+                  {formatPrice(service.priceCents)}
+                </p>
+                <div className="mt-3 flex justify-end gap-1 border-t border-border pt-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => openEdit(service)}
+                    disabled={writeBlocked}
+                    title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+                  >
+                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                    Editar
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setConfirmDelete(service)}
+                    disabled={writeBlocked}
+                    title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+                    className="text-danger hover:bg-danger-bg"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    Excluir
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

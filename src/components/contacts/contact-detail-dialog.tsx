@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar } from "@/components/ui/avatar";
 import { useToast } from "@/components/ui/toast";
 import { formatPhoneDisplay } from "@/components/lib/format-phone";
 import { formatDateTimeLabel, formatDateTimeShortLabel } from "@/components/lib/format-date";
@@ -184,7 +186,11 @@ export function ContactDetailDialog({
           <DialogDescription>Dados, histórico de agendamentos e controle do bot.</DialogDescription>
 
           {loading ? (
-            <p className="mt-4 text-sm text-text-secondary">Carregando…</p>
+            <div className="mt-4 flex flex-col gap-3">
+              <Skeleton className="h-6 w-2/3" />
+              <Skeleton className="h-16" />
+              <Skeleton className="h-24" />
+            </div>
           ) : error ? (
             <Alert variant="danger" className="mt-4">
               {error}
@@ -192,7 +198,9 @@ export function ContactDetailDialog({
           ) : detail ? (
             <div className="mt-4 flex flex-col gap-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
+                <div className="flex items-start gap-3">
+                  <Avatar id={detail.id} name={detail.displayName} />
+                  <div>
                   <div className="flex items-center gap-2">
                     <p className="font-display text-lg font-bold text-text">{detail.displayName}</p>
                     <Badge variant={detail.source === "WHATSAPP" ? "success" : "neutral"}>
@@ -206,6 +214,7 @@ export function ContactDetailDialog({
                   {detail.pushName && detail.pushName !== detail.name ? (
                     <p className="text-xs text-text-secondary">Nome no WhatsApp: {detail.pushName}</p>
                   ) : null}
+                  </div>
                 </div>
                 <Button
                   variant="secondary"

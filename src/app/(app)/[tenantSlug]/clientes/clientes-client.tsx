@@ -6,11 +6,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Download, Plus, Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PeopleEmptyIllustration } from "@/components/ui/empty-illustration";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/components/lib/cn";
@@ -217,7 +220,17 @@ export function ClientesClient({
         </Alert>
       ) : null}
 
-      <Card className="mb-4 flex flex-col gap-3 p-4">
+      {!loading && !error ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs text-text-secondary ring-1 ring-primary/15">
+            <Users className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+            <span className="font-semibold tabular-nums text-text">{contacts.length}</span>
+            {nextCursor ? "cliente(s) carregado(s)" : "cliente(s)"}
+          </span>
+        </div>
+      ) : null}
+
+      <Card className="mb-4 flex flex-col gap-3 rounded-hero p-4">
         <div className="relative">
           <Search
             className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary"
@@ -253,12 +266,18 @@ export function ClientesClient({
       </Card>
 
       {loading ? (
-        <Card className="p-12 text-center text-sm text-text-secondary">Carregando clientes…</Card>
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-14 rounded-hero" />
+          ))}
+        </div>
       ) : error ? (
         <EmptyState icon={Users} title="Não deu para carregar" description={error} />
       ) : contacts.length === 0 ? (
         <EmptyState
+          variant={!debouncedSearch && filter === "all" ? "highlight" : "neutral"}
           icon={Users}
+          illustration={!debouncedSearch && filter === "all" ? <PeopleEmptyIllustration className="h-full w-full" /> : undefined}
           title={debouncedSearch || filter !== "all" ? "Nenhum cliente encontrado" : "Nenhum cliente ainda"}
           description={
             debouncedSearch || filter !== "all"
@@ -275,7 +294,7 @@ export function ClientesClient({
         />
       ) : (
         <>
-          <Card className="hidden md:block">
+          <Card className="hidden rounded-hero md:block">
             <Table>
               <TableHead>
                 <TableRow>
@@ -292,6 +311,7 @@ export function ClientesClient({
                   <TableRow key={contact.id} className="cursor-pointer" onClick={() => setDetailId(contact.id)}>
                     <TableCell>
                       <div className="flex items-center gap-2">
+                        <Avatar id={contact.id} name={contact.displayName} size="sm" />
                         <span className="font-medium">{contact.displayName}</span>
                         <SourceBadge source={contact.source} />
                         {contact.botPaused ? <Badge variant="warning">Bot pausado</Badge> : null}
@@ -325,9 +345,10 @@ export function ClientesClient({
                     setDetailId(contact.id);
                   }
                 }}
-                className="cursor-pointer p-4"
+                className="cursor-pointer rounded-hero p-4 transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-hover motion-reduce:transition-none motion-reduce:hover:translate-y-0"
               >
                 <div className="flex flex-wrap items-center gap-2">
+                  <Avatar id={contact.id} name={contact.displayName} size="sm" />
                   <p className="font-medium text-text">{contact.displayName}</p>
                   <SourceBadge source={contact.source} />
                   {contact.botPaused ? <Badge variant="warning">Bot pausado</Badge> : null}

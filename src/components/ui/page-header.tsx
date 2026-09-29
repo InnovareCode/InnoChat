@@ -1,7 +1,9 @@
 import { cn } from "@/components/lib/cn";
 
 export type PageHeaderProps = {
-  title: string;
+  /** Normalmente uma string; aceita `ReactNode` para os casos em que o título carrega um avatar
+   * ao lado do nome (ex.: detalhe de profissional) — sem criar uma segunda prop só para isso. */
+  title: React.ReactNode;
   description?: string;
   action?: React.ReactNode;
   className?: string;

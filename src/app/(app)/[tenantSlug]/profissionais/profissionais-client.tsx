@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
+import { Avatar } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
@@ -146,70 +147,123 @@ export function ProfissionaisClient({
           }
         />
       ) : (
-        <Card>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeadCell>Nome</TableHeadCell>
-                <TableHeadCell>Serviços</TableHeadCell>
-                <TableHeadCell>Expediente</TableHeadCell>
-                <TableHeadCell>Status</TableHeadCell>
-                <TableHeadCell className="text-right">Ações</TableHeadCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {professionals.map((professional) => (
-                <TableRow key={professional.id}>
-                  <TableCell className="font-medium">
-                    <Link
-                      href={`/${tenantSlug}/profissionais/${professional.id}`}
-                      className="hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                    >
-                      {professional.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell>{professional.professionalServices.length}</TableCell>
-                  <TableCell>
-                    {professional.workingHours.length > 0
-                      ? `${new Set(professional.workingHours.map((h) => h.weekday)).size} dia(s)`
-                      : "Não definido"}
-                  </TableCell>
-                  <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => toggleActive(professional)}
-                      disabled={isPending || writeBlocked}
-                      className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
-                      title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
-                      aria-label={professional.active ? `Desativar ${professional.name}` : `Ativar ${professional.name}`}
-                    >
-                      <Badge variant={professional.active ? "success" : "neutral"}>
-                        {professional.active ? "Ativo" : "Inativo"}
-                      </Badge>
-                    </button>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/${tenantSlug}/profissionais/${professional.id}`}>Editar</Link>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Excluir ${professional.name}`}
-                        onClick={() => setConfirmDelete(professional)}
-                        disabled={writeBlocked}
-                        title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
-                      >
-                        <Trash2 className="h-4 w-4" aria-hidden="true" />
-                      </Button>
-                    </div>
-                  </TableCell>
+        <>
+          <Card className="hidden rounded-hero md:block">
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableHeadCell>Nome</TableHeadCell>
+                  <TableHeadCell>Serviços</TableHeadCell>
+                  <TableHeadCell>Expediente</TableHeadCell>
+                  <TableHeadCell>Status</TableHeadCell>
+                  <TableHeadCell className="text-right">Ações</TableHeadCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+              </TableHead>
+              <TableBody>
+                {professionals.map((professional) => (
+                  <TableRow key={professional.id}>
+                    <TableCell className="font-medium">
+                      <Link
+                        href={`/${tenantSlug}/profissionais/${professional.id}`}
+                        className="flex items-center gap-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                      >
+                        <Avatar id={professional.id} name={professional.name} size="sm" />
+                        {professional.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{professional.professionalServices.length}</TableCell>
+                    <TableCell>
+                      {professional.workingHours.length > 0
+                        ? `${new Set(professional.workingHours.map((h) => h.weekday)).size} dia(s)`
+                        : "Não definido"}
+                    </TableCell>
+                    <TableCell>
+                      <button
+                        type="button"
+                        onClick={() => toggleActive(professional)}
+                        disabled={isPending || writeBlocked}
+                        className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                        title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+                        aria-label={professional.active ? `Desativar ${professional.name}` : `Ativar ${professional.name}`}
+                      >
+                        <Badge variant={professional.active ? "success" : "neutral"}>
+                          {professional.active ? "Ativo" : "Inativo"}
+                        </Badge>
+                      </button>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/${tenantSlug}/profissionais/${professional.id}`}>Editar</Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Excluir ${professional.name}`}
+                          onClick={() => setConfirmDelete(professional)}
+                          disabled={writeBlocked}
+                          title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+
+          <div className="flex flex-col gap-3 md:hidden">
+            {professionals.map((professional) => (
+              <Card key={professional.id} className="rounded-hero p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Link
+                    href={`/${tenantSlug}/profissionais/${professional.id}`}
+                    className="flex items-center gap-2 font-medium text-text hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                  >
+                    <Avatar id={professional.id} name={professional.name} size="sm" />
+                    {professional.name}
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => toggleActive(professional)}
+                    disabled={isPending || writeBlocked}
+                    className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                    title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+                    aria-label={professional.active ? `Desativar ${professional.name}` : `Ativar ${professional.name}`}
+                  >
+                    <Badge variant={professional.active ? "success" : "neutral"}>
+                      {professional.active ? "Ativo" : "Inativo"}
+                    </Badge>
+                  </button>
+                </div>
+                <p className="mt-1 text-sm text-text-secondary">
+                  {professional.professionalServices.length} serviço(s) ·{" "}
+                  {professional.workingHours.length > 0
+                    ? `${new Set(professional.workingHours.map((h) => h.weekday)).size} dia(s) de expediente`
+                    : "expediente não definido"}
+                </p>
+                <div className="mt-3 flex justify-end gap-1 border-t border-border pt-3">
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href={`/${tenantSlug}/profissionais/${professional.id}`}>Editar</Link>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setConfirmDelete(professional)}
+                    disabled={writeBlocked}
+                    title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
+                    className="text-danger hover:bg-danger-bg"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    Excluir
+                  </Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

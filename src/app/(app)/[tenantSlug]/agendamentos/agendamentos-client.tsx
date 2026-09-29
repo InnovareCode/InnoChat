@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ClipboardList, Plus } from "lucide-react";
+import { CalendarClock, ClipboardList, Plus } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
 import { listAppointmentsAction } from "@/modules/agenda/appointment-actions";
 import { formatDateTimeShortLabel } from "@/components/lib/format-date";
@@ -117,7 +118,17 @@ export function AgendamentosClient({
         }
       />
 
-      <Card className="mb-4 p-4">
+      {!loading && !error ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs text-text-secondary ring-1 ring-primary/15">
+            <CalendarClock className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+            <span className="font-semibold tabular-nums text-text">{filtered.length}</span>
+            no período filtrado
+          </span>
+        </div>
+      ) : null}
+
+      <Card className="mb-4 rounded-hero p-4">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <Label htmlFor="filtro-de">De</Label>
@@ -152,7 +163,11 @@ export function AgendamentosClient({
       </Card>
 
       {loading ? (
-        <Card className="p-12 text-center text-sm text-text-secondary">Carregando agendamentos…</Card>
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-14 rounded-hero" />
+          ))}
+        </div>
       ) : error ? (
         <EmptyState icon={ClipboardList} title="Não deu para carregar" description={error} />
       ) : filtered.length === 0 ? (
@@ -163,32 +178,61 @@ export function AgendamentosClient({
           action={<Button onClick={() => setNovoOpen(true)}>Novo agendamento</Button>}
         />
       ) : (
-        <Card>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableHeadCell>Data/hora</TableHeadCell>
-                <TableHeadCell>Cliente</TableHeadCell>
-                <TableHeadCell>Serviço</TableHeadCell>
-                <TableHeadCell>Profissional</TableHeadCell>
-                <TableHeadCell>Status</TableHeadCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filtered.map((a) => (
-                <TableRow key={a.id} className="cursor-pointer" onClick={() => openDetail(a)}>
-                  <TableCell className="tabular-nums">{formatDateTimeShortLabel(a.startsAt, timezone)}</TableCell>
-                  <TableCell>{a.contact.name ?? "Sem nome"}</TableCell>
-                  <TableCell>{a.service.name}</TableCell>
-                  <TableCell>{a.professional.name}</TableCell>
-                  <TableCell>
-                    <Badge variant={STATUS_VARIANT[a.status]}>{STATUS_LABEL[a.status]}</Badge>
-                  </TableCell>
+        <>
+          <Card className="hidden rounded-hero md:block">
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableHeadCell>Data/hora</TableHeadCell>
+                  <TableHeadCell>Cliente</TableHeadCell>
+                  <TableHeadCell>Serviço</TableHeadCell>
+                  <TableHeadCell>Profissional</TableHeadCell>
+                  <TableHeadCell>Status</TableHeadCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+              </TableHead>
+              <TableBody>
+                {filtered.map((a) => (
+                  <TableRow key={a.id} className="cursor-pointer" onClick={() => openDetail(a)}>
+                    <TableCell className="tabular-nums">{formatDateTimeShortLabel(a.startsAt, timezone)}</TableCell>
+                    <TableCell>{a.contact.name ?? "Sem nome"}</TableCell>
+                    <TableCell>{a.service.name}</TableCell>
+                    <TableCell>{a.professional.name}</TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_VARIANT[a.status]}>{STATUS_LABEL[a.status]}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+
+          <div className="flex flex-col gap-3 md:hidden">
+            {filtered.map((a) => (
+              <Card
+                key={a.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => openDetail(a)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openDetail(a);
+                  }
+                }}
+                className="cursor-pointer rounded-hero p-4 transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-hover motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium text-text">{a.contact.name ?? "Sem nome"}</p>
+                  <Badge variant={STATUS_VARIANT[a.status]}>{STATUS_LABEL[a.status]}</Badge>
+                </div>
+                <p className="mt-1 text-sm text-text-secondary">{a.service.name} · {a.professional.name}</p>
+                <p className="mt-2 text-xs tabular-nums text-text-secondary">
+                  {formatDateTimeShortLabel(a.startsAt, timezone)}
+                </p>
+              </Card>
+            ))}
+          </div>
+        </>
       )}
 
       <NovoAgendamentoDialog

@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } f
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ResendVerificationButton } from "@/components/account/resend-verification-button";
 import {
   createWhatsappInstanceAction,
@@ -76,7 +77,7 @@ function mapCreateError(code: string, message: string, details: unknown): ErrorV
 
 function QrImage({ dataUrl }: { dataUrl: string }) {
   return (
-    <div className="flex items-center justify-center rounded-card border border-border bg-white p-4">
+    <div className="flex items-center justify-center rounded-hero border border-border bg-white p-5 shadow-card">
       {/* eslint-disable-next-line @next/next/no-img-element -- imagem base64 gerada em runtime pela Evolution, não é asset estático */}
       <img
         src={dataUrl}
@@ -358,7 +359,7 @@ export function ConnectWhatsappDialog({
                 </Alert>
               ) : timedOut ? (
                 <>
-                  <div className="flex h-[272px] w-[272px] flex-col items-center justify-center gap-2 rounded-card border border-dashed border-border text-center text-sm text-text-secondary">
+                  <div className="flex h-[272px] w-[272px] flex-col items-center justify-center gap-2 rounded-hero border border-dashed border-border text-center text-sm text-text-secondary">
                     <p>O QR code expirou.</p>
                   </div>
                   <Button type="button" onClick={handleGenerateNewQr}>
@@ -382,8 +383,9 @@ export function ConnectWhatsappDialog({
                   <p className="text-xs text-text-secondary">Atualizando automaticamente…</p>
                 </>
               ) : (
-                <div className="flex h-[272px] w-[272px] items-center justify-center rounded-card border border-dashed border-border text-sm text-text-secondary">
-                  Gerando QR code…
+                <div className="flex h-[272px] w-[272px] flex-col items-center justify-center gap-2">
+                  <Skeleton className="h-full w-full rounded-hero" />
+                  <p className="sr-only">Gerando QR code…</p>
                 </div>
               )}
             </div>
