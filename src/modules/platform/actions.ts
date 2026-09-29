@@ -7,6 +7,7 @@ import { logger } from "@/lib/logger";
 import { UnsafeUrlError } from "@/lib/net/safe-fetch";
 import { N8nApiError } from "./n8n-client";
 import { runAction, type Result } from "@/lib/result";
+import { parseSender } from "@/lib/email/sender";
 import { DomainError } from "@/lib/errors";
 import { ensurePublicBaseUrlFromCurrentRequest } from "@/lib/public-url";
 import { isValidCnpj, normalizeDocumentDigits } from "@/core/billing";
@@ -61,7 +62,9 @@ const updatePlatformSettingsSchema = z.object({
   smtpSecure: z.boolean().optional(),
   smtpUser: z.string().max(255).optional(),
   smtpPassword: z.string().max(500).optional(),
-  smtpFrom: z.union([z.literal(""), z.string().email()]).optional(),
+  smtpFrom: z
+    .union([z.literal(""), z.string().trim().max(200).refine((v) => parseSender(v) !== null, "Use um e-mail (no-reply@dominio.com) ou nome + e-mail (InnoChat <no-reply@dominio.com>).")])
+    .optional(),
 });
 
 export async function updatePlatformSettingsAction(input: unknown): Promise<Result<PlatformSettingsView>> {
