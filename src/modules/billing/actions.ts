@@ -5,6 +5,8 @@ import { requireTenantMember } from "@/lib/auth/guards";
 import { runAction, type Result } from "@/lib/result";
 import { DomainError } from "@/lib/errors";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { reconcileInvoicePayment, type ReconcileOutcome } from "./reconcile";
+import { getPrisma } from "@/lib/db/prisma";
 import { changePlan, findBillingRecipientEmail, findOwnInvoiceOrThrow, listActivePlans, regeneratePixForInvoice, type ChangePlanResult } from "./service";
 
 /**
@@ -87,4 +89,53 @@ export async function regenerateMyInvoicePixAction(tenantSlug: string, invoiceId
     const invoice = await regeneratePixForInvoice(invoiceId, payerEmail);
     return { invoiceId: invoice.id, pixCopyPaste: invoice.pixCopyPaste };
   });
+}
+
+const checkPaymentSchema = z.object({ tenantSlug: z.string().min(1) });
+
+export type CheckMyInvoicePaymentResult = {
+  status: "paid" | "pending" | "throttled" | "payment_failed" | "no_open_invoice" | "unavailable";
+};
+
+/**
+ * Conciliação ativa disparada pela tela de Assinatura (polling enquanto o Pix está exibido): consulta
+ * o Mercado Pago e dá baixa se já foi pago — não depende do webhook. Qualquer membro da empresa pode
+ * chamar (só lê o estado da PRÓPRIA fatura em aberto); o `tenantSlug` vem do guard, nunca de um
+ * `invoiceId` do cliente. Rate limit de 1 consulta ao MP a cada 5s por fatura, no banco.
+ */
+export async function checkMyInvoicePaymentAction(input: { tenantSlug: string }): Promise<Result<CheckMyInvoicePaymentResult>> {
+  return runAction(async () => {
+    const { tenantSlug } = checkPaymentSchema.parse(input);
+    const { tenant } = await requireTenantMember(tenantSlug);
+
+    const invoice = await getPrisma().invoice.findFirst({
+      where: { status: "OPEN", mpPaymentId: { not: null }, subscription: { tenantId: tenant.id } },
+      orderBy: { periodStart: "desc" },
+      select: { id: true },
+    });
+    if (!invoice) return { status: "no_open_invoice" as const };
+
+    const outcome = await reconcileInvoicePayment(invoice.id, { source: "tenant_poll" });
+    return { status: toClientStatus(outcome) };
+  });
+}
+
+function toClientStatus(outcome: ReconcileOutcome): CheckMyInvoicePaymentResult["status"] {
+  switch (outcome.status) {
+    case "paid":
+    case "already_paid":
+      return "paid";
+    case "pending":
+    case "no_payment":
+      return "pending";
+    case "throttled":
+      return "throttled";
+    case "payment_failed":
+      return "payment_failed";
+    case "not_open":
+    case "voided_invoice_paid":
+      return "no_open_invoice";
+    case "error":
+      return "unavailable";
+  }
 }

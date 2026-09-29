@@ -21,6 +21,7 @@ import {
   type CompanyListItem,
   type DelinquentCompany,
 } from "./admin-service";
+import { reconcileInvoicePayment, type ReconcileOutcome } from "./reconcile";
 
 /** Server Actions do admin da plataforma para planos e empresas (docs/contratos.md, Fase 7). */
 
@@ -139,5 +140,13 @@ export async function markInvoicePaidManuallyAction(invoiceId: string, input: un
     const admin = await requirePlatformAdmin();
     const data = markInvoicePaidManuallySchema.parse(input);
     return markInvoicePaidManually(invoiceId, admin.id, data.reason);
+  });
+}
+
+/** "Conferir no Mercado Pago" (Admin → Cobrança): conciliação ativa da fatura, sem rate limit de 5s (ação humana, 1 clique). */
+export async function reconcileInvoiceAdminAction(invoiceId: string): Promise<Result<ReconcileOutcome>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    return reconcileInvoicePayment(invoiceId, { source: "admin_button", minIntervalMs: 0 });
   });
 }

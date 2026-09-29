@@ -269,6 +269,14 @@ model PlatformSettings {
   lastMaintenanceTickAt     DateTime?
   lastMaintenanceTickResult Json?
 
+  // Diagnóstico do webhook do Mercado Pago (Admin → Saúde): último recebido (qualquer desfecho) e
+  // última rejeição com o motivo. JSON pequeno `{ outcome|reason, environment, type }` — NUNCA o
+  // corpo da notificação nem segredo/assinatura.
+  lastMpWebhookAt         DateTime?
+  lastMpWebhookResult     Json?
+  lastMpWebhookRejectedAt DateTime?
+  lastMpWebhookRejection  Json?
+
   updatedByUserId String?
   updatedAt       DateTime @updatedAt
 
@@ -768,6 +776,12 @@ model Invoice {
   pixCopyPaste String?
   pixExpiresAt DateTime?
   paidAt       DateTime?
+
+  // Ambiente do Mercado Pago (PRODUCTION/SANDBOX) em que o Pix foi gerado: a conciliação consulta
+  // o pagamento com as credenciais DESSE ambiente, mesmo que o admin troque o ativo depois. Nulo =
+  // legado (tenta o ativo). `mpLastCheckedAt` = última consulta ativa ao MP (rate limit no banco).
+  mpEnvironment   MercadoPagoEnvironment?
+  mpLastCheckedAt DateTime?
 
   // Marcas de e-mail já enviado (Vega, Fase 7 — billing/tick, §7.1 "aviso... 1 dia antes do
   // vencimento e no vencimento"): sem isto, um tick de hora em hora reenviaria o mesmo lembrete

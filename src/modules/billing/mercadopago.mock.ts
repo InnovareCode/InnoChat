@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { MercadoPagoApiError, type CreatePixPaymentInput, type MercadoPagoGateway, type MercadoPagoPayment } from "./mercadopago";
 
 /**
@@ -21,7 +22,7 @@ export function createMockMercadoPagoGateway() {
         throw new MercadoPagoApiError("mock: falta o CPF/CNPJ do pagador.", undefined, "missing_payer_document");
       }
       counter += 1;
-      const paymentId = `mock_pay_${counter}`;
+      const paymentId = `mock_pay_${crypto.randomUUID().slice(0, 8)}_${counter}`; // único entre mocks: ProviderEvent(provider, id) é global
       payments.set(paymentId, {
         id: paymentId,
         status: "pending",
@@ -46,6 +47,12 @@ export function createMockMercadoPagoGateway() {
 
   return {
     gateway,
+    /** Força um status (rejected/cancelled/pending...) — o que `getPayment` reconsulta. */
+    setStatus(paymentId: string, status: string) {
+      const payment = payments.get(paymentId);
+      if (!payment) throw new Error(`mock: pagamento ${paymentId} não existe`);
+      payment.status = status;
+    },
     /** Simula a aprovação do pagamento (o que o webhook reconsulta via `getPayment`). */
     approve(paymentId: string, approvedAt: Date = new Date()) {
       const payment = payments.get(paymentId);

@@ -31,3 +31,4 @@
 - [Segredos da plataforma cifrados + par MP prod/sandbox](platform_secrets_encryption.md) — enc:v1:, migração preguiçosa, regra de leitura única, testes.
 - [n8n prefixa webhook com parâmetro no path pelo webhookId](n8n_webhook_path_param_prefixed_by_webhookid.md) — causa do bot mudo em prod (2026-09-29); base derivada no syncN8n + reapontamento.
 - [Notificações do painel são derivadas + trigger de tenantId](notifications_derived_design.md) — sem tabela Notification; leitura em Membership/NotificationRead; disconnectedAt só na queda inesperada.
+- [Conciliação ativa de Pix + diagnóstico do webhook](mp_reconcile_active_design.md) — reconcile.ts, mpEnvironment na fatura, rate limit no banco, ids do mock únicos.

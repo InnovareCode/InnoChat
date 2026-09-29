@@ -1764,3 +1764,22 @@ Não há restrição de profissional por STAFF no produto: STAFF vê todos os ev
 Nota: nenhuma rota do produto grava hoje `AppointmentEvent` de `COMPLETED`/`NO_SHOW` (não existe ação de "concluir"/"faltou"); o kind já é suportado assim que houver.
 
 Testes: `tests/integration/notifications.integration.test.ts` (cada kind, leitura, isolamento, poll, upcoming, timeline, trigger, queda do WhatsApp, purge) e `src/modules/notifications/format.test.ts`. Seed local para a UI: `npm run db:seed:notifications -- [slug] [--billing] [--clean]` (`prisma/seed-notifications.ts`).
+
+## Conciliação ativa de Pix + diagnóstico do webhook (2026-09-29)
+
+Motivo: a baixa dependia só do webhook do MP; webhook perdido/rejeitado deixava fatura paga como `OPEN`.
+
+**Migration aditiva** `20260930200000_mp_reconcile_diagnostics`: `Invoice.mpEnvironment` (`MercadoPagoEnvironment?`, ambiente em que o Pix foi gerado; nulo = legado), `Invoice.mpLastCheckedAt` (rate limit de consulta), `PlatformSettings.lastMpWebhookAt/lastMpWebhookResult/lastMpWebhookRejectedAt/lastMpWebhookRejection` (JSON pequeno, sem corpo/segredo).
+
+**`reconcileInvoicePayment(invoiceId, { source, minIntervalMs?, now?, gateway?, resolveGateway? })`** (`src/modules/billing/reconcile.ts`) devolve `{ status }`: `paid` (com `environment`) | `already_paid` | `pending` (`mpStatus`) | `payment_failed` (`mpStatus`: rejected/cancelled/expired/refunded/charged_back — nunca baixa) | `voided_invoice_paid` | `throttled` | `no_payment` | `not_open` | `error` (`code`: `NOT_CONFIGURED` | `MP_UNAVAILABLE` | `PAYMENT_MISMATCH`). Usa as credenciais de `Invoice.mpEnvironment`; legado tenta o ativo e depois o outro (e grava o descoberto). Confere `external_reference === invoice.id`. Baixa via `applyInvoicePayment` (idempotente/race-safe). Auditoria: `ProviderEvent(provider="mercadopago-reconcile", providerEventId=<paymentId>, payload.source)`.
+
+**Server Actions**
+- `checkMyInvoicePaymentAction({ tenantSlug }): Result<{ status: "paid" | "pending" | "throttled" | "payment_failed" | "no_open_invoice" | "unavailable" }>` — qualquer membro do tenant; localiza a fatura `OPEN` com `mpPaymentId` da própria empresa; limite de 1 consulta ao MP / 5s por fatura (banco). A tela Assinatura chama a cada ~9s com a aba visível, por até 15 min, e ao receber `paid` mostra "Pagamento confirmado!" (`data-testid="assinatura-pagamento-confirmado"`) e faz `router.refresh()`.
+- `reconcileInvoiceAdminAction(invoiceId): Result<ReconcileOutcome>` — só admin da plataforma, sem rate limit; botão "Conferir no Mercado Pago" (aria-label `Conferir no Mercado Pago a fatura de <empresa>`) em Admin → Cobrança, visível para fatura `OPEN` com `hasMpPayment`.
+- `AdminInvoiceListItem.hasMpPayment: boolean` (novo).
+
+**`billing/tick`:** primeiro passo concilia as faturas `OPEN` com `mpPaymentId` (lote de 50, as consultadas há mais tempo primeiro); resumo ganhou `invoicesReconciledPaid`.
+
+**Diagnóstico do webhook** (`webhook-diagnostics.ts`): `lastMpWebhookResult = { outcome: processed|already_processed|ignored|rejected, reason?, environment, type }`; `lastMpWebhookRejection = { reason, environment, type }` com `reason` em `missing_signature | malformed_signature | bad_signature | stale_timestamp | no_secret_for_env | wrong_environment_secret | ignored_type | missing_data_id`. `wrong_environment_secret` = assinatura válida com a chave do OUTRO ambiente. Escrita de rejeição com throttle de 2s (endpoint público); log estruturado `billing.webhook.rejected` sempre. `PlatformHealth.mercadoPagoWebhook = { lastReceivedAt, lastOutcome, lastRejectedAt, lastRejectionReason, activeEnvironment }`, exibido em Admin → Saúde (`data-testid="saude-webhook-mp"`), com alerta quando o último foi rejeitado.
+
+Testes: `tests/integration/billing-reconcile.integration.test.ts`, `src/modules/billing/mercadopago.test.ts` (`explainMercadoPagoSignature`).

@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const tryGetPublicBaseUrl = vi.hoisted(() => vi.fn(async () => null as string | null));
 vi.mock("@/lib/public-url", () => ({ tryGetPublicBaseUrl }));
 
-const { createMercadoPagoGateway, MercadoPagoApiError, verifyMercadoPagoSignature } = await import("./mercadopago");
+const { createMercadoPagoGateway, MercadoPagoApiError, verifyMercadoPagoSignature, explainMercadoPagoSignature } = await import("./mercadopago");
 
 /**
  * Corpo enviado ao Mercado Pago na criação do Pix, conferido item a item contra o Parque das
@@ -268,5 +268,35 @@ describe("verifyMercadoPagoSignature", () => {
   it("rejeita quando falta ts ou v1 dentro do header", () => {
     expect(verifyMercadoPagoSignature({ xSignature: "v1=abc", xRequestId: "req-1", dataId: "pay_123", secret: SECRET })).toBe(false);
     expect(verifyMercadoPagoSignature({ xSignature: "ts=123", xRequestId: "req-1", dataId: "pay_123", secret: SECRET })).toBe(false);
+  });
+});
+
+describe("explainMercadoPagoSignature — motivo da rejeição (diagnóstico)", () => {
+  const base = { xRequestId: "req-1", dataId: "pay_1", secret: SECRET };
+
+  it("devolve null quando válida", () => {
+    const ts = String(nowSeconds());
+    const v1 = sign(`id:pay_1;request-id:req-1;ts:${ts};`);
+    expect(explainMercadoPagoSignature({ ...base, xSignature: `ts=${ts},v1=${v1}` })).toBeNull();
+  });
+
+  it("missing_signature quando o header não vem", () => {
+    expect(explainMercadoPagoSignature({ ...base, xSignature: null })).toBe("missing_signature");
+  });
+
+  it("malformed_signature quando falta ts ou v1", () => {
+    expect(explainMercadoPagoSignature({ ...base, xSignature: "v1=abc" })).toBe("malformed_signature");
+    expect(explainMercadoPagoSignature({ ...base, xSignature: "ts=abc,v1=abc" })).toBe("malformed_signature");
+  });
+
+  it("stale_timestamp quando o ts está fora da tolerância", () => {
+    const ts = String(nowSeconds() - 3600);
+    const v1 = sign(`id:pay_1;request-id:req-1;ts:${ts};`);
+    expect(explainMercadoPagoSignature({ ...base, xSignature: `ts=${ts},v1=${v1}` })).toBe("stale_timestamp");
+  });
+
+  it("bad_signature quando o hash não bate (segredo errado)", () => {
+    const ts = String(nowSeconds());
+    expect(explainMercadoPagoSignature({ ...base, xSignature: `ts=${ts},v1=${"0".repeat(64)}` })).toBe("bad_signature");
   });
 });

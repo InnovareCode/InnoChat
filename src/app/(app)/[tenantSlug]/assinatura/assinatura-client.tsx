@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } f
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/components/lib/cn";
 import { formatDateTimeLabel } from "@/components/lib/format-date";
-import { changePlanAction, regenerateMyInvoicePixAction, type PlanListItem } from "@/modules/billing/actions";
+import { changePlanAction, checkMyInvoicePaymentAction, regenerateMyInvoicePixAction, type PlanListItem } from "@/modules/billing/actions";
 
 export type BillingStatus = "TRIALING" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELED";
 
@@ -77,6 +77,60 @@ function useStatusPolling(shouldPoll: boolean, intervalMs = 15_000) {
     const id = setInterval(() => router.refresh(), intervalMs);
     return () => clearInterval(id);
   }, [shouldPoll, intervalMs, router]);
+}
+
+const PAYMENT_CHECK_INTERVAL_MS = 9_000;
+const PAYMENT_CHECK_MAX_MS = 15 * 60 * 1000;
+
+/**
+ * Conciliação ativa enquanto o Pix está na tela: consulta o Mercado Pago (via server action, que
+ * dá baixa se já foi pago) a cada ~9s, SÓ com a aba visível, por até 15 min — não depende do
+ * webhook. Ao confirmar, chama `onPaid` uma vez e para. O servidor limita 1 consulta/5s por fatura.
+ */
+function usePaymentCheck(tenantSlug: string, enabled: boolean, onPaid: () => void) {
+  const onPaidRef = useRef(onPaid);
+  useEffect(() => {
+    onPaidRef.current = onPaid;
+  }, [onPaid]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let stopped = false;
+    let inFlight = false;
+    const startedAt = Date.now();
+
+    async function check() {
+      if (stopped || inFlight || document.visibilityState !== "visible") return;
+      if (Date.now() - startedAt > PAYMENT_CHECK_MAX_MS) {
+        stopped = true;
+        clearInterval(intervalId);
+        return;
+      }
+      inFlight = true;
+      try {
+        const result = await checkMyInvoicePaymentAction({ tenantSlug });
+        if (!stopped && result.ok && result.data.status === "paid") {
+          stopped = true;
+          clearInterval(intervalId);
+          onPaidRef.current();
+        }
+      } catch {
+        // Falha de rede: tenta de novo no próximo ciclo.
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    const intervalId = setInterval(check, PAYMENT_CHECK_INTERVAL_MS);
+    const onVisible = () => void check();
+    document.addEventListener("visibilitychange", onVisible);
+    void check();
+    return () => {
+      stopped = true;
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [tenantSlug, enabled]);
 }
 
 function PixCard({
@@ -430,8 +484,14 @@ export function AssinaturaClient({
   isOwner: boolean;
   hasDocument: boolean;
 }) {
-  const stillWaitingPayment = snapshot.invoice !== null && !snapshot.invoice.paidAt;
+  const router = useRouter();
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+  const stillWaitingPayment = snapshot.invoice !== null && !snapshot.invoice.paidAt && !paymentConfirmed;
   useStatusPolling(stillWaitingPayment);
+  usePaymentCheck(tenantSlug, stillWaitingPayment && !!snapshot.invoice?.pixCopyPaste, () => {
+    setPaymentConfirmed(true);
+    router.refresh();
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -476,7 +536,13 @@ export function AssinaturaClient({
         ) : null}
       </Card>
 
-      {snapshot.invoice ? (
+      {paymentConfirmed ? (
+        <Alert variant="success" title="Pagamento confirmado!" data-testid="assinatura-pagamento-confirmado">
+          Recebemos o seu Pix. Sua assinatura está em dia.
+        </Alert>
+      ) : null}
+
+      {snapshot.invoice && !paymentConfirmed ? (
         <PixCard invoice={snapshot.invoice} timezone={snapshot.timezone} tenantSlug={tenantSlug} hasDocument={hasDocument} />
       ) : null}
 

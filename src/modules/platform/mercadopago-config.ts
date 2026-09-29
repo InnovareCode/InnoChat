@@ -60,6 +60,11 @@ export async function getActiveMercadoPagoCredentials(): Promise<ActiveMercadoPa
   return { environment, enabled: row?.mpEnabled ?? true, ...readPair(row, environment) };
 }
 
+/** Par de credenciais de um ambiente específico (não o ativo) — conciliação por `Invoice.mpEnvironment`. */
+export async function getMercadoPagoCredentials(env: MercadoPagoEnv) {
+  return readPair(await loadPlatformSettingsRow(), env);
+}
+
 function toEnvView(row: PlatformSettings | null, env: MercadoPagoEnv): MercadoPagoEnvView {
   const pair = readPair(row, env);
   return { publicKey: pair.publicKey, accessTokenSaved: !!pair.accessToken, webhookSecretSaved: !!pair.webhookSecret };

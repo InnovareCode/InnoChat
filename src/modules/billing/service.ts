@@ -7,6 +7,7 @@ import { sendMail, invoiceGeneratedEmail, subscriptionSuspendedEmail } from "@/l
 import { getPublicBaseUrl } from "@/lib/public-url";
 import { CANCEL_AFTER_SUSPENDED_TRIAL_DAYS, computeTrialEndsAt, effectiveStatus, validateCpfCnpj, type SubscriptionStatus } from "@/core/billing";
 import { formatCentsBRL, formatDateBR } from "./format";
+import { getActiveMercadoPagoCredentials, type MercadoPagoEnv } from "@/modules/platform/mercadopago-config";
 import { getMercadoPagoGateway, MercadoPagoApiError, type MercadoPagoFailureKind, type MercadoPagoGateway } from "./mercadopago";
 
 /**
@@ -208,6 +209,15 @@ const DOMAIN_ERROR_BY_MP_FAILURE: Readonly<Record<MercadoPagoFailureKind, { code
   },
 };
 
+/**
+ * Ambiente do MP em que o gateway gerou o Pix — vai para `Invoice.mpEnvironment` para a conciliação
+ * consultar com as credenciais certas mesmo que o admin troque o ambiente ativo depois. Gateway sem
+ * `environment` (fake de teste) cai no ambiente ativo.
+ */
+export async function pixEnvironmentFor(gateway: MercadoPagoGateway): Promise<MercadoPagoEnv> {
+  return gateway.environment ?? (await getActiveMercadoPagoCredentials()).environment;
+}
+
 /** Exportada para quem já tem a fatura criada (sem passar pelo check de idempotência de `createInvoiceForPeriodTracked`, que trataria a fatura recém-criada como "já existe" e nunca chamaria isto). */
 export async function tryAttachPix(invoiceId: string, payerEmail: string, description: string, gateway?: MercadoPagoGateway) {
   try {
@@ -233,6 +243,7 @@ export async function tryAttachPix(invoiceId: string, payerEmail: string, descri
         pixQrCode: pix.qrCode,
         pixCopyPaste: pix.copyPaste,
         pixExpiresAt: pix.expiresAt,
+        mpEnvironment: await pixEnvironmentFor(mp),
       },
     });
   } catch (error) {
@@ -291,7 +302,13 @@ export async function regeneratePixForInvoice(invoiceId: string, payerEmail: str
 
   return getPrisma().invoice.update({
     where: { id: invoiceId },
-    data: { mpPaymentId: pix.paymentId, pixQrCode: pix.qrCode, pixCopyPaste: pix.copyPaste, pixExpiresAt: pix.expiresAt },
+    data: {
+      mpPaymentId: pix.paymentId,
+      pixQrCode: pix.qrCode,
+      pixCopyPaste: pix.copyPaste,
+      pixExpiresAt: pix.expiresAt,
+      mpEnvironment: await pixEnvironmentFor(mp),
+    },
   });
 }
 

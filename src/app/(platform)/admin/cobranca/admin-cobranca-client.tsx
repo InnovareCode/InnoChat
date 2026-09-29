@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { AlertTriangle, Banknote, Check, FlaskConical, QrCode, ReceiptText, TrendingUp } from "lucide-react";
+import { AlertTriangle, Banknote, Check, FlaskConical, QrCode, ReceiptText, RefreshCw, TrendingUp } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -20,7 +20,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/components/lib/cn";
 import { formatDateBR, formatCentsBRL } from "@/modules/billing/format";
-import { listInvoicesAdminAction, markInvoicePaidManuallyAction, regeneratePixForInvoiceAdminAction } from "@/modules/billing/admin-actions";
+import {
+  listInvoicesAdminAction,
+  markInvoicePaidManuallyAction,
+  reconcileInvoiceAdminAction,
+  regeneratePixForInvoiceAdminAction,
+} from "@/modules/billing/admin-actions";
 import type { AdminInvoiceListItem, BillingMonthlyTotals, DelinquentCompany } from "@/modules/billing/admin-service";
 
 type InvoiceRow = Omit<AdminInvoiceListItem, "periodStart" | "periodEnd" | "dueAt" | "paidAt" | "createdAt"> & {
@@ -92,6 +97,7 @@ export function AdminCobrancaClient({
   const [isPending, startTransition] = useTransition();
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [checkingId, setCheckingId] = useState<string | null>(null);
 
   const [statusFilter, setStatusFilter] = useState<InvoiceRow["status"] | "">("");
   const [fromDate, setFromDate] = useState("");
@@ -177,6 +183,42 @@ export function AdminCobrancaClient({
         variant: result.data.hasPix ? "success" : "error",
         title: result.data.hasPix ? "Pix regerado." : "Pix não pôde ser gerado.",
       });
+    });
+  }
+
+  function handleReconcile(invoice: InvoiceRow) {
+    setCheckingId(invoice.id);
+    startTransition(async () => {
+      const result = await reconcileInvoiceAdminAction(invoice.id);
+      setCheckingId(null);
+      if (!result.ok) {
+        notify({ variant: "error", title: "Não foi possível conferir no Mercado Pago", description: result.error.message });
+        return;
+      }
+      const outcome = result.data;
+      if (outcome.status === "paid" || outcome.status === "already_paid") {
+        setItems((prev) => prev.map((i) => (i.id === invoice.id ? { ...i, status: "PAID", paidAt: new Date().toISOString() } : i)));
+        notify({ variant: "success", title: outcome.status === "paid" ? "Pagamento confirmado no Mercado Pago." : "Esta fatura já estava paga." });
+      } else if (outcome.status === "pending") {
+        notify({ variant: "info", title: "Ainda não foi pago.", description: `Status no Mercado Pago: ${outcome.mpStatus}.` });
+      } else if (outcome.status === "payment_failed") {
+        notify({ variant: "error", title: "O pagamento não foi concluído.", description: `Status no Mercado Pago: ${outcome.mpStatus}. A fatura continua em aberto.` });
+      } else if (outcome.status === "error") {
+        notify({
+          variant: "error",
+          title: "Não foi possível consultar o Mercado Pago.",
+          description:
+            outcome.code === "NOT_CONFIGURED"
+              ? "Access token do ambiente desta fatura não está salvo."
+              : outcome.code === "PAYMENT_MISMATCH"
+                ? "O pagamento consultado pertence a outra fatura."
+                : "Serviço indisponível ou credencial recusada. Veja Admin → Saúde.",
+        });
+      } else if (outcome.status === "voided_invoice_paid") {
+        notify({ variant: "error", title: "Pagamento aprovado para fatura anulada.", description: "Reative a empresa e/ou estorne no Mercado Pago." });
+      } else {
+        notify({ variant: "info", title: "Nada a conferir nesta fatura." });
+      }
     });
   }
 
@@ -359,6 +401,19 @@ export function AdminCobrancaClient({
                               <QrCode className="h-4 w-4" aria-hidden="true" />
                             )}
                           </Button>
+                          {invoice.hasMpPayment ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Conferir no Mercado Pago a fatura de ${invoice.tenantName}`}
+                              title="Conferir no Mercado Pago"
+                              onClick={() => handleReconcile(invoice)}
+                              disabled={isPending}
+                            >
+                              {checkingId === invoice.id ? <Spinner /> : <RefreshCw className="h-4 w-4" aria-hidden="true" />}
+                            </Button>
+                          ) : null}
                           <Button
                             type="button"
                             variant="ghost"

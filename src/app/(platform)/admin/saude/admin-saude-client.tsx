@@ -12,7 +12,7 @@ import { cn } from "@/components/lib/cn";
 import { formatRelativeTimeLabel } from "@/components/lib/format-date";
 import { useToast } from "@/components/ui/toast";
 import { getPlatformHealthAction } from "@/modules/platform/actions";
-import type { IntegrationHealth, PlatformHealth, TickHealth } from "@/modules/platform/health-service";
+import type { IntegrationHealth, MercadoPagoWebhookHealth, PlatformHealth, TickHealth } from "@/modules/platform/health-service";
 
 const WHATSAPP_STATUS_LABEL: Record<string, string> = {
   CONNECTED: "Conectado",
@@ -63,6 +63,47 @@ function IntegrationCard({ icon, label, health }: { icon: React.ReactNode; label
         <p className="font-display text-sm font-bold text-text">{label}</p>
       </div>
       <p className="mt-3 text-sm text-text-secondary">{health.detalhe}</p>
+    </Card>
+  );
+}
+
+const WEBHOOK_REASON_LABEL: Record<string, string> = {
+  missing_signature: "sem assinatura (x-signature ausente)",
+  malformed_signature: "assinatura mal formada",
+  bad_signature: "assinatura inválida",
+  stale_timestamp: "assinatura fora do prazo (relógio ou reenvio antigo)",
+  no_secret_for_env: "sem chave secreta salva para o ambiente ativo",
+  wrong_environment_secret: "assinatura válida para o OUTRO ambiente (teste x produção)",
+  ignored_type: "tipo de notificação ignorado",
+  missing_data_id: "notificação sem data.id",
+};
+
+const ENV_LABEL = { PRODUCTION: "Produção", SANDBOX: "Teste (sandbox)" } as const;
+
+function MercadoPagoWebhookCard({ webhook }: { webhook: MercadoPagoWebhookHealth }) {
+  const rejectedNow = webhook.lastOutcome === "rejected";
+  return (
+    <Card className="rounded-hero" data-testid="saude-webhook-mp">
+      <CardHeader>
+        <CardTitle>Webhook do Mercado Pago</CardTitle>
+        <CardDescription>Ambiente ativo: {ENV_LABEL[webhook.activeEnvironment]}.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 text-sm">
+        <p className="text-text">
+          {webhook.lastReceivedAt ? `Último recebido ${formatRelativeTimeLabel(webhook.lastReceivedAt)}` : "Nenhum webhook recebido ainda"}
+          {webhook.lastOutcome ? <Badge variant={rejectedNow ? "danger" : "success"} className="ml-2">{rejectedNow ? "rejeitado" : "aceito"}</Badge> : null}
+        </p>
+        <p className="text-text">
+          {webhook.lastRejectedAt
+            ? `Última rejeição ${formatRelativeTimeLabel(webhook.lastRejectedAt)} — ${WEBHOOK_REASON_LABEL[webhook.lastRejectionReason ?? ""] ?? webhook.lastRejectionReason ?? "motivo desconhecido"}`
+            : "Nenhuma rejeição registrada."}
+        </p>
+        <Alert variant="info">
+          No painel do Mercado Pago, o webhook tem URL e chave secreta <strong>separadas para modo teste e produção</strong>. A chave
+          secreta salva aqui para o ambiente ativo ({ENV_LABEL[webhook.activeEnvironment]}) precisa ser a do mesmo modo no painel do MP. Sem webhook,
+          a fatura ainda é baixada pela conferência automática (tela de Assinatura, tick a cada hora ou botão em Cobrança).
+        </Alert>
+      </CardContent>
     </Card>
   );
 }
@@ -156,6 +197,8 @@ export function AdminSaudeClient({ initialHealth }: { initialHealth: PlatformHea
         <IntegrationCard icon={<Mail aria-hidden="true" />} label="SMTP" health={health.integrations.smtp} />
         <IntegrationCard icon={<Wallet aria-hidden="true" />} label="Mercado Pago" health={health.integrations.mercadoPago} />
       </div>
+
+      <MercadoPagoWebhookCard webhook={health.mercadoPagoWebhook} />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <TickCard title="billing/tick" tick={health.billingTick} />

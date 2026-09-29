@@ -178,6 +178,8 @@ export type AdminInvoiceListItem = {
   dueAt: Date;
   paidAt: Date | null;
   hasPix: boolean;
+  /** Há pagamento no Mercado Pago para conferir (`mpPaymentId`) — habilita "Conferir no Mercado Pago". */
+  hasMpPayment: boolean;
   createdAt: Date;
   /** `TRIAL` = fatura do cadastro (teste); a UI rotula "Teste". */
   kind: "TRIAL" | "REGULAR";
@@ -242,6 +244,7 @@ export async function listInvoicesAdmin(params: ListInvoicesAdminParams): Promis
       dueAt: invoice.dueAt,
       paidAt: invoice.paidAt,
       hasPix: !!invoice.pixCopyPaste,
+      hasMpPayment: !!invoice.mpPaymentId,
       createdAt: invoice.createdAt,
       kind: invoice.isTrialConversion ? "TRIAL" : "REGULAR",
     })),

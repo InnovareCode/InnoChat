@@ -5,6 +5,7 @@ import { sendMail, invoiceDueReminderEmail } from "@/lib/email";
 import { effectiveStatus, validateCpfCnpj } from "@/core/billing";
 import {
   billingUrlFor,
+  pixEnvironmentFor,
   createInvoiceForPeriodTracked,
   findBillingRecipientEmail,
   generateInvoiceDescription,
@@ -13,6 +14,7 @@ import {
 } from "./service";
 import { formatCentsBRL, formatDateBR } from "./format";
 import { getMercadoPagoGateway, type MercadoPagoGateway } from "./mercadopago";
+import { reconcileInvoicePayment } from "./reconcile";
 import { recordBillingTickRun } from "@/modules/platform/health-service";
 
 /**
@@ -46,6 +48,8 @@ export type BillingTickSummary = {
   suspensionEmailsSent: number;
   /** Faturas de teste não convertido anuladas (`VOID`) por a conta ter sido cancelada. */
   invoicesVoided: number;
+  /** Faturas `OPEN` com Pix conciliadas ativamente contra o Mercado Pago e baixadas (webhook perdido/atrasado). */
+  invoicesReconciledPaid: number;
 };
 
 export async function runBillingTick(now: Date = new Date(), gateway?: MercadoPagoGateway): Promise<BillingTickSummary> {
@@ -57,6 +61,7 @@ export async function runBillingTick(now: Date = new Date(), gateway?: MercadoPa
     statusChanges: 0,
     suspensionEmailsSent: 0,
     invoicesVoided: 0,
+    invoicesReconciledPaid: 0,
   };
 
   // Resolve o gateway do MP uma vez só (evita reler PlatformSettings a cada fatura/Pix). Se não
@@ -71,6 +76,8 @@ export async function runBillingTick(now: Date = new Date(), gateway?: MercadoPa
     }
   }
 
+  // 0. Concilia PRIMEIRO: fatura já paga não pode receber lembrete/suspensão/Pix novo.
+  await reconcileOpenInvoices(prisma, now, gateway, summary);
   await generateUpcomingInvoices(prisma, now, resolvedGateway, summary);
   await regenerateExpiredPix(prisma, now, resolvedGateway, summary);
   await sendDueReminders(prisma, now, summary);
@@ -86,6 +93,27 @@ export async function runBillingTick(now: Date = new Date(), gateway?: MercadoPa
   });
 
   return summary;
+}
+
+/** Teto por rodada — o tick roda de hora em hora; o restante entra na rodada seguinte (mais antigas consultadas primeiro). */
+const RECONCILE_BATCH_LIMIT = 50;
+
+async function reconcileOpenInvoices(prisma: ReturnType<typeof getPrisma>, now: Date, gateway: MercadoPagoGateway | undefined, summary: BillingTickSummary) {
+  const candidates = await prisma.invoice.findMany({
+    where: { status: "OPEN", mpPaymentId: { not: null } },
+    orderBy: [{ mpLastCheckedAt: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }],
+    take: RECONCILE_BATCH_LIMIT,
+    select: { id: true },
+  });
+  for (const { id } of candidates) {
+    try {
+      const outcome = await reconcileInvoicePayment(id, { source: "tick", minIntervalMs: 0, now, gateway });
+      if (outcome.status === "paid") summary.invoicesReconciledPaid += 1;
+    } catch (error) {
+      // Nunca derruba o tick por uma fatura — só loga e segue.
+      logger.warn("billing.tick.reconcile_failed", { invoiceId: id, errorMessage: error instanceof Error ? error.message : String(error) });
+    }
+  }
 }
 
 async function generateUpcomingInvoices(
@@ -186,7 +214,13 @@ async function regenerateExpiredPix(
       });
       await prisma.invoice.update({
         where: { id: invoice.id },
-        data: { mpPaymentId: pix.paymentId, pixQrCode: pix.qrCode, pixCopyPaste: pix.copyPaste, pixExpiresAt: pix.expiresAt },
+        data: {
+          mpPaymentId: pix.paymentId,
+          pixQrCode: pix.qrCode,
+          pixCopyPaste: pix.copyPaste,
+          pixExpiresAt: pix.expiresAt,
+          mpEnvironment: await pixEnvironmentFor(gateway),
+        },
       });
       summary.pixRegenerated += 1;
     } catch (error) {

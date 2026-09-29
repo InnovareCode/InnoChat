@@ -126,8 +126,19 @@ export type TickHealth = {
   stale: boolean;
 };
 
+/** Diagnóstico do webhook do MP (nunca contém corpo/segredo — só desfecho, motivo e ambiente). */
+export type MercadoPagoWebhookHealth = {
+  lastReceivedAt: string | null;
+  lastOutcome: string | null;
+  lastRejectedAt: string | null;
+  lastRejectionReason: string | null;
+  /** Ambiente ATIVO hoje (o segredo usado na validação é o dele). */
+  activeEnvironment: "PRODUCTION" | "SANDBOX";
+};
+
 export type PlatformHealth = {
   integrations: IntegrationsHealth;
+  mercadoPagoWebhook: MercadoPagoWebhookHealth;
   billingTick: TickHealth;
   maintenanceTick: TickHealth;
   whatsappInstancesByStatus: Record<WhatsappInstanceStatus, number>;
@@ -151,7 +162,13 @@ export async function getPlatformHealth(now: Date = new Date()): Promise<Platfor
     getIntegrationsHealth(),
     prisma.platformSettings.findUnique({
       where: { id: 1 },
-      select: { lastBillingTickAt: true, lastBillingTickResult: true, lastMaintenanceTickAt: true, lastMaintenanceTickResult: true },
+      select: {
+        mpEnvironment: true,
+        lastMpWebhookAt: true,
+        lastMpWebhookResult: true,
+        lastMpWebhookRejectedAt: true,
+        lastMpWebhookRejection: true,
+        lastBillingTickAt: true, lastBillingTickResult: true, lastMaintenanceTickAt: true, lastMaintenanceTickResult: true },
     }),
     prisma.whatsappInstance.groupBy({ by: ["status"], where: { deletedAt: null }, _count: { _all: true } }),
     prisma.subscription.groupBy({ by: ["status"], _count: { _all: true } }),
@@ -178,8 +195,25 @@ export async function getPlatformHealth(now: Date = new Date()): Promise<Platfor
   if (!integrations.evolution.ok) alerts.push("Evolution API fora do ar ou mal configurada — o WhatsApp de novas conexões pode falhar.");
   if (!integrations.mercadoPago.ok) alerts.push("Mercado Pago fora do ar ou mal configurado — novos Pix podem não ser gerados.");
 
+  const jsonField = (value: unknown, key: string): string | null => {
+    const v = value && typeof value === "object" ? (value as Record<string, unknown>)[key] : null;
+    return typeof v === "string" ? v : null;
+  };
+  const mercadoPagoWebhook: MercadoPagoWebhookHealth = {
+    lastReceivedAt: settings?.lastMpWebhookAt?.toISOString() ?? null,
+    lastOutcome: jsonField(settings?.lastMpWebhookResult, "outcome"),
+    lastRejectedAt: settings?.lastMpWebhookRejectedAt?.toISOString() ?? null,
+    lastRejectionReason: jsonField(settings?.lastMpWebhookRejection, "reason"),
+    activeEnvironment: settings?.mpEnvironment ?? "PRODUCTION",
+  };
+
+  if (mercadoPagoWebhook.lastOutcome === "rejected") {
+    alerts.push("O último webhook do Mercado Pago foi rejeitado — pagamentos Pix podem não estar sendo baixados automaticamente. Veja o diagnóstico abaixo.");
+  }
+
   return {
     integrations,
+    mercadoPagoWebhook,
     billingTick,
     maintenanceTick,
     whatsappInstancesByStatus,

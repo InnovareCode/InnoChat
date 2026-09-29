@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { getActiveMercadoPagoCredentials } from "@/modules/platform/mercadopago-config";
+import { getActiveMercadoPagoCredentials, getMercadoPagoCredentials, type MercadoPagoEnv } from "@/modules/platform/mercadopago-config";
 import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { tryGetPublicBaseUrl } from "@/lib/public-url";
@@ -51,6 +51,8 @@ export type CreatePixPaymentInput = {
 };
 
 export interface MercadoPagoGateway {
+  /** Ambiente cujas credenciais este gateway usa (gravado em `Invoice.mpEnvironment` ao gerar o Pix). Ausente em fakes de teste. */
+  readonly environment?: MercadoPagoEnv;
   createPixPayment(input: CreatePixPaymentInput): Promise<PixPaymentResult>;
   getPayment(paymentId: string): Promise<MercadoPagoPayment>;
 }
@@ -181,8 +183,9 @@ async function notificationUrlOrUndefined(): Promise<{ notification_url: string 
 }
 
 /** Implementação real, contra a API do Mercado Pago (Pagamentos Pix). */
-export function createMercadoPagoGateway(accessToken: string): MercadoPagoGateway {
+export function createMercadoPagoGateway(accessToken: string, environment?: MercadoPagoEnv): MercadoPagoGateway {
   return {
+    environment,
     async createPixPayment(input) {
       // Falha CEDO, sem chamar o MP — mesma defesa do incidente do Parque das Feiras
       // (`payments.pix.cpf.test.ts`, "FALHA CEDO: nem chega a chamar o gateway"): o MP exige
@@ -302,7 +305,21 @@ export async function getMercadoPagoGateway(options: { forNewCharge?: boolean } 
   if (options.forNewCharge && !active.enabled) {
     throw new DomainError("MERCADOPAGO_DISABLED", "Cobrança pelo Mercado Pago desligada pelo administrador da plataforma.");
   }
-  return createMercadoPagoGateway(active.accessToken);
+  return createMercadoPagoGateway(active.accessToken, active.environment);
+}
+
+/**
+ * Gateway com as credenciais de um ambiente ESPECÍFICO (não o ativo) — conciliação de uma fatura
+ * usa o ambiente em que o Pix foi gerado (`Invoice.mpEnvironment`), porque o admin pode ter
+ * trocado o ativo depois. Nunca checa `mpEnabled` (consultar pagamento já feito não é cobrança
+ * nova). Lança `MERCADOPAGO_NOT_CONFIGURED` se o access token daquele ambiente não existe.
+ */
+export async function getMercadoPagoGatewayForEnvironment(environment: MercadoPagoEnv): Promise<MercadoPagoGateway> {
+  const creds = await getMercadoPagoCredentials(environment);
+  if (!creds.accessToken) {
+    throw new DomainError("MERCADOPAGO_NOT_CONFIGURED", `Mercado Pago sem access token salvo para o ambiente ${environment}.`);
+  }
+  return createMercadoPagoGateway(creds.accessToken, environment);
 }
 
 /**
@@ -333,6 +350,8 @@ const SIGNATURE_TOLERANCE_MS = 10 * 60 * 1000;
  * ausentes omitidos, nesta ordem), com `data.id` sempre em minúsculas, usando
  * o webhook secret do ambiente ATIVO (`getActiveMercadoPagoCredentials`) como chave.
  */
+export type SignatureFailureReason = "missing_signature" | "malformed_signature" | "stale_timestamp" | "bad_signature";
+
 export function verifyMercadoPagoSignature(params: {
   xSignature: string | null;
   xRequestId: string | null;
@@ -342,8 +361,20 @@ export function verifyMercadoPagoSignature(params: {
   /** Só para teste — no runtime real é sempre `new Date()` (injetado via `now` no `webhook.ts`). */
   now?: Date;
 }): boolean {
+  return explainMercadoPagoSignature(params) === null;
+}
+
+/** Mesma validação, mas devolve o MOTIVO da falha (diagnóstico do Admin → Saúde) ou `null` se válida. */
+export function explainMercadoPagoSignature(params: {
+  xSignature: string | null;
+  xRequestId: string | null;
+  dataId: string | null;
+  secret: string;
+  now?: Date;
+}): SignatureFailureReason | null {
   const { xSignature, xRequestId, dataId, secret } = params;
-  if (!xSignature || !secret) return false;
+  if (!xSignature) return "missing_signature";
+  if (!secret) return "bad_signature";
 
   const parts = new Map<string, string>();
   for (const chunk of xSignature.split(",")) {
@@ -352,13 +383,13 @@ export function verifyMercadoPagoSignature(params: {
   }
   const ts = parts.get("ts");
   const v1 = parts.get("v1");
-  if (!ts || !v1) return false;
+  if (!ts || !v1) return "malformed_signature";
 
   const tsSeconds = Number(ts);
-  if (!Number.isFinite(tsSeconds)) return false;
+  if (!Number.isFinite(tsSeconds)) return "malformed_signature";
   const now = params.now ?? new Date();
   if (Math.abs(now.getTime() - tsSeconds * 1000) > SIGNATURE_TOLERANCE_MS) {
-    return false;
+    return "stale_timestamp";
   }
 
   let manifest = "";
@@ -370,6 +401,6 @@ export function verifyMercadoPagoSignature(params: {
 
   const expectedBuf = Buffer.from(expected);
   const receivedBuf = Buffer.from(v1);
-  if (expectedBuf.length !== receivedBuf.length) return false;
-  return crypto.timingSafeEqual(expectedBuf, receivedBuf);
+  if (expectedBuf.length !== receivedBuf.length) return "bad_signature";
+  return crypto.timingSafeEqual(expectedBuf, receivedBuf) ? null : "bad_signature";
 }

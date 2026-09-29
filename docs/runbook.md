@@ -177,33 +177,34 @@ Se o banco ou n8n estiver indisponível, o status fica `degraded` ou `error`.
 1. A empresa reconecta (**Canal → WhatsApp** → gera novo QR).
 2. Se desconectar repetidamente (a cada poucas horas), há problema com a Evolution — investigue a versão ou chave da API.
 
-### Incidente 3: Pix não confirma (fatura vencida sem marcar como paga)
+### Incidente 3: Pix pago e não baixado (fatura continua "Aberta")
 
-**Sintomas:** cliente pagou, viu a confirmação no banco, mas fatura no InnoChat continua `OPEN`.
+**Sintomas:** cliente pagou, viu a confirmação no banco, mas a fatura no InnoChat continua `OPEN`.
 
-**Causa:** webhook do Mercado Pago não chegou ou foi descartado.
+**Como funciona hoje:** a baixa NÃO depende só do webhook. Há conciliação ativa (`reconcileInvoicePayment`), que consulta o pagamento no Mercado Pago (`GET /v1/payments/{mpPaymentId}`) com as credenciais do **ambiente em que o Pix foi gerado** (`Invoice.mpEnvironment`; fatura antiga sem esse campo tenta o ambiente ativo e depois o outro) e dá baixa se `approved`. Ela roda: (a) a cada ~9s enquanto o cliente está com o Pix aberto na tela **Assinatura** (aba visível, até 15 min, no máximo 1 consulta ao MP a cada 5s por fatura); (b) a cada `billing/tick` (faturas `OPEN` com `mpPaymentId`, até 50 por rodada); (c) pelo botão **Conferir no Mercado Pago** em **Admin → Cobrança**.
 
-**Diagnóstico:**
+**Passo a passo:**
 
-1. No banco de dados, verifique se `ProviderEvent` tem um registro com o ID do pagamento:
-   ```sql
-   SELECT * FROM provider_events WHERE payload->>'id' = '<payment-id>' LIMIT 1;
-   ```
+1. **Admin → Cobrança**: na fatura aberta, clique em **Conferir no Mercado Pago**. O toast diz o resultado:
+   - "Pagamento confirmado" = baixada (o webhook é que não estava chegando, siga o passo 2 para corrigir de vez);
+   - "Ainda não foi pago" + status do MP (`pending`/`in_process`) = o MP ainda não aprovou; aguarde;
+   - "O pagamento não foi concluído" (`rejected`/`cancelled`/`expired`) = não houve dinheiro, a fatura segue aberta (gere um novo Pix);
+   - "Não foi possível consultar" = access token do ambiente da fatura ausente/recusado — confira **Admin → Configurações → Mercado Pago** (o par do ambiente certo: produção x teste).
+2. **Admin → Saúde → Webhook do Mercado Pago**: veja "último recebido há X" e "última rejeição há Y — motivo":
+   - `bad_signature`: a chave secreta salva não é a do webhook do painel do MP. **O webhook no painel do MP tem URL e chave secreta separadas para modo teste e produção** — a chave do ambiente ativo aqui precisa ser a do mesmo modo lá;
+   - `wrong_environment_secret`: a assinatura bate com a chave do OUTRO ambiente (ex.: ativo = teste, mas o painel manda notificações do modo produção, ou vice-versa);
+   - `no_secret_for_env`: não há chave secreta salva para o ambiente ativo;
+   - `missing_signature` / `malformed_signature`: a chamada não veio do MP (ou o MP não tem chave secreta configurada no webhook);
+   - `stale_timestamp`: assinatura antiga (reenvio muito atrasado) ou relógio do servidor desajustado;
+   - `ignored_type`: notificação que não é de pagamento (ex.: `merchant_order`) — normal;
+   - "Nenhum webhook recebido ainda": a URL não está cadastrada (ou está no modo errado) no painel do MP. URL: `https://<dominio>/api/webhooks/mercadopago`.
+3. Corrija URL/chave no painel do MP e/ou em **Admin → Configurações**. Reenvie a notificação pelo painel do MP (Webhooks → histórico → reenviar) — opcional, a conciliação já cobre.
+4. Logs (sem segredo): `billing.webhook.rejected` (com `reason`), `billing.reconcile.invoice_paid`, `billing.reconcile.get_payment_failed`, `billing.reconcile.payment_not_approved`.
+5. Auditoria da baixa: `SELECT * FROM provider_events WHERE provider = 'mercadopago-reconcile' AND "providerEventId" = '<payment-id>';` (`payload.source` = `tenant_poll` | `admin_button` | `tick`). Baixa pelo webhook fica em `provider = 'mercadopago'`.
 
-2. Se tem, significa o webhook chegou mas o `processedAt` pode ter erro. Veja o `payload` para investigar.
+**Pagamento aprovado para fatura anulada (`VOID`):** nada é baixado; log `billing.reconcile.payment_for_void_invoice`. Reative a empresa e/ou estorne no MP.
 
-3. Se não tem, o webhook não chegou. Verifique no painel do Mercado Pago:
-   - Webhook URL está correto? (`https://seu-dominio/api/webhooks/mercadopago`)
-   - Segredo do webhook (webhook secret) está correto? (**Admin → Configurações da plataforma**)
-
-**Ações:**
-
-1. Corrija a URL ou segredo do webhook se estiver errado.
-2. No Mercado Pago, resend o webhook manualmente (Histórico de webhooks → ação de resend).
-3. Se o webhook for recebido de novo e ainda falhar, há bug no tratamento — investigue os logs do painel.
-
-**Solução manual (último recurso):**
-- Você pode marcar a fatura como paga manualmente via SQL ou banco de dados (mas isso é risco — prefira reconsultar a API do MP em vez de confiar só no webhook).
+**Último recurso:** **Admin → Cobrança → Marcar como paga manualmente** (com motivo; fica auditado). Prefira sempre a conferência no MP.
 
 ### Incidente 4: Taxa de limite de login alta
 

@@ -1,9 +1,10 @@
 import { getPrisma } from "@/lib/db/prisma";
 import { isUniqueViolation } from "@/lib/db/prisma-errors";
 import { logger } from "@/lib/logger";
-import { getActiveMercadoPagoCredentials } from "@/modules/platform/mercadopago-config";
+import { getActiveMercadoPagoCredentials, getMercadoPagoCredentials, type MercadoPagoEnv } from "@/modules/platform/mercadopago-config";
 import { applyInvoicePayment } from "./service";
-import { getMercadoPagoGateway, verifyMercadoPagoSignature, type MercadoPagoGateway } from "./mercadopago";
+import { explainMercadoPagoSignature, getMercadoPagoGateway, type MercadoPagoGateway } from "./mercadopago";
+import { recordWebhookReceived, recordWebhookRejected, type WebhookRejectionReason } from "./webhook-diagnostics";
 
 /**
  * `POST /api/webhooks/mercadopago` (docs/arquitetura.md §7.1, §6.10). Segue o mesmo formato de
@@ -31,7 +32,18 @@ import { getMercadoPagoGateway, verifyMercadoPagoSignature, type MercadoPagoGate
  *    `Invoice.id`).
  */
 
-export class WebhookAuthError extends Error {}
+async function getOtherEnvironmentWebhookSecret(active: MercadoPagoEnv): Promise<string | null> {
+  return (await getMercadoPagoCredentials(active === "PRODUCTION" ? "SANDBOX" : "PRODUCTION")).webhookSecret;
+}
+
+export class WebhookAuthError extends Error {
+  constructor(
+    message: string,
+    readonly reason?: WebhookRejectionReason,
+  ) {
+    super(message);
+  }
+}
 export class WebhookIgnored extends Error {}
 
 export type MercadoPagoWebhookBody = {
@@ -51,32 +63,45 @@ export async function handleMercadoPagoWebhook(params: {
 }): Promise<{ status: "processed" | "ignored" | "already_processed" }> {
   const prisma = getPrisma();
 
+  // Segredo do ambiente ATIVO (produção ou teste). Fail-closed: ausente ou que não decifra => rejeita.
+  const { webhookSecret, environment } = await getActiveMercadoPagoCredentials();
+  const info = { environment, type: params.type ?? null };
+
   if (!params.dataId) {
+    await recordWebhookReceived("ignored", info, "missing_data_id");
     throw new WebhookIgnored("Notificação sem data.id — nada a processar.");
   }
 
-  // Segredo do ambiente ATIVO (produção ou teste). Fail-closed: ausente ou que não decifra => rejeita.
-  const { webhookSecret, environment } = await getActiveMercadoPagoCredentials();
   if (!webhookSecret) {
     // Sem segredo configurado (ou ilegível): não dá para validar a assinatura com segurança.
     // Rejeitar é mais seguro que aceitar sem checagem.
-    logger.warn("billing.webhook.no_secret_configured", { environment });
-    throw new WebhookAuthError("Mercado Pago não configurado.");
+    await recordWebhookRejected("no_secret_for_env", info);
+    throw new WebhookAuthError("Mercado Pago não configurado.", "no_secret_for_env");
   }
 
-  const validSignature = verifyMercadoPagoSignature({
+  const signatureFailure = explainMercadoPagoSignature({
     xSignature: params.xSignature,
     xRequestId: params.xRequestId,
     dataId: params.dataId,
     secret: webhookSecret,
   });
-  if (!validSignature) {
-    logger.warn("billing.webhook.invalid_signature");
-    throw new WebhookAuthError("Assinatura inválida.");
+  if (signatureFailure) {
+    // Diagnóstico: a assinatura bate com o segredo do OUTRO ambiente? Então o painel do MP está
+    // mandando notificações de um modo (teste/produção) diferente do ambiente ativo aqui.
+    let reason: WebhookRejectionReason = signatureFailure;
+    if (signatureFailure === "bad_signature") {
+      const otherSecret = await getOtherEnvironmentWebhookSecret(environment);
+      if (otherSecret && explainMercadoPagoSignature({ xSignature: params.xSignature, xRequestId: params.xRequestId, dataId: params.dataId, secret: otherSecret }) === null) {
+        reason = "wrong_environment_secret";
+      }
+    }
+    await recordWebhookRejected(reason, info);
+    throw new WebhookAuthError("Assinatura inválida.", reason);
   }
 
   if (params.type && params.type !== "payment") {
     logger.info("billing.webhook.irrelevant_type", { type: params.type });
+    await recordWebhookReceived("ignored", info, "ignored_type");
     return { status: "ignored" };
   }
 
@@ -130,6 +155,7 @@ export async function handleMercadoPagoWebhook(params: {
   }
 
   if (result === "already_processed") {
+    await recordWebhookReceived("already_processed", info);
     return { status: "already_processed" };
   }
 
@@ -138,6 +164,7 @@ export async function handleMercadoPagoWebhook(params: {
       where: { provider_providerEventId: { provider: "mercadopago", providerEventId } },
       data: { processedAt: new Date() },
     });
+    await recordWebhookReceived("ignored", info);
     return { status: "ignored" };
   }
 
@@ -155,6 +182,7 @@ export async function handleMercadoPagoWebhook(params: {
         payload: { status: payment.status, externalReference: payment.externalReference, voidedInvoicePayment: true },
       },
     });
+    await recordWebhookReceived("ignored", info);
     return { status: "ignored" };
   }
 
@@ -163,5 +191,6 @@ export async function handleMercadoPagoWebhook(params: {
     data: { processedAt: new Date() },
   });
 
+  await recordWebhookReceived("processed", info);
   return { status: "processed" };
 }
