@@ -5,56 +5,70 @@ para clínicas, salões e qualquer negócio de serviços com horário marcado.
 Repositório: https://github.com/InnovareCode/InnoChat (branch `main`).
 Decisões do dono: memória `decisoes-iniciais-innochat` e `docs/arquitetura.md` §15.
 
-## Estado atual (2026-09-28)
+## Estado atual (2026-09-29)
 
-**Etapas A, B e C do `docs/plano-implementacao.md` concluídas em 2026-09-29**: visual premium em todas as telas,
-MP alinhado ao Parque das Feiras (CPF/CNPJ obrigatório), teste de 3 dias, termos/privacidade lidos do banco,
-admin Cobrança/Saúde/Dados jurídicos, revisões de segurança liberadas, QA final aprovado
-(2 rodadas E2E seguidas 123/123, 203 unit, 144 integração, build). **Próximo: etapa D (publicação com o dono).**
+**No ar em produção** em `https://innochat.innovarecode.com.br` (Easypanel, projeto `pontua-me`, auto-deploy por
+push; migrations rodam sozinhas no boot do container). Versão exibida: **v1.0.0**.
+
+Validado de ponta a ponta pelo dono em produção:
+- **WhatsApp:** QR → "oi" → agendar, remarcar e cancelar pelo bot.
+- **Pix:** Pix real gerado → pago → reconhecido e baixado pela conciliação ativa.
 
 ## Concluído
 
 - **Painel da empresa:**
-  - Início com indicadores e gráfico;
-  - Agenda dia/semana, com folgas e bloqueios;
-  - Agendamentos, Serviços, Profissionais (expediente e folgas);
-  - **Clientes** (ficha, pausar o bot, LGPD, CSV);
-  - **WhatsApp por QR**;
+  - Início (indicadores, gráfico, Próximos atendimentos hoje);
+  - Agenda dia/semana com arrastar para remarcar;
+  - Agendamentos com status, origem e linha do tempo;
+  - Clientes, Serviços, Profissionais;
+  - WhatsApp (celular no estilo WhatsApp, QR ao vivo);
   - Mensagens do bot;
-  - Configurações (3 temas, bloqueios da empresa, equipe);
-  - Assinatura (Pix, troca de plano);
-  - onboarding.
-- **Contas:** cadastro público, confirmação de e-mail com reenvio, esqueci a senha, convite de equipe, instalação única do admin.
+  - Configurações (3 temas, bloqueios, equipe);
+  - Assinatura (Pix com conferência automática);
+  - onboarding com o mascote **Inno** (tour + checklist).
+- **Experiência:**
+  - central de notificações (sino, toasts, título da aba);
+  - atualização ao vivo sem F5;
+  - barra de navegação + skeletons + loader padrão;
+  - ícone do menu no título de cada página;
+  - selo InnovareCode + versão;
+  - login/cadastro premium com o Inno;
+  - e-mails transacionais premium + recibo de pagamento.
 - **Admin da plataforma:**
-  - Configurações: Evolution, n8n, SMTP, Mercado Pago, testar conexão, sincronizar n8n, ativar bot;
-  - Planos (R$ 59,90 / 109,90 / 189,90, editáveis);
-  - Empresas.
-- **Backend:** API interna do bot, cobrança Pix + `billing/tick`, LGPD `maintenance/tick`, adaptador Evolution, segurança (rate limit, headers/CSP, SSRF, assinatura do MP).
-- **n8n (inativos até publicar):** `innochat-bot` (agendar, meus agendamentos, cancelar, remarcar), `innochat-erros`, `innochat-cron`.
-- **Qualidade:** 171 unitários, 118 de integração, ~60 E2E, revisão de segurança, CI, Dockerfile + `/api/health`, guia `docs/deploy-easypanel.md`.
+  - Configurações: Evolution, n8n (sync deriva a URL do webhook do nó e reaponta instâncias), SMTP, Mercado Pago com produção + sandbox e segredos cifrados AES-256-GCM;
+  - Planos, Empresas;
+  - Cobrança (card "Em teste", conferir no MP);
+  - Saúde (diagnóstico do webhook do MP);
+  - Dados jurídicos.
+- **Cobrança:**
+  - teste de 3 dias;
+  - teste não convertido: suspenso em 1 dia, cancelado em +7 dias, fatura anulada;
+  - conciliação ativa do Pix (tela, tick, admin);
+  - baixa só com referência e valor exatos.
+- **Qualidade:** ~360 unitários, ~220 de integração, 125 E2E contra build de produção; revisões do Órion aprovadas.
 
-## Falta antes de publicar
+## Falta (etapa D — fechamento)
 
-1. Protótipo premium (4 pacotes + responsivo) → aprovação do dono → estender a todas as telas.
-2. Mercado Pago alinhado ao Parque das Feiras (pode exigir CPF/CNPJ do pagador).
-3. Telas admin **Cobrança** e **Saúde** (hoje "Em breve").
-4. QA das telas novas + responsivo em 5 larguras + **2 rodadas E2E completas seguidas verdes**.
-5. Órion: revisão dos pontos novos (Clientes/CSV, SQL cru, drag-and-drop).
-6. Termos de uso e privacidade (texto do dono).
+1. Confirmar no ar o deploy dos e-mails (`7e1f7ba`) e mandar um e-mail real de teste (Gmail/Outlook/iPhone).
+2. "Simular notificação" no painel do MP deve responder 200 (fix `50593fc`).
+3. Primeira execução do `maintenance/tick` (03:15) — o alerta de "atrasado" em Saúde some depois dela.
 
-## Publicação (seguindo `docs/deploy-easypanel.md`)
+## Recomendações ao dono
 
-1. Easypanel: Postgres + App do GitHub + `DATABASE_URL`/`AUTH_SECRET` + domínio + `migrate deploy`.
-2. `/instalacao` → Admin → Configurações (Evolution, n8n, SMTP, Mercado Pago + URL do webhook no MP).
-3. Sincronizar n8n → Ativar bot.
-4. Prova ponta a ponta real: QR → "oi" → agendar/cancelar/remarcar → Pix → e-mails; capturar os payloads reais da Evolution.
+- **Trocar a senha do banco de produção:** ela apareceu em logs colados no chat e é igual à local.
+- **`AUTH_SECRET` é definitivo:** agora ele cifra os segredos salvos. Trocar exige recadastrar Evolution, n8n, SMTP e MP.
+- **Card sandbox do MP:** tem credenciais de produção (o MP recusa com "live credentials"). Colocar as de teste ou usar só Produção.
 
-## Pós-v1
+## Pós-v1 / ideias
 
-Lembrete de véspera · histórico de conversas · origem do cliente (painel vs WhatsApp) · cifragem dos segredos · rate limit distribuído.
+- Ação "concluir / cliente faltou" no agendamento (as notificações desses casos já existem).
+- Sino no admin da plataforma.
+- Conversa do mockup do WhatsApp com a mensagem real de boas-vindas.
+- Lembrete de véspera ao cliente.
+- Histórico de conversas.
+- Rate limit distribuído.
 
 ## Decisões em aberto (dono)
 
 - Texto próprio "Confirma a remarcação?"?
-- Teste grátis de 1 dia (mercado usa 7 a 14)?
-- Termos de uso e política de privacidade.
+- Card "Adicionar número" escondido quando o plano está no limite?
