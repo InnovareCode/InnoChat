@@ -157,18 +157,18 @@ test.describe("Admin da plataforma: configurações e integrações", () => {
       await page.getByLabel("URL da Evolution").fill(evolutionFake.url);
       await page.getByLabel("Chave da Evolution").fill(evolutionKey);
       await page.getByRole("button", { name: "Salvar" }).first().click();
-      await expect(page.getByText("Evolution API salva.")).toBeVisible();
+      await expect(page.getByText("Evolution API salva.").first()).toBeVisible();
 
       await page.getByLabel("URL do n8n").fill(n8nFake.url);
       await page.getByLabel("Chave da API do n8n").fill(n8nKey);
       await page.getByLabel("URL base de webhook do n8n", { exact: true }).fill(`${n8nFake.url}/webhook`);
       await page.getByRole("button", { name: "Salvar" }).nth(1).click();
-      await expect(page.getByText("n8n salvo.")).toBeVisible();
+      await expect(page.getByText("n8n salvo.").first()).toBeVisible();
 
       await page.getByRole("button", { name: "Sincronizar n8n" }).click();
-      await expect(page.getByText(/Sincronizado:/)).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText(/3 credencial\(is\) rotacionada\(s\)/)).toBeVisible();
-      await expect(page.getByText(/bot-e2e-1/)).toBeVisible();
+      await expect(page.getByText(/Sincronizado:/).first()).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText(/3 credencial\(is\) rotacionada\(s\)/).first()).toBeVisible();
+      await expect(page.getByText(/bot-e2e-1/).first()).toBeVisible();
 
       // A sync NUNCA chama publish/activate — nenhuma dessas rotas foi cadastrada no fake, então
       // se o cliente tivesse chamado, teria recebido 404 do fallback do `startFakeServer` e a
@@ -213,7 +213,7 @@ test.describe("Admin da plataforma: configurações e integrações", () => {
 
     // Sem n8n configurado/sincronizado, a action devolve erro (N8N_NOT_CONFIGURED ou
     // N8N_NOT_SYNCED) — a tela deve mostrar isso, nunca travar silenciosamente.
-    await expect(page.getByText(/Não foi possível ativar o bot/)).toBeVisible();
+    await expect(page.getByText(/Não foi possível ativar o bot/).first()).toBeVisible();
   });
 
   test("Cancelar no diálogo de confirmação não chama a action", async ({ page }) => {

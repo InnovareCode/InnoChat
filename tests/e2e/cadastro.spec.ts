@@ -80,7 +80,7 @@ test.describe("Cadastro público (/cadastro) ponta a ponta", () => {
     // (mesma raiz, `529.982.247-XX` só que com o último dígito trocado).
     await page.getByLabel("CPF ou CNPJ *", { exact: true }).fill("52998224700");
     await page.getByRole("button", { name: "Criar conta" }).click();
-    await expect(page.getByText("Informe um CPF ou CNPJ válido.")).toBeVisible();
+    await expect(page.getByText("Informe um CPF ou CNPJ válido.").first()).toBeVisible();
     // Nunca chegou a criar nada — nem tenant, nem usuário.
     const tenant = await prisma.tenant.findUnique({ where: { slug: `${RUN_PREFIX_SLUG}-cpf-invalido` } });
     expect(tenant).toBeNull();
@@ -96,7 +96,7 @@ test.describe("Cadastro público (/cadastro) ponta a ponta", () => {
     // (`src/core/billing/document.ts`) precisa aceitar igual.
     await page.getByLabel("CPF ou CNPJ *", { exact: true }).fill("529.982.247-25");
     await page.getByRole("button", { name: "Criar conta" }).click();
-    await expect(page.getByText("Confirme seu e-mail")).toBeVisible();
+    await expect(page.getByText("Confirme seu e-mail").first()).toBeVisible();
     const tenant = await prisma.tenant.findUnique({ where: { slug } });
     expect(tenant).not.toBeNull();
   });
@@ -106,7 +106,7 @@ test.describe("Cadastro público (/cadastro) ponta a ponta", () => {
     // `validateSlug` (puro, client-side) já bloqueia — nem precisa clicar em "Criar conta" para
     // ver o erro (mas clicamos, para confirmar que o submit não segue adiante).
     await page.getByRole("button", { name: "Criar conta" }).click();
-    await expect(page.getByText("Esse endereço já é reservado pelo sistema. Escolha outro.")).toBeVisible();
+    await expect(page.getByText("Esse endereço já é reservado pelo sistema. Escolha outro.").first()).toBeVisible();
     await expect(page.getByText("Confirme seu e-mail")).toHaveCount(0);
   });
 
@@ -114,14 +114,14 @@ test.describe("Cadastro público (/cadastro) ponta a ponta", () => {
     const email = `${RUN_PREFIX_LC}-slugdup@e2e.innochat.local`;
     await fillValidForm(page, { slug: SEED_TENANT_SLUG, email });
     await page.getByRole("button", { name: "Criar conta" }).click();
-    await expect(page.getByText("Esse endereço já está em uso. Escolha outro.")).toBeVisible();
+    await expect(page.getByText("Esse endereço já está em uso. Escolha outro.").first()).toBeVisible();
   });
 
   test("e-mail duplicado (dono do seed): mensagem no campo", async ({ page }) => {
     const slug = `${RUN_PREFIX_SLUG}-cadastro-emaildup`;
     await fillValidForm(page, { slug, email: SEED_OWNER_EMAIL });
     await page.getByRole("button", { name: "Criar conta" }).click();
-    await expect(page.getByText("Já existe uma conta com este e-mail.")).toBeVisible();
+    await expect(page.getByText("Já existe uma conta com este e-mail.").first()).toBeVisible();
   });
 
   test("sem SMTP configurado, o cadastro conclui normalmente (e-mail de verificação só falha em silêncio)", async ({ page }) => {
@@ -135,7 +135,7 @@ test.describe("Cadastro público (/cadastro) ponta a ponta", () => {
     await fillValidForm(page, { slug, email });
     await page.getByRole("button", { name: "Criar conta" }).click();
 
-    await expect(page.getByText("Confirme seu e-mail")).toBeVisible();
+    await expect(page.getByText("Confirme seu e-mail").first()).toBeVisible();
     const tenant = await prisma.tenant.findUnique({ where: { slug } });
     expect(tenant).not.toBeNull();
     const user = await prisma.user.findUnique({ where: { email } });
@@ -162,7 +162,7 @@ test.describe("Cadastro público (/cadastro) ponta a ponta", () => {
 
       await fillValidForm(page, { slug, email });
       await page.getByRole("button", { name: "Criar conta" }).click();
-      await expect(page.getByText("Confirme seu e-mail")).toBeVisible();
+      await expect(page.getByText("Confirme seu e-mail").first()).toBeVisible();
 
       // Espera o e-mail de verificação chegar no SMTP fake (efeito colateral assíncrono, fora da
       // transação de cadastro — docs/contratos.md). O cadastro TAMBÉM dispara o e-mail de fatura
@@ -178,7 +178,7 @@ test.describe("Cadastro público (/cadastro) ponta a ponta", () => {
       expect(verifyUrl).toContain("/verificar-email?token=");
 
       await page.goto(verifyUrl!);
-      await expect(page.getByText("E-mail confirmado!")).toBeVisible();
+      await expect(page.getByText("E-mail confirmado!").first()).toBeVisible();
       const verifiedUser = await prisma.user.findUniqueOrThrow({ where: { email } });
       expect(verifiedUser.emailVerifiedAt).not.toBeNull();
 
@@ -187,7 +187,7 @@ test.describe("Cadastro público (/cadastro) ponta a ponta", () => {
       await page.goto("/recuperar-senha");
       await page.getByLabel("E-mail").fill(email);
       await page.getByRole("button", { name: "Enviar link" }).click();
-      await expect(page.getByText("Verifique seu e-mail")).toBeVisible();
+      await expect(page.getByText("Verifique seu e-mail").first()).toBeVisible();
 
       await expect.poll(() => fakeSmtp.mails.length, { timeout: 10_000 }).toBeGreaterThan(0);
       const resetMail = fakeSmtp.mails[0];

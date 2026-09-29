@@ -82,7 +82,7 @@ test.describe("Clientes", () => {
     await formDialog.getByLabel("Telefone", { exact: false }).fill(phone);
     await formDialog.getByRole("button", { name: "Criar", exact: true }).click();
 
-    await expect(page.getByText("Já existe um cliente cadastrado com esse telefone.")).toBeVisible();
+    await expect(page.getByText("Já existe um cliente cadastrado com esse telefone.").first()).toBeVisible();
     await page.getByRole("button", { name: "Abrir cliente existente" }).click();
     await expect(page.getByRole("dialog").filter({ hasText: "Dados, histórico de agendamentos" })).toBeVisible();
     await expect(page.getByText(firstName).first()).toBeVisible();

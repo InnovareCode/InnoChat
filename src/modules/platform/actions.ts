@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requirePlatformAdmin } from "@/lib/auth/guards";
 import { runAction, type Result } from "@/lib/result";
@@ -194,7 +195,12 @@ export async function updatePlatformLegalInfoAction(input: unknown): Promise<Res
       data.companyCnpj = digits;
     }
 
-    return updatePlatformLegalInfo(data, admin.id);
+    const saved = await updatePlatformLegalInfo(data, admin.id);
+    // /termos e /privacidade são estáticas com revalidate de 60s: invalida na hora para o
+    // dado novo aparecer já na próxima visita (achado da Íris, 2026-09-29).
+    revalidatePath("/termos");
+    revalidatePath("/privacidade");
+    return saved;
   });
 }
 

@@ -95,7 +95,12 @@ function NavGroupSection({
           hasActive ? "text-sidebar-active-text" : "text-sidebar-text/60 hover:text-sidebar-text",
         )}
       >
-        <span>{group.label}</span>
+        <span className="flex items-center gap-2">
+          {group.label}
+          {!open && group.items.some((item) => item.dot) ? (
+            <span className="h-2 w-2 rounded-full bg-danger" aria-hidden="true" title="Precisa de atenção" />
+          ) : null}
+        </span>
         <ChevronDown
           className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200 motion-reduce:transition-none", open && "rotate-180")}
           aria-hidden="true"
@@ -126,7 +131,11 @@ function GroupedNav({ groups, pinned, onNavigate }: { groups: NavGroup[]; pinned
   const pathname = usePathname();
   const [openGroups, setOpenGroups] = useState<string[]>(() => {
     const active = groupContainingActive(groups, pathname);
-    return active ? [active] : [groups[0]?.id ?? ""];
+    const initial = active ? [active] : [groups[0]?.id ?? ""];
+    // Grupo com item pedindo atenção (ex.: WhatsApp desconectado) nasce aberto: um alerta
+    // escondido num grupo fechado é o mesmo que não existir (achado da Íris, 2026-09-29).
+    const attention = groups.filter((g) => g.items.some((item) => item.dot)).map((g) => g.id);
+    return [...new Set([...initial, ...attention])];
   });
 
   // Se a navegação mudar para um grupo ainda fechado, auto-abre (sem fechar os outros que o

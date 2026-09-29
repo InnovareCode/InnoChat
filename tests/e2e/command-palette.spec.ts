@@ -21,7 +21,7 @@ test.describe("Paleta de comando (Ctrl+K)", () => {
     await expect(input).toBeFocused();
 
     await input.fill("clientes");
-    const clientesResult = dialog.getByRole("button", { name: "Clientes" });
+    const clientesResult = dialog.getByRole("button", { name: "Clientes", exact: true });
     await expect(clientesResult).toBeVisible();
     await clientesResult.click();
     await expect(page).toHaveURL(new RegExp(`/${SEED_TENANT_SLUG}/clientes$`));
@@ -63,6 +63,6 @@ test.describe("Paleta de comando (Ctrl+K)", () => {
     await expect(input).toBeFocused();
     await input.fill("xyz-nao-existe-123");
     await expect(input).toHaveValue("xyz-nao-existe-123");
-    await expect(page.getByText(/Nada encontrado para/)).toBeVisible();
+    await expect(page.getByText(/Nada encontrado para/).first()).toBeVisible();
   });
 });

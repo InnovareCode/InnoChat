@@ -154,8 +154,8 @@ test.describe.serial("WhatsApp: conexão por QR com Evolution fake", () => {
     });
     await page.getByRole("button", { name: "Concluir" }).click();
 
-    await expect(page.getByText("Conectado", { exact: true })).toBeVisible();
-    await expect(page.getByText(PHONE_E164_OK_DISPLAY)).toBeVisible();
+    await expect(page.getByText("Conectado", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText(PHONE_E164_OK_DISPLAY).first()).toBeVisible();
 
     expect(violations).toEqual([]);
   });
@@ -178,7 +178,7 @@ test.describe.serial("WhatsApp: conexão por QR com Evolution fake", () => {
     // Avança o relógio VIRTUAL 2min01s — o `setTimeout(POLL_TIMEOUT_MS)` do diálogo dispara sem
     // esperar isso de verdade (`connect-whatsapp-dialog.tsx`, `POLL_TIMEOUT_MS = 2*60*1000`).
     await context.clock.fastForward("02:01");
-    await expect(page.getByText("O QR code expirou.", { exact: true })).toBeVisible();
+    await expect(page.getByText("O QR code expirou.", { exact: true }).first()).toBeVisible();
     const expiredButton = page.getByRole("button", { name: "Gerar novo QR" });
     await expect(expiredButton).toBeVisible();
 
@@ -203,8 +203,8 @@ test.describe.serial("WhatsApp: conexão por QR com Evolution fake", () => {
     await page.getByLabel("Rótulo *", { exact: true }).fill("Terceira linha");
     await page.getByRole("button", { name: "Gerar QR code" }).click();
 
-    await expect(page.getByText("Limite do plano atingido")).toBeVisible();
-    await expect(page.getByText(/permite até 1 número\(s\) de WhatsApp e você já tem 1/)).toBeVisible();
+    await expect(page.getByText("Limite do plano atingido").first()).toBeVisible();
+    await expect(page.getByText(/permite até 1 número\(s\) de WhatsApp e você já tem 1/).first()).toBeVisible();
     await expect(page.getByRole("link", { name: "Ver assinatura" })).toBeVisible();
   });
 
@@ -221,7 +221,7 @@ test.describe.serial("WhatsApp: conexão por QR com Evolution fake", () => {
     fakeEvolution.setState(instanceName!, "open");
     fakeEvolution.setOwnerJid(instanceName!, PHONE_JID_TRIAL_TAKEN);
 
-    await expect(page.getByText("Este número já usou o teste grátis")).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByText("Este número já usou o teste grátis").first()).toBeVisible({ timeout: 8_000 });
     await expect(
       page.getByText("Esse número de WhatsApp já foi conectado em outro teste grátis do InnoChat."),
     ).toBeVisible();
@@ -239,7 +239,7 @@ test.describe.serial("WhatsApp: conexão por QR com Evolution fake", () => {
       await page.getByLabel("Rótulo *", { exact: true }).fill("Linha sem verificar email");
       await page.getByRole("button", { name: "Gerar QR code" }).click();
 
-      await expect(page.getByText("Confirme seu e-mail antes de conectar")).toBeVisible();
+      await expect(page.getByText("Confirme seu e-mail antes de conectar").first()).toBeVisible();
       const created = await prisma.whatsappInstance.findFirst({ where: { tenantId, label: "Linha sem verificar email" } });
       expect(created).toBeNull();
     } finally {
@@ -256,7 +256,7 @@ test.describe.serial("WhatsApp: conexão por QR com Evolution fake", () => {
     await page.getByRole("button", { name: "Conectar número" }).click();
     await page.getByLabel("Rótulo *", { exact: true }).fill("Linha sem n8n");
     await page.getByRole("button", { name: "Gerar QR code" }).click();
-    await expect(page.getByText("Ainda não é possível conectar")).toBeVisible();
+    await expect(page.getByText("Ainda não é possível conectar").first()).toBeVisible();
     await prisma.platformSettings.update({ where: { id: 1 }, data: { n8nWebhookBaseUrl: "http://fake-n8n-webhook.e2e.local/webhook" } });
 
     // --- sem Evolution configurada ---
@@ -265,7 +265,7 @@ test.describe.serial("WhatsApp: conexão por QR com Evolution fake", () => {
     await page.getByRole("button", { name: "Conectar número" }).click();
     await page.getByLabel("Rótulo *", { exact: true }).fill("Linha sem evolution");
     await page.getByRole("button", { name: "Gerar QR code" }).click();
-    await expect(page.getByText("Ainda não é possível conectar")).toBeVisible();
+    await expect(page.getByText("Ainda não é possível conectar").first()).toBeVisible();
     await prisma.platformSettings.update({
       where: { id: 1 },
       data: { evolutionApiUrl: fakeEvolution.url, evolutionApiKey: "fake-evolution-key-e2e" },
@@ -306,7 +306,7 @@ test.describe.serial("WhatsApp: conexão por QR com Evolution fake", () => {
     await expect(page.getByRole("button", { name: "Desconectar" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Remover" })).toHaveCount(0);
     // Mas continua vendo a informação (o card do número conectado no teste 1).
-    await expect(page.getByText("Recepção")).toBeVisible();
+    await expect(page.getByText("Recepção").first()).toBeVisible();
   });
 
   test("remover só funciona digitando o rótulo exato", async ({ page, context }) => {

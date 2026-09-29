@@ -65,7 +65,7 @@ test.describe("Assinatura: trocar plano", () => {
     await loginAndWaitForPanel(page, fixtures.staffEmail, STAFF_PASSWORD, SEED_TENANT_SLUG);
     await page.goto(`/${SEED_TENANT_SLUG}/assinatura`);
 
-    await expect(page.getByText("Só o proprietário da empresa pode trocar de plano.")).toBeVisible();
+    await expect(page.getByText("Só o proprietário da empresa pode trocar de plano.").first()).toBeVisible();
     const upgradeButton = page.getByRole("button", { name: /Fazer upgrade|Fazer downgrade/ }).first();
     await expect(upgradeButton).toBeDisabled();
   });
@@ -144,8 +144,8 @@ test.describe("Assinatura: trocar plano", () => {
 
       await expect(page.getByText("Troca agendada.").first()).toBeVisible();
       await expect(page.getByText("A mudança entra em vigor no próximo ciclo de cobrança.").first()).toBeVisible();
-      await expect(page.getByText("Mudança para o plano")).toBeVisible();
-      await expect(page.getByText("Agendado", { exact: true })).toBeVisible();
+      await expect(page.getByText("Mudança para o plano").first()).toBeVisible();
+      await expect(page.getByText("Agendado", { exact: true }).first()).toBeVisible();
     });
   });
 });

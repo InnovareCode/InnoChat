@@ -165,7 +165,7 @@ test.describe.serial("/instalacao — bootstrap do primeiro admin da plataforma"
     await page.getByRole("button", { name: "Concluir instalação" }).click();
 
     await expect(page).toHaveURL(/\/login\?instalado=1/);
-    await expect(page.getByText("Instalação concluída")).toBeVisible();
+    await expect(page.getByText("Instalação concluída").first()).toBeVisible();
 
     const admin = await prisma.user.findUnique({ where: { email: createdAdminEmail } });
     expect(admin?.isPlatformAdmin).toBe(true);

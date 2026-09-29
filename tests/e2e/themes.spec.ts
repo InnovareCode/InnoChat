@@ -29,7 +29,7 @@ test.describe("Temas do painel (docs/contratos.md Fase 1 — Configurações →
     await page.goto(`/${SEED_TENANT_SLUG}/configuracoes/aparencia`);
     await page.getByRole("radio", { name: /Âmbar Estúdio/ }).check({ force: true });
     await page.getByRole("button", { name: "Salvar tema" }).click();
-    await expect(page.getByText("Tema salvo. Toda a equipe já vê o novo visual.")).toBeVisible();
+    await expect(page.getByText("Tema salvo. Toda a equipe já vê o novo visual.").first()).toBeVisible();
 
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "AMBAR_ESTUDIO");
@@ -37,7 +37,7 @@ test.describe("Temas do painel (docs/contratos.md Fase 1 — Configurações →
     // Devolve para o tema padrão, para não afetar os próximos testes desta sessão.
     await page.getByRole("radio", { name: /Índigo Clínico/ }).check({ force: true });
     await page.getByRole("button", { name: "Salvar tema" }).click();
-    await expect(page.getByText("Tema salvo. Toda a equipe já vê o novo visual.")).toBeVisible();
+    await expect(page.getByText("Tema salvo. Toda a equipe já vê o novo visual.").first()).toBeVisible();
   });
 
   test("STAFF (não-OWNER) NÃO consegue trocar o tema", async ({ page }) => {
@@ -48,7 +48,7 @@ test.describe("Temas do painel (docs/contratos.md Fase 1 — Configurações →
     await page.goto(`/${SEED_TENANT_SLUG}/configuracoes/aparencia`);
     await page.getByRole("radio", { name: /Verde Slate/ }).check({ force: true });
     await page.getByRole("button", { name: "Salvar tema" }).click();
-    await expect(page.getByText("Só o dono da empresa pode trocar o tema.")).toBeVisible();
+    await expect(page.getByText("Só o dono da empresa pode trocar o tema.").first()).toBeVisible();
 
     // Confirma que NADA mudou no banco (o STAFF não conseguiu, mesmo tendo enviado o form).
     const tenant = await prisma.tenant.findUniqueOrThrow({ where: { slug: SEED_TENANT_SLUG } });
@@ -113,7 +113,7 @@ async function setTheme(page: Page, theme: (typeof THEMES)[number]["value"]) {
   const label = THEMES.find((t) => t.value === theme)!.label;
   await page.getByRole("radio", { name: new RegExp(label) }).check({ force: true });
   await page.getByRole("button", { name: "Salvar tema" }).click();
-  await expect(page.getByText("Tema salvo. Toda a equipe já vê o novo visual.")).toBeVisible();
+  await expect(page.getByText("Tema salvo. Toda a equipe já vê o novo visual.").first()).toBeVisible();
 }
 
 function nextWeekdayISO(weekday: number): string {

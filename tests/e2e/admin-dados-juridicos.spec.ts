@@ -32,6 +32,6 @@ test.describe("Admin → Configurações → Dados jurídicos", () => {
     // O CNPJ aparece formatado (com pontuação) — `fillLegalSections`/`fillLegalIntro` usam o
     // valor salvo (com dígitos apenas) formatado para exibição; procura pelos dígitos, que sempre
     // aparecem independente da máscara escolhida.
-    await expect(page.getByText(/11\.222\.333\/0001-81|11222333000181/)).toBeVisible();
+    await expect(page.getByText(/11\.222\.333\/0001-81|11222333000181/).first()).toBeVisible();
   });
 });

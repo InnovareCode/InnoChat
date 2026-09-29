@@ -48,7 +48,7 @@ test.describe("Admin → Cobrança", () => {
     await page.goto("/admin/cobranca");
     await page.getByLabel("Empresa", { exact: false }).fill(tenant.name);
     await page.getByRole("button", { name: "Filtrar" }).click();
-    await expect(page.getByText(tenant.name)).toBeVisible();
+    await expect(page.getByText(tenant.name).first()).toBeVisible();
 
     const markPaidButton = page.getByRole("button", { name: `Marcar como paga a fatura de ${tenant.name}` });
     await markPaidButton.click();
@@ -91,7 +91,7 @@ test.describe("Admin → Cobrança", () => {
     await page.goto("/admin/cobranca");
     await page.getByLabel("Empresa", { exact: false }).fill(tenant.name);
     await page.getByRole("button", { name: "Filtrar" }).click();
-    await expect(page.getByText(tenant.name)).toBeVisible();
+    await expect(page.getByText(tenant.name).first()).toBeVisible();
 
     await page.getByRole("button", { name: `Regerar Pix da fatura de ${tenant.name}` }).click();
     // Sem Mercado Pago configurado neste ambiente (PlatformSettings sem token) — a ação chega a

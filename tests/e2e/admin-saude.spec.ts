@@ -15,7 +15,7 @@ test.describe("Admin → Saúde", () => {
     await expect(page.getByRole("heading", { name: "Saúde" })).toBeVisible();
 
     for (const label of ["Evolution", "n8n", "SMTP", "Mercado Pago"]) {
-      await expect(page.getByText(label, { exact: true })).toBeVisible();
+      await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
     }
     await expect(page.getByRole("heading", { name: "billing/tick" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "maintenance/tick" })).toBeVisible();

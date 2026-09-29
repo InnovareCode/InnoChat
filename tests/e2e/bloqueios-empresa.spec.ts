@@ -71,7 +71,7 @@ test.describe("Bloqueios da empresa inteira aparecem em toda a Agenda", () => {
     await page.getByLabel("Motivo (opcional)").fill(HOLIDAY_REASON);
     await page.getByRole("button", { name: "Criar" }).click();
     await expect(page.getByText("Feriado cadastrado.").first()).toBeVisible();
-    await expect(page.getByText(HOLIDAY_REASON)).toBeVisible();
+    await expect(page.getByText(HOLIDAY_REASON).first()).toBeVisible();
 
     // Vai para a Agenda, no dia do feriado, visão "Dia" (colunas por profissional).
     await page.goto(`/${SEED_TENANT_SLUG}/agenda`);

@@ -16,7 +16,7 @@ test.describe("Datas e fuso horário no painel", () => {
 
   test("Agenda mostra 'Horário de Brasília' (nunca o identificador IANA cru)", async ({ page }) => {
     await page.goto(`/${SEED_TENANT_SLUG}/agenda`);
-    await expect(page.getByText("Horário de Brasília")).toBeVisible();
+    await expect(page.getByText("Horário de Brasília").first()).toBeVisible();
     await expect(page.getByText("America/Sao_Paulo")).toHaveCount(0);
   });
 

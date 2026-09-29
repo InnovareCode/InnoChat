@@ -51,12 +51,12 @@ test.describe("Assinatura: Gerar Pix agora", () => {
     // ambiente) — o que importa aqui é que NENHUMA delas mostra a mensagem de rate limit.
     for (let i = 0; i < 5; i++) {
       await button.click();
-      await expect(page.getByText("Não foi possível gerar o Pix")).toBeVisible();
+      await expect(page.getByText("Não foi possível gerar o Pix").first()).toBeVisible();
       await expect(page.getByText("Muitas tentativas em pouco tempo.")).toHaveCount(0);
     }
 
     // 6ª: estoura o teto (5 tentativas/10min por empresa) — mensagem específica.
     await button.click();
-    await expect(page.getByText("Muitas tentativas em pouco tempo. Aguarde alguns minutos antes de tentar de novo.")).toBeVisible();
+    await expect(page.getByText("Muitas tentativas em pouco tempo. Aguarde alguns minutos antes de tentar de novo.").first()).toBeVisible();
   });
 });

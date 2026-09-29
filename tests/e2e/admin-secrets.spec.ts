@@ -22,13 +22,13 @@ test.describe("Admin da plataforma: segredos nunca voltam em texto puro", () => 
     await page.getByRole("button", { name: "Salvar" }).first().click();
 
     // Confirma que salvou (hint com o servidor mascarado) e que o campo não guarda o texto digitado.
-    await expect(page.getByText(/Chave atual: ••••2345\./)).toBeVisible();
+    await expect(page.getByText(/Chave atual: ••••2345\./).first()).toBeVisible();
     await expect(page.getByLabel("Chave da Evolution")).toHaveValue("");
 
     // A garantia que importa de verdade — persistida, sobrevive a reload: reabrindo a tela do
     // zero, o valor digitado NUNCA reaparece em lugar nenhum do HTML (nem escondido).
     await page.reload();
-    await expect(page.getByText(/Chave atual: ••••2345\./)).toBeVisible();
+    await expect(page.getByText(/Chave atual: ••••2345\./).first()).toBeVisible();
     const htmlAfterReload = await page.content();
     expect(htmlAfterReload).not.toContain(plaintextKey);
   });
@@ -48,13 +48,13 @@ test.describe("Admin da plataforma: segredos nunca voltam em texto puro", () => 
     // Depois de fechado, o segredo não aparece em lugar nenhum da página — só o status "Configurado".
     const htmlAfterClose = await page.content();
     expect(htmlAfterClose).not.toContain(secretValue);
-    await expect(page.getByText("Configurado", { exact: true })).toBeVisible();
+    await expect(page.getByText("Configurado", { exact: true }).first()).toBeVisible();
 
     // Reabrir a tela (reload) também nunca reexibe o valor gerado — a action só devolve o
     // booleano `internalApiSecretConfigured`, nunca o segredo/hash de volta.
     await page.reload();
     const htmlAfterReload = await page.content();
     expect(htmlAfterReload).not.toContain(secretValue);
-    await expect(page.getByText("Configurado", { exact: true })).toBeVisible();
+    await expect(page.getByText("Configurado", { exact: true }).first()).toBeVisible();
   });
 });
