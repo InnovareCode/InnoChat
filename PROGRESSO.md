@@ -47,11 +47,10 @@ Validado de ponta a ponta pelo dono em produção:
   - baixa só com referência e valor exatos.
 - **Qualidade:** ~360 unitários, ~220 de integração, 125 E2E contra build de produção; revisões do Órion aprovadas.
 
-## Falta (etapa D — fechamento)
+## Etapa D — CONCLUÍDA (2026-09-29)
 
-1. Confirmar no ar o deploy dos e-mails (`7e1f7ba`) e mandar um e-mail real de teste (Gmail/Outlook/iPhone).
-2. "Simular notificação" no painel do MP deve responder 200 (fix `50593fc`).
-3. Primeira execução do `maintenance/tick` (03:15) — o alerta de "atrasado" em Saúde some depois dela.
+Validado pelo dono em produção: bot WhatsApp, Pix real baixado, e-mail real entregue, webhook do MP simulado = 200.
+Único acompanhamento: primeira execução do `maintenance/tick` (03:15) em Admin → Saúde.
 
 ## Recomendações ao dono
 
