@@ -80,6 +80,38 @@ export class N8nApiError extends Error {
   }
 }
 
+/** Chaves de `settings` aceitas pelo `PUT /workflows/{id}` em todas as versões recentes do n8n. */
+const STABLE_SETTINGS_KEYS = [
+  "saveExecutionProgress",
+  "saveManualExecutions",
+  "saveDataErrorExecution",
+  "saveDataSuccessExecution",
+  "executionTimeout",
+  "errorWorkflow",
+  "timezone",
+  "executionOrder",
+  "callerPolicy",
+  "callerIds",
+] as const;
+
+/** O mínimo que o InnoChat configura nos workflows (retenção de execuções, erro, fuso). */
+const ESSENTIAL_SETTINGS_KEYS = [
+  "saveManualExecutions",
+  "saveDataErrorExecution",
+  "saveDataSuccessExecution",
+  "executionTimeout",
+  "errorWorkflow",
+  "timezone",
+] as const;
+
+function pickSettings(settings: Record<string, unknown> | undefined, keys: readonly string[]): Record<string, unknown> {
+  const picked: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (settings && settings[key] !== undefined) picked[key] = settings[key];
+  }
+  return picked;
+}
+
 const REQUEST_TIMEOUT_MS = 10_000;
 const WORKFLOWS_LIST_LIMIT = 100;
 const WORKFLOWS_LIST_MAX_PAGES = 5; // teto de segurança — nunca varredura ilimitada (docs/arquitetura.md, "nunca todos os registros sem limite")
@@ -188,13 +220,22 @@ export function createN8nClient(baseUrl: string, apiKey: string): N8nClient {
       // `PUT /workflows/{id}` só aceita estes 4 campos — nunca reenviamos o objeto cru do GET
       // (que traz `id`/`active`/`tags`/`versionId`/etc, todos `readOnly`). `publishIfActive`
       // fica no padrão (`true`) — não passamos query param.
-      const payload = {
-        name: workflow.name,
-        nodes: workflow.nodes,
-        connections: workflow.connections,
-        settings: workflow.settings ?? {},
+      //
+      // `settings` também é filtrado: o GET devolve chaves que o schema de escrita da própria
+      // instância recusa ("settings must NOT have additional properties", primeiro deploy real,
+      // 2026-09-29). Mandamos só as chaves estáveis entre versões; se ainda assim a instância
+      // recusar, tenta de novo só com as que o InnoChat realmente usa.
+      const send = async (settings: Record<string, unknown>) => {
+        const payload = { name: workflow.name, nodes: workflow.nodes, connections: workflow.connections, settings };
+        return request<N8nWorkflow>(`/workflows/${id}`, { method: "PUT", body: JSON.stringify(payload) });
       };
-      const updated = await request<N8nWorkflow>(`/workflows/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+      let updated: N8nWorkflow | null;
+      try {
+        updated = await send(pickSettings(workflow.settings, STABLE_SETTINGS_KEYS));
+      } catch (error) {
+        if (!(error instanceof N8nApiError && error.status === 400 && /settings/i.test(error.message))) throw error;
+        updated = await send(pickSettings(workflow.settings, ESSENTIAL_SETTINGS_KEYS));
+      }
       if (!updated) throw new N8nApiError(500, "n8n não devolveu o workflow atualizado.");
       return updated;
     },
