@@ -1,6 +1,7 @@
 "use client";
 
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useReducedMotion } from "framer-motion";
 import { formatDayNumber } from "@/components/lib/format-date";
 
 type Point = { date: string; count: number };
@@ -11,6 +12,7 @@ type Point = { date: string; count: number };
  * `ResponsiveContainer` porque o card em volta não tem largura fixa (shell sem `max-w`).
  */
 export function InicioChart({ data }: { data: Point[] }) {
+  const reduceMotion = useReducedMotion();
   return (
     <ResponsiveContainer width="100%" height={220}>
       <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
@@ -46,7 +48,16 @@ export function InicioChart({ data }: { data: Point[] }) {
           labelFormatter={(value) => (typeof value === "string" ? formatDayNumber(value) : value)}
           formatter={(value) => [value, "agendamentos"]}
         />
-        <Area type="monotone" dataKey="count" stroke="var(--color-primary)" strokeWidth={2} fill="url(#inicio-chart-fill)" />
+        <Area
+          type="monotone"
+          dataKey="count"
+          stroke="var(--color-primary)"
+          strokeWidth={2}
+          fill="url(#inicio-chart-fill)"
+          isAnimationActive={!reduceMotion}
+          animationDuration={700}
+          animationEasing="ease-out"
+        />
       </AreaChart>
     </ResponsiveContainer>
   );

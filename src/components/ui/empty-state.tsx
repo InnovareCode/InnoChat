@@ -11,6 +11,9 @@ export type EmptyStateProps = {
    * tracejada neutra — para os casos em que o vazio É a próxima ação óbvia (ex.: "conecte o
    * primeiro número"), não só "ainda não há dados". Default `neutral` continua o mesmo de sempre. */
   variant?: "neutral" | "highlight";
+  /** Ilustração inline (`empty-illustration.tsx`) — só some com `Icon` na variante `highlight`;
+   * na `neutral` continua o círculo com ícone de sempre (mais discreto). */
+  illustration?: React.ReactNode;
 };
 
 /**
@@ -18,7 +21,15 @@ export type EmptyStateProps = {
  * para as páginas placeholder das telas que a Vega ainda vai alimentar
  * (nunca uma tela em branco sem explicação).
  */
-export function EmptyState({ icon: Icon, title, description, action, className, variant = "neutral" }: EmptyStateProps) {
+export function EmptyState({
+  icon: Icon,
+  title,
+  description,
+  action,
+  className,
+  variant = "neutral",
+  illustration,
+}: EmptyStateProps) {
   return (
     <div
       className={cn(
@@ -29,7 +40,9 @@ export function EmptyState({ icon: Icon, title, description, action, className, 
         className,
       )}
     >
-      {Icon ? (
+      {illustration && variant === "highlight" ? (
+        <div className="mb-4 h-24 w-32 text-primary">{illustration}</div>
+      ) : Icon ? (
         <div
           className={cn(
             "mb-4 flex h-12 w-12 items-center justify-center rounded-full",

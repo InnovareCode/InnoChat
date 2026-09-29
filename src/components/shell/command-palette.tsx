@@ -57,8 +57,8 @@ export function CommandPalette({
   const quickActions: QuickAction[] = useMemo(() => {
     if (variant !== "tenant") return [];
     return [
-      { label: "Novo agendamento", hint: "Agenda", href: `/${tenantSlug}/agenda`, icon: CalendarPlus },
-      { label: "Novo cliente", hint: "Clientes", href: `/${tenantSlug}/clientes`, icon: UserPlus },
+      { label: "Novo agendamento", hint: "Agenda", href: `/${tenantSlug}/agenda?novo=1`, icon: CalendarPlus },
+      { label: "Novo cliente", hint: "Clientes", href: `/${tenantSlug}/clientes?novo=1`, icon: UserPlus },
       { label: "Conectar WhatsApp", hint: "Canal", href: `/${tenantSlug}/whatsapp`, icon: MessageCircleMore },
     ];
   }, [variant, tenantSlug]);
@@ -96,7 +96,7 @@ export function CommandPalette({
         <RadixDialog.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm" />
         <RadixDialog.Content
           className={cn(
-            "fixed left-1/2 top-[18%] z-50 w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2",
+            "dialog-content-top fixed left-1/2 top-[18%] z-50 w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2",
             "rounded-hero border border-border bg-surface shadow-card-hover",
             "focus:outline-none",
           )}

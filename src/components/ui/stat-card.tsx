@@ -73,7 +73,7 @@ export function StatCard({
       transition={{ duration: 0.25, delay: index * STAGGER_DELAY_S, ease: [0.16, 1, 0.3, 1] }}
       className={cn(
         "group relative overflow-hidden border border-border bg-surface p-5 shadow-card",
-        "transition-[box-shadow,border-color] duration-200 hover:border-primary/30 hover:shadow-card-hover motion-reduce:transition-none",
+        "transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-hover motion-reduce:transition-none motion-reduce:hover:translate-y-0",
         size === "hero" ? "rounded-hero-lg" : "rounded-hero",
         className,
       )}

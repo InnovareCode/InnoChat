@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { CalendarClock, CalendarPlus, CalendarRange, MessageCircle, Percent, Plus, Scissors, UserX, UserPlus } from "lucide-react";
@@ -5,7 +6,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { CalendarEmptyIllustration } from "@/components/ui/empty-illustration";
 import { Badge } from "@/components/ui/badge";
+import { Avatar } from "@/components/ui/avatar";
+import { cn } from "@/components/lib/cn";
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTimeLabel } from "@/components/lib/format-date";
 import { DomainError } from "@/lib/errors";
 import { getDashboardView } from "@/modules/dashboard/queries";
@@ -15,10 +20,38 @@ import { InicioChart } from "./inicio-chart";
  * Página "Início" (docs/design/premium-spec.md §10) — a leitura de dados vem inteira de
  * `src/modules/dashboard/queries.ts` (exceção de escopo autorizada pelo Atlas: só leitura,
  * escopo por tenant). Erro de leitura vira mensagem explícita, nunca uma página em branco.
+ *
+ * `Suspense` em volta de `InicioContent` (pacote "movimento e carregamento", 2026-09-29): dá um
+ * skeleton com shimmer de verdade durante a navegação/streaming, em vez de só aparecer tudo de
+ * uma vez quando o Server Component termina — o cabeçalho e o botão de ação já aparecem na hora.
  */
 export default async function InicioPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = await params;
 
+  return (
+    <div>
+      <PageHeader
+        size="hero"
+        title="Início"
+        description="O resumo do seu negócio hoje."
+        action={
+          <Link
+            href={`/${tenantSlug}/agenda`}
+            className="inline-flex h-10 items-center gap-2 rounded-card bg-primary px-4 text-sm font-medium text-white transition-transform duration-150 hover:bg-primary-strong active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            Novo agendamento
+          </Link>
+        }
+      />
+      <Suspense fallback={<InicioSkeleton />}>
+        <InicioContent tenantSlug={tenantSlug} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function InicioContent({ tenantSlug }: { tenantSlug: string }) {
   let view;
   try {
     view = await getDashboardView(tenantSlug);
@@ -27,34 +60,17 @@ export default async function InicioPage({ params }: { params: Promise<{ tenantS
       notFound();
     }
     return (
-      <div>
-        <PageHeader title="Início" />
-        <EmptyState
-          title="Não foi possível carregar o resumo agora"
-          description="Tente recarregar a página em alguns instantes. Se o problema continuar, fale com o suporte."
-        />
-      </div>
+      <EmptyState
+        title="Não foi possível carregar o resumo agora"
+        description="Tente recarregar a página em alguns instantes. Se o problema continuar, fale com o suporte."
+      />
     );
   }
 
   const hasAnyActivity = view.dailySeries.some((p) => p.count > 0) || view.upcoming.length > 0;
 
   return (
-    <div>
-      <PageHeader
-        title="Início"
-        description="O resumo do seu negócio hoje."
-        action={
-          <Link
-            href={`/${tenantSlug}/agenda`}
-            className="inline-flex h-10 items-center gap-2 rounded-card bg-primary px-4 text-sm font-medium text-white hover:bg-primary-strong"
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Novo agendamento
-          </Link>
-        }
-      />
-
+    <>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           index={0}
@@ -112,7 +128,7 @@ export default async function InicioPage({ params }: { params: Promise<{ tenantS
             ) : (
               <EmptyState
                 variant="highlight"
-                icon={CalendarPlus}
+                illustration={<CalendarEmptyIllustration className="h-full w-full" />}
                 title="Ainda sem agendamentos no período"
                 description="O gráfico aparece assim que os primeiros agendamentos entrarem, pelo painel ou pelo bot."
               />
@@ -143,6 +159,7 @@ export default async function InicioPage({ params }: { params: Promise<{ tenantS
                       ) : null}
                       <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" aria-hidden="true" />
                     </span>
+                    <Avatar id={appt.professionalName} name={appt.professionalName} size="sm" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-text">{appt.serviceName}</p>
                       <p className="truncate text-xs text-text-secondary">
@@ -161,11 +178,11 @@ export default async function InicioPage({ params }: { params: Promise<{ tenantS
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <ShortcutCard href={`/${tenantSlug}/agenda`} icon={CalendarPlus} label="Novo agendamento" />
-        <ShortcutCard href={`/${tenantSlug}/clientes`} icon={UserPlus} label="Novo cliente" />
+        <ShortcutCard href={`/${tenantSlug}/agenda?novo=1`} icon={CalendarPlus} label="Novo agendamento" />
+        <ShortcutCard href={`/${tenantSlug}/clientes?novo=1`} icon={UserPlus} label="Novo cliente" />
         <ShortcutCard href={`/${tenantSlug}/servicos`} icon={Scissors} label="Gerenciar serviços" />
       </div>
-    </div>
+    </>
   );
 }
 
@@ -173,12 +190,37 @@ function ShortcutCard({ href, icon: Icon, label }: { href: string; icon: typeof 
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 rounded-hero border border-border bg-surface p-4 text-sm font-medium text-text transition-colors duration-150 hover:border-primary/30 hover:bg-bg motion-reduce:transition-none"
+      className={cn(
+        "flex items-center gap-3 rounded-hero border border-border bg-surface p-4 text-sm font-medium text-text",
+        "transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-hover motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+      )}
     >
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
         <Icon className="h-4 w-4" aria-hidden="true" />
       </span>
       {label}
     </Link>
+  );
+}
+
+/** Skeleton do "Início" — mesma forma da grade real (5 StatCards + gráfico/lista + atalhos). */
+function InicioSkeleton() {
+  return (
+    <>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-[164px] rounded-hero" />
+        ))}
+      </div>
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Skeleton className="h-[300px] rounded-hero lg:col-span-2" />
+        <Skeleton className="h-[300px] rounded-hero" />
+      </div>
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-[60px] rounded-hero" />
+        ))}
+      </div>
+    </>
   );
 }

@@ -54,7 +54,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               duration={5000}
               onOpenChange={(open) => !open && remove(item.id)}
               className={cn(
-                "rounded-card border bg-surface p-4 shadow-card data-[state=open]:animate-in",
+                "toast-root rounded-card border bg-surface p-4 shadow-card",
                 "grid grid-cols-[auto_1fr] gap-3",
                 VARIANT_CLASS[item.variant],
               )}

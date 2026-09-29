@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Download, Plus, Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -91,6 +92,21 @@ export function ClientesClient({
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const requestIdRef = useRef(0);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Paleta de comando (Ctrl+K) e o atalho "Novo cliente" do Início linkam para
+  // `/clientes?novo=1` — abre o diálogo direto. `setTimeout(fn, 0)`: setState direto no corpo do
+  // efeito dispara o lint `react-hooks/set-state-in-effect` (armadilha já registrada na memória).
+  useEffect(() => {
+    if (searchParams.get("novo") !== "1") return;
+    const id = setTimeout(() => {
+      setCreateOpen(true);
+      router.replace(`/${tenantSlug}/clientes`, { scroll: false });
+    }, 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Debounce da busca — só depois de o usuário parar de digitar por 350ms é que ela
   // dispara uma nova consulta (evita uma requisição por tecla).

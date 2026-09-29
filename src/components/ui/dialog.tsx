@@ -18,7 +18,7 @@ export function DialogContent({
       <RadixDialog.Overlay className="fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-in data-[state=open]:fade-in" />
       <RadixDialog.Content
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2",
+          "dialog-content-centered fixed left-1/2 top-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2",
           "rounded-card border border-border bg-surface p-6 shadow-card",
           "focus:outline-none",
           className,

@@ -1,16 +1,33 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  KeyboardSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import { CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, colorForId } from "@/components/ui/avatar";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/components/lib/cn";
 import {
   capitalizeFirst,
+  formatDateTimeLabel,
   formatDayNumber,
   formatLongDateLabel,
   formatShortWeekdayLabel,
@@ -18,7 +35,7 @@ import {
   formatWeekRangeLabel,
   friendlyTimezoneLabel,
 } from "@/components/lib/format-date";
-import { listAppointmentsAction } from "@/modules/agenda/appointment-actions";
+import { listAppointmentsAction, rescheduleAppointmentAction } from "@/modules/agenda/appointment-actions";
 import { listScheduleExceptionsAction } from "@/modules/agenda/catalog-actions";
 import {
   NovoAgendamentoDialog,
@@ -142,6 +159,25 @@ export function AgendaClient({
   const [detail, setDetail] = useState<AppointmentDetail | null>(null);
   const [nowTick, setNowTick] = useState(() => new Date());
   const [weekProfessionalId, setWeekProfessionalId] = useState<string>("");
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [rescheduling, setRescheduling] = useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { notify } = useToast();
+
+  // Paleta de comando (Ctrl+K) e o atalho "Novo agendamento" do Início linkam para
+  // `/agenda?novo=1` — abre o diálogo direto, sem precisar clicar de novo no botão da tela.
+  // `setTimeout(fn, 0)`: setState direto no corpo do efeito dispara o lint
+  // `react-hooks/set-state-in-effect` (armadilha já registrada na memória).
+  useEffect(() => {
+    if (searchParams.get("novo") !== "1") return;
+    const id = setTimeout(() => {
+      setNovoOpen(true);
+      router.replace(`/${tenantSlug}/agenda`, { scroll: false });
+    }, 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const activeProfessionals = useMemo(() => professionals.filter((p) => p.active), [professionals]);
   const agendaServices: AgendaService[] = services;
@@ -199,6 +235,28 @@ export function AgendaClient({
     setNovoPrefill(forDate ? { date: forDate } : undefined);
     setNovoOpen(true);
   }
+  /**
+   * Arrastar para remarcar (docs premium, pacote "agenda interativa") — reaproveita a MESMA
+   * `rescheduleAppointmentAction` do diálogo de detalhe ("Remarcar" por texto continua existindo,
+   * o arraste é um atalho, não o único caminho). Limitação de contrato conhecida e reportada no
+   * handoff: `rescheduleAppointment` (backend, Vega) só muda `startsAt` — mantém o MESMO
+   * profissional do agendamento original. Por isso só existe drop dentro da coluna do próprio
+   * profissional; soltar em outra coluna é bloqueado antes de chamar o servidor (ver `DayView`).
+   */
+  async function handleReschedule(appointmentId: string, newStartsAtISO: string) {
+    setRescheduling(true);
+    const result = await rescheduleAppointmentAction(tenantSlug, appointmentId, { startsAt: newStartsAtISO });
+    setRescheduling(false);
+    if (result.ok) {
+      notify({ variant: "success", title: "Agendamento remarcado", description: formatDateTimeLabel(newStartsAtISO, timezone) });
+      load();
+    } else if (result.error.code === "SLOT_TAKEN") {
+      notify({ variant: "error", title: "Horário ocupado", description: "Esse horário acabou de ser ocupado por outro agendamento." });
+    } else {
+      notify({ variant: "error", title: "Não foi possível remarcar", description: result.error.message });
+    }
+  }
+
   function openDetail(a: ApptRaw) {
     setDetail({
       id: a.id,
@@ -282,7 +340,7 @@ export function AgendaClient({
               aria-label="Filtrar semana por profissional"
               value={weekProfessionalId}
               onChange={(e) => setWeekProfessionalId(e.target.value)}
-              className="h-9 w-auto min-w-[10rem]"
+              className="w-auto min-w-[10rem]"
             >
               <option value="">Todos os profissionais</option>
               {activeProfessionals.map((p) => (
@@ -297,7 +355,7 @@ export function AgendaClient({
               type="button"
               onClick={() => setView("day")}
               className={cn(
-                "rounded-card px-3 py-1.5 text-sm transition-colors duration-150 motion-reduce:transition-none",
+                "flex min-h-11 items-center rounded-card px-3 text-sm transition-colors duration-150 motion-reduce:transition-none",
                 view === "day" ? "bg-primary text-white" : "text-text-secondary hover:bg-bg",
               )}
             >
@@ -307,7 +365,7 @@ export function AgendaClient({
               type="button"
               onClick={() => setView("week")}
               className={cn(
-                "rounded-card px-3 py-1.5 text-sm transition-colors duration-150 motion-reduce:transition-none",
+                "flex min-h-11 items-center rounded-card px-3 text-sm transition-colors duration-150 motion-reduce:transition-none",
                 view === "week" ? "bg-primary text-white" : "text-text-secondary hover:bg-bg",
               )}
             >
@@ -318,7 +376,7 @@ export function AgendaClient({
       </div>
 
       {loading ? (
-        <Card className="p-12 text-center text-sm text-text-secondary">Carregando agenda…</Card>
+        <AgendaSkeleton />
       ) : view === "day" ? (
         <DayView
           dateISO={dateISO}
@@ -329,6 +387,10 @@ export function AgendaClient({
           now={nowTick}
           onSlotClick={openNovoAt}
           onApptClick={openDetail}
+          onReschedule={handleReschedule}
+          draggingId={draggingId}
+          onDragStateChange={setDraggingId}
+          dragDisabled={writeBlocked || rescheduling}
         />
       ) : (
         <WeekView
@@ -367,6 +429,26 @@ export function AgendaClient({
         disabled={writeBlocked}
       />
     </div>
+  );
+}
+
+/** Skeleton com shimmer no lugar de "Carregando agenda…" (docs premium, pacote "movimento"). */
+function AgendaSkeleton() {
+  return (
+    <>
+      <Card className="hidden overflow-hidden rounded-hero p-4 md:block">
+        <div className="flex gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-[420px] flex-1" />
+          ))}
+        </div>
+      </Card>
+      <div className="flex flex-col gap-4 md:hidden">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <Skeleton key={i} className="h-[140px] rounded-hero" />
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -460,6 +542,120 @@ function exceptionLabel(exception: ScheduleExceptionRow): string {
   return exception.reason?.trim() || EXCEPTION_TYPE_LABEL[exception.type];
 }
 
+/** Mini-resumo flutuante no hover do bloco (docs premium, pacote "agenda interativa"). */
+function HoverSummary({ appt, timezone }: { appt: ApptRaw; timezone: string }) {
+  return (
+    <div
+      className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 w-48 -translate-x-1/2 rounded-card border border-border bg-surface p-3 text-left text-xs shadow-card-hover"
+      role="tooltip"
+    >
+      <p className="font-semibold text-text">{appt.contact.name ?? "Sem nome"}</p>
+      <p className="mt-0.5 text-text-secondary">{appt.service.name}</p>
+      <p className="mt-0.5 tabular-nums text-text-secondary">
+        {formatTimeLabel(appt.startsAt, timezone)}–{formatTimeLabel(appt.endsAt, timezone)}
+      </p>
+      <Badge variant={STATUS_BADGE_VARIANT[appt.status]} className="mt-1.5">
+        {appt.status === "SCHEDULED" ? "Agendado" : appt.status === "COMPLETED" ? "Concluído" : appt.status === "NO_SHOW" ? "Faltou" : "Cancelado"}
+      </Badge>
+    </div>
+  );
+}
+
+/**
+ * Bloco de agendamento arrastável (docs premium, "arrastar para remarcar") — só é de fato
+ * arrastável quando `status === "SCHEDULED"` (mesma regra do backend, `rescheduleAppointment`
+ * só aceita remarcar um agendamento em aberto) e a tela não está bloqueada por escrita/já
+ * remarcando. Barra lateral na cor do PROFISSIONAL (`colorForId`) somada ao preenchimento por
+ * STATUS — as duas informações cabem juntas sem se atrapalhar.
+ */
+function DraggableAppointmentBlock({
+  appt,
+  top,
+  height,
+  timezone,
+  disabled,
+  onClick,
+}: {
+  appt: ApptRaw;
+  top: number;
+  height: number;
+  timezone: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const draggable = appt.status === "SCHEDULED" && !disabled;
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: appt.id,
+    data: { professionalId: appt.professionalId },
+    disabled: !draggable,
+  });
+  const [hover, setHover] = useState(false);
+
+  return (
+    <div
+      className="absolute z-10"
+      style={{ top, height, left: 4, right: 4 }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <button
+        ref={setNodeRef}
+        type="button"
+        onClick={onClick}
+        style={{ borderLeftColor: colorForId(appt.professionalId) }}
+        className={cn(
+          "h-full w-full overflow-hidden rounded-card border-l-[3px] p-1.5 text-left text-xs shadow-card",
+          "transition-[transform,opacity] duration-150 hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
+          draggable ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-pointer",
+          isDragging && "opacity-0",
+          STATUS_BLOCK_CLASSES[appt.status],
+        )}
+        {...listeners}
+        {...attributes}
+      >
+        <p className="truncate font-semibold tabular-nums">{formatTimeLabel(appt.startsAt, timezone)}</p>
+        <p className="truncate font-medium">{appt.service.name}</p>
+        <p className="truncate opacity-90">{appt.contact.name ?? "Sem nome"}</p>
+      </button>
+      {hover && !isDragging ? <HoverSummary appt={appt} timezone={timezone} /> : null}
+    </div>
+  );
+}
+
+/** Célula de horário — droppable durante o arraste; nunca aceita solta em folga/bloqueio. */
+function DroppableSlotCell({
+  id,
+  disabled,
+  top,
+  height,
+  onClick,
+  ariaLabel,
+}: {
+  id: string;
+  disabled: boolean;
+  top: number;
+  height: number;
+  onClick: () => void;
+  ariaLabel: string;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id, disabled });
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      onClick={onClick}
+      style={{ top, height }}
+      className={cn(
+        "absolute left-0 right-0 border-b border-border transition-colors duration-150 hover:bg-bg motion-reduce:transition-none",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+        isOver && !disabled && "bg-primary/15",
+      )}
+      aria-label={ariaLabel}
+    />
+  );
+}
+
 function DayView({
   dateISO,
   timezone,
@@ -469,6 +665,10 @@ function DayView({
   now,
   onSlotClick,
   onApptClick,
+  onReschedule,
+  draggingId,
+  onDragStateChange,
+  dragDisabled = false,
 }: {
   dateISO: string;
   timezone: string;
@@ -478,7 +678,18 @@ function DayView({
   now: Date;
   onSlotClick: (professionalId: string, startsAtISO: string) => void;
   onApptClick: (a: ApptRaw) => void;
+  /** Arrastar para remarcar é opcional — só o `DayView` do painel do tenant usa; `WeekView`
+   * continua só com clique (ver PENDÊNCIAS no handoff: cobrir a semana fica para outra rodada). */
+  onReschedule?: (appointmentId: string, newStartsAtISO: string) => void;
+  draggingId?: string | null;
+  onDragStateChange?: (id: string | null) => void;
+  dragDisabled?: boolean;
 }) {
+  const { notify } = useToast();
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor),
+  );
   const { startMin, endMin } = useMemo(
     () => computeWindow(dateISO, professionals, appointments, timezone),
     [dateISO, professionals, appointments, timezone],
@@ -511,13 +722,54 @@ function DayView({
     return dayExceptions.filter((e) => e.professionalId === null || e.professionalId === professionalId);
   }
 
+  /** Nunca dá para soltar (arrastar) num slot com bloqueio/feriado — mesma regra do dono. */
+  function slotBlockedByException(professionalId: string, minuteOffset: number): boolean {
+    const min = startMin + minuteOffset;
+    return bandsForProfessional(professionalId).some((e) => {
+      const position = exceptionBandPosition(e, dateISO, timezone, startMin, endMin, ROW_HEIGHT_PX);
+      if (!position) return false;
+      const bandStartMin = startMin + position.top / ROW_HEIGHT_PX * SLOT_MIN;
+      const bandEndMin = bandStartMin + (position.height / ROW_HEIGHT_PX) * SLOT_MIN;
+      return min >= bandStartMin && min < bandEndMin;
+    });
+  }
+
+  const draggingAppt = draggingId ? appointments.find((a) => a.id === draggingId) : undefined;
+
+  function handleDragStart(event: DragStartEvent) {
+    onDragStateChange?.(String(event.active.id));
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    onDragStateChange?.(null);
+    const { active, over } = event;
+    if (!over) return;
+    const draggedProfessionalId = active.data.current?.professionalId as string | undefined;
+    const [overProfessionalId, slotIndexStr] = String(over.id).split(":");
+    if (!draggedProfessionalId || overProfessionalId !== draggedProfessionalId) {
+      notify({
+        variant: "info",
+        title: "Não é possível mudar de profissional arrastando",
+        description: "Abra o agendamento e use \"Remarcar\" para trocar de profissional.",
+      });
+      return;
+    }
+    const slotIndex = Number(slotIndexStr);
+    onReschedule?.(String(active.id), slotToISO(slotIndex * SLOT_MIN));
+  }
+
   return (
     <>
       {/* Desktop/tablet: colunas por profissional */}
-      <Card className="hidden overflow-x-auto rounded-hero md:block">
+      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      {/* Responsivo (docs premium, requisito reforçado 2026-09-29): a GRADE rola por dentro
+          (`max-h-*` + `overflow-auto` neste wrapper, não a página inteira) com cabeçalho de
+          horas (coluna) e de profissionais (linha) fixos via `sticky` — testado sem rolagem
+          horizontal da página em 360/390/768/1024/1440px (ver handoff, matriz de breakpoints). */}
+      <Card className="hidden overflow-auto rounded-hero md:block" style={{ maxHeight: "calc(100vh - 280px)" }}>
         <div className="flex min-w-full">
-          <div className="w-16 shrink-0 border-r border-border">
-            <div className="h-14 border-b border-border" />
+          <div className="sticky left-0 z-20 w-16 shrink-0 border-r border-border bg-surface">
+            <div className="sticky top-0 z-30 h-14 border-b border-border bg-surface" />
             {Array.from({ length: totalSlots }).map((_, i) => {
               const min = startMin + i * SLOT_MIN;
               const label = min % 60 === 0 ? `${String(Math.floor(min / 60)).padStart(2, "0")}:00` : "";
@@ -538,8 +790,11 @@ function DayView({
             const isOffToday = todaysHours.length === 0;
             return (
               <div key={prof.id} className="min-w-[13rem] flex-1 border-r border-border last:border-r-0">
-                <div className="flex h-14 flex-col items-center justify-center border-b border-border px-2 text-center">
-                  <p className="truncate text-sm font-medium text-text">{prof.name}</p>
+                <div className="sticky top-0 z-20 flex h-14 flex-col items-center justify-center border-b border-border bg-surface px-2 text-center">
+                  <div className="flex items-center gap-1.5">
+                    <Avatar id={prof.id} name={prof.name} size="sm" />
+                    <p className="truncate text-sm font-medium text-text">{prof.name}</p>
+                  </div>
                   <p className={cn("truncate text-[11px] tabular-nums", isOffToday ? "font-medium text-text-secondary" : "text-text-secondary")}>
                     {workingHoursSummary(todaysHours)}
                   </p>
@@ -567,16 +822,14 @@ function DayView({
                         );
                       }
                       return (
-                        <button
+                        <DroppableSlotCell
                           key={i}
-                          type="button"
+                          id={`${prof.id}:${i}`}
+                          disabled={!draggingId || dragDisabled || slotBlockedByException(prof.id, i * SLOT_MIN)}
+                          top={i * ROW_HEIGHT_PX}
+                          height={ROW_HEIGHT_PX}
                           onClick={() => onSlotClick(prof.id, slotToISO(i * SLOT_MIN))}
-                          style={{ top: i * ROW_HEIGHT_PX, height: ROW_HEIGHT_PX }}
-                          className={cn(
-                            "absolute left-0 right-0 border-b border-border transition-colors duration-150 hover:bg-bg motion-reduce:transition-none",
-                            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
-                          )}
-                          aria-label={`Novo agendamento com ${prof.name} às ${minutesToHHMM(startMin + i * SLOT_MIN)}`}
+                          ariaLabel={`Novo agendamento com ${prof.name} às ${minutesToHHMM(startMin + i * SLOT_MIN)}`}
                         />
                       );
                     })
@@ -604,27 +857,24 @@ function DayView({
                     const top = ((startLocalMin - startMin) / SLOT_MIN) * ROW_HEIGHT_PX;
                     const height = Math.max(((endLocalMin - startLocalMin) / SLOT_MIN) * ROW_HEIGHT_PX, ROW_HEIGHT_PX / 2);
                     return (
-                      <button
+                      <DraggableAppointmentBlock
                         key={a.id}
-                        type="button"
+                        appt={a}
+                        top={top}
+                        height={height}
+                        timezone={timezone}
+                        disabled={dragDisabled}
                         onClick={() => onApptClick(a)}
-                        style={{ top, height, left: 4, right: 4 }}
-                        className={cn(
-                          "absolute z-10 overflow-hidden rounded-card p-1.5 text-left text-xs shadow-card transition-transform duration-150 hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-                          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
-                          STATUS_BLOCK_CLASSES[a.status],
-                        )}
-                      >
-                        <p className="truncate font-semibold tabular-nums">{formatTimeLabel(a.startsAt, timezone)}</p>
-                        <p className="truncate font-medium">{a.service.name}</p>
-                        <p className="truncate opacity-90">{a.contact.name ?? "Sem nome"}</p>
-                      </button>
+                      />
                     );
                   })}
 
                   {nowTopPx !== null ? (
                     <div className="pointer-events-none absolute left-0 right-0 z-20 border-t-2 border-danger" style={{ top: nowTopPx }}>
-                      <span className="absolute -left-1 -top-1.5 h-3 w-3 rounded-full bg-danger" />
+                      <span className="absolute -left-1 -top-1.5 flex h-3 w-3">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-60" aria-hidden="true" />
+                        <span className="relative inline-flex h-3 w-3 rounded-full bg-danger" aria-hidden="true" />
+                      </span>
                     </div>
                   ) : null}
                 </div>
@@ -633,6 +883,18 @@ function DayView({
           })}
         </div>
       </Card>
+      <DragOverlay>
+        {draggingAppt ? (
+          <div
+            className={cn("w-44 rounded-card border-l-[3px] p-1.5 text-left text-xs shadow-card-hover", STATUS_BLOCK_CLASSES[draggingAppt.status])}
+            style={{ borderLeftColor: colorForId(draggingAppt.professionalId) }}
+          >
+            <p className="truncate font-semibold tabular-nums">{formatTimeLabel(draggingAppt.startsAt, timezone)}</p>
+            <p className="truncate font-medium">{draggingAppt.service.name}</p>
+          </div>
+        ) : null}
+      </DragOverlay>
+      </DndContext>
 
       {/* Celular: lista por profissional */}
       <div className="flex flex-col gap-4 md:hidden">
