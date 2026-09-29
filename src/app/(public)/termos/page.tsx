@@ -1,21 +1,19 @@
 import type { Metadata } from "next";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LegalDocument } from "@/components/legal/legal-document";
+import { TERMOS_INTRO, TERMOS_SECTIONS } from "./termos-content";
 
-export const metadata: Metadata = { title: "Termos de uso — InnoChat" };
+export const metadata: Metadata = {
+  title: "Termos de uso — InnoChat",
+  description: "Regras de contratação e uso do InnoChat, plataforma de agendamento pelo WhatsApp.",
+};
 
 export default function TermosPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-md">
-        <Card>
-          <CardHeader>
-            <CardTitle>Termos de uso</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-text-secondary">Texto a definir pelo responsável.</p>
-          </CardContent>
-        </Card>
-      </div>
-    </main>
+    <LegalDocument
+      title="Termos de uso"
+      intro={TERMOS_INTRO}
+      sections={TERMOS_SECTIONS}
+      related={{ href: "/privacidade", label: "Política de privacidade" }}
+    />
   );
 }

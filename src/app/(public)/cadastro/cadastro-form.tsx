@@ -11,8 +11,7 @@ import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { slugify, validateSlug, type SlugValidationError } from "@/core/signup/slug";
 import { signUpAction } from "@/modules/signup/actions";
-
-const TERMS_VERSION = "1";
+import { TERMS_VERSION } from "@/lib/legal";
 
 const SLUG_ERROR_MESSAGE: Record<SlugValidationError, string> = {
   TOO_SHORT: "O endereço precisa ter pelo menos 3 letras.",

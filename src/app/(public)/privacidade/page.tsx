@@ -1,21 +1,19 @@
 import type { Metadata } from "next";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LegalDocument } from "@/components/legal/legal-document";
+import { PRIVACIDADE_INTRO, PRIVACIDADE_SECTIONS } from "./privacidade-content";
 
-export const metadata: Metadata = { title: "Política de privacidade — InnoChat" };
+export const metadata: Metadata = {
+  title: "Política de privacidade — InnoChat",
+  description: "Como o InnoChat trata dados pessoais, de acordo com a LGPD.",
+};
 
 export default function PrivacidadePage() {
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-md">
-        <Card>
-          <CardHeader>
-            <CardTitle>Política de privacidade</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-text-secondary">Texto a definir pelo responsável.</p>
-          </CardContent>
-        </Card>
-      </div>
-    </main>
+    <LegalDocument
+      title="Política de privacidade"
+      intro={PRIVACIDADE_INTRO}
+      sections={PRIVACIDADE_SECTIONS}
+      related={{ href: "/termos", label: "Termos de uso" }}
+    />
   );
 }
