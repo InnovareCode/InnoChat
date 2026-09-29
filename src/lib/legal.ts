@@ -1,3 +1,5 @@
+import { DomainError } from "@/lib/errors";
+
 /**
  * Versão vigente dos Termos de Uso e da Política de Privacidade — fonte única.
  *
@@ -19,3 +21,21 @@ export const LEGAL_EFFECTIVE_DATE = "28 de setembro de 2026";
 /** Aviso exibido no topo das duas páginas enquanto o texto não passa por revisão jurídica. */
 export const LEGAL_DRAFT_NOTICE =
   "Documento-modelo elaborado para o InnoChat; recomenda-se revisão por advogado antes da publicação definitiva.";
+
+/**
+ * Confere a `termsVersion` que o cadastro público manda contra a versão vigente ANTES de
+ * gravar o aceite (decisão do dono, 2026-09-29) — nunca confia no client sobre isso. Uma aba
+ * antiga em cache mandaria a versão velha; gravar isso como aceite da versão nova seria uma
+ * afirmação falsa (a pessoa nunca leu o texto atual). Lança `DomainError` com um código que a
+ * tela consegue tratar ("atualize a página") em vez de aceitar silenciosamente ou sobrescrever
+ * pela constante sem avisar — as outras duas opções fariam a pessoa "aceitar" um texto que
+ * nunca viu.
+ */
+export function assertCurrentTermsVersion(version: string): void {
+  if (version !== TERMS_VERSION) {
+    throw new DomainError(
+      "TERMS_VERSION_OUTDATED",
+      "Os termos foram atualizados. Atualize a página e aceite os termos atuais para continuar.",
+    );
+  }
+}

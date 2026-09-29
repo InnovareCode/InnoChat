@@ -8,6 +8,13 @@ import { maskSecret } from "@/lib/mask";
  * "configurado". `internalApiSecretHash` nunca é exposto, nem mascarado: é hash, não segredo
  * reversível, e o valor em texto puro só existe no instante em que é gerado
  * (`regenerateInternalApiSecret`).
+ *
+ * NOTA (decisão do dono, 2026-09-29): `PlatformSettings.termsVersion` deixou de ser lido/gravado
+ * aqui — duplicava `TERMS_VERSION` (`src/lib/legal.ts`), a fonte única real que o cadastro
+ * público confere (`assertCurrentTermsVersion`), e nunca havia tela de admin editando este
+ * campo (nenhuma referência em `src/app`). A coluna continua no schema (nenhuma migration
+ * destrutiva) — proposta para o Cronos: uma migration futura pode removê-la quando convier,
+ * já que nenhum código lê/escreve nela a partir de agora.
  */
 export type PlatformSettingsView = {
   // Só leitura — nunca vem de `PlatformSettingsInput` (gravado sozinho a partir da requisição,
@@ -27,7 +34,6 @@ export type PlatformSettingsView = {
   smtpUser: string | null;
   smtpPasswordMasked: string | null;
   smtpFrom: string | null;
-  termsVersion: string | null;
   updatedAt: string | null;
   updatedByUserId: string | null;
 };
@@ -48,7 +54,6 @@ type PlatformSettingsRow = {
   smtpUser: string | null;
   smtpPassword: string | null;
   smtpFrom: string | null;
-  termsVersion: string | null;
   updatedAt: Date;
   updatedByUserId: string | null;
 } | null;
@@ -71,7 +76,6 @@ function toView(row: PlatformSettingsRow): PlatformSettingsView {
       smtpUser: null,
       smtpPasswordMasked: null,
       smtpFrom: null,
-      termsVersion: null,
       updatedAt: null,
       updatedByUserId: null,
     };
@@ -93,7 +97,6 @@ function toView(row: PlatformSettingsRow): PlatformSettingsView {
     smtpUser: row.smtpUser,
     smtpPasswordMasked: maskSecret(row.smtpPassword),
     smtpFrom: row.smtpFrom,
-    termsVersion: row.termsVersion,
     updatedAt: row.updatedAt.toISOString(),
     updatedByUserId: row.updatedByUserId,
   };
@@ -123,7 +126,6 @@ export type PlatformSettingsInput = {
   smtpUser?: string;
   smtpPassword?: string;
   smtpFrom?: string;
-  termsVersion?: string;
 };
 
 function keepIfEmpty(incoming: string | undefined, existing: string | null | undefined): string | null {
@@ -149,7 +151,6 @@ export async function updatePlatformSettings(input: PlatformSettingsInput, updat
     smtpUser: keepIfEmpty(input.smtpUser, current?.smtpUser),
     smtpPassword: keepIfEmpty(input.smtpPassword, current?.smtpPassword),
     smtpFrom: keepIfEmpty(input.smtpFrom, current?.smtpFrom),
-    termsVersion: keepIfEmpty(input.termsVersion, current?.termsVersion),
     updatedByUserId,
   };
 

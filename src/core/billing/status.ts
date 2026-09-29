@@ -10,8 +10,8 @@ export const GRACE_DAYS = 1;
 /** Tempo em SUSPENDED antes de virar CANCELED (§7.4). */
 export const CANCEL_AFTER_SUSPENDED_DAYS = 60;
 
-/** Trial (decisão do dono, 2026-09-28): 1 dia a partir do cadastro. */
-export const TRIAL_DAYS = 1;
+/** Trial (decisão do dono, 2026-09-29 — trocou de 1 para 3 dias; carência continua em 1 dia, ver `GRACE_DAYS`): 3 dias a partir do cadastro. */
+export const TRIAL_DAYS = 3;
 
 export function computeTrialEndsAt(signupAt: Date): Date {
   return addDays(signupAt, TRIAL_DAYS);

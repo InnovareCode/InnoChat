@@ -6,6 +6,7 @@ import { runAction, type Result } from "@/lib/result";
 import { DomainError } from "@/lib/errors";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/http/client-ip";
+import { assertCurrentTermsVersion, TERMS_VERSION } from "@/lib/legal";
 import { acceptInvite, inviteTeamMember, requestPasswordReset, resendVerificationEmail, resetPassword, signUp, verifyEmail } from "./service";
 
 /**
@@ -43,6 +44,18 @@ export async function signUpAction(input: unknown): Promise<Result<{ tenantSlug:
     assertRateLimit("signup", ip, SIGNUP_LIMIT, SIGNUP_WINDOW_MS);
 
     const data = signUpSchema.parse(input);
+    // O client manda `TERMS_VERSION` (src/lib/legal.ts) junto do formulário — conferimos contra
+    // a MESMA constante aqui, em vez de gravar o que veio do client sem checar (decisão do
+    // dono, 2026-09-29): um aceite versionado só vale alguma coisa se provar que a pessoa
+    // aceitou a redação que está NO AR agora. Uma aba antiga em cache mandando uma versão velha
+    // teria seu aceite gravado como se fosse da redação atual — e ninguém teria de fato lido o
+    // texto vigente. Rejeitar com uma mensagem clara ("atualize a página") é melhor que aceitar
+    // silenciosamente ou do que sobrescrever pela constante sem avisar (a pessoa então "aceitaria"
+    // um texto que nunca viu). `signUp` sempre recebe `TERMS_VERSION` (a constante do SERVIDOR,
+    // não `data.termsVersion`) — mesmo já validados iguais, isso garante que o valor persistido
+    // é sempre o canônico.
+    assertCurrentTermsVersion(data.termsVersion);
+
     const result = await signUp({
       companyName: data.companyName,
       slug: data.slug,
@@ -50,7 +63,7 @@ export async function signUpAction(input: unknown): Promise<Result<{ tenantSlug:
       ownerName: data.ownerName,
       email: data.email,
       password: data.password,
-      termsVersion: data.termsVersion,
+      termsVersion: TERMS_VERSION,
     });
     return { tenantSlug: result.tenantSlug };
   });

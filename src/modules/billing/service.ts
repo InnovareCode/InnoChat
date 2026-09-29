@@ -5,9 +5,9 @@ import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { sendMail, invoiceGeneratedEmail, subscriptionSuspendedEmail } from "@/lib/email";
 import { getPublicBaseUrl } from "@/lib/public-url";
-import { computeTrialEndsAt, effectiveStatus, type SubscriptionStatus } from "@/core/billing";
+import { computeTrialEndsAt, effectiveStatus, validateCpfCnpj, type SubscriptionStatus } from "@/core/billing";
 import { formatCentsBRL, formatDateBR } from "./format";
-import { getMercadoPagoGateway, type MercadoPagoGateway } from "./mercadopago";
+import { getMercadoPagoGateway, MercadoPagoApiError, type MercadoPagoFailureKind, type MercadoPagoGateway } from "./mercadopago";
 
 /**
  * Camada de serviço da cobrança (docs/arquitetura.md §7). Reúne o que toca banco/e-mail/MP —
@@ -148,17 +148,80 @@ export async function createInvoiceForPeriodTracked(params: {
   return { invoice: withPix ?? invoice, created: true };
 }
 
+/**
+ * Documento (CPF/CNPJ) do pagador de uma fatura, já normalizado e validado — ou `null` quando
+ * `Tenant.document` está vazio ou (defensivamente) veio com dígito verificador inválido. O
+ * Mercado Pago exige `payer.identification` para Pix (ver `mercadopago.ts#createPixPayment`);
+ * este é o único lugar que lê `Tenant.document` para essa finalidade.
+ */
+async function resolvePayerForInvoice(invoiceId: string): Promise<{ name: string; document: string | null; tenantId: string }> {
+  const invoice = await getPrisma().invoice.findUniqueOrThrow({
+    where: { id: invoiceId },
+    include: { subscription: { include: { tenant: { select: { id: true, name: true, document: true } } } } },
+  });
+  const { tenant } = invoice.subscription;
+  const validated = tenant.document ? validateCpfCnpj(tenant.document) : { valid: false as const };
+  if (tenant.document && !validated.valid) {
+    // Não deveria acontecer se a gravação (`updateTenantDocument`) sempre validar antes de
+    // salvar — mas um dado corrompido não pode se disfarçar de "documento presente" e mandar a
+    // cobrança para o MP do jeito errado. Loga para investigar a origem do dado ruim.
+    logger.warn("billing.pix.tenant_document_invalid", { tenantId: tenant.id });
+  }
+  return { name: tenant.name, document: validated.valid ? validated.digits : null, tenantId: tenant.id };
+}
+
+/**
+ * `MercadoPagoFailureKind` → código de `DomainError`, para quem chama poder mostrar UMA frase
+ * certa em vez de "algo deu errado" — mesma régua do Parque das Feiras
+ * (`lib/pagamentos/porta.ts#FalhaDoGateway`, `paymentErrorResponse.ts`): cada falha diz de QUEM
+ * é o problema (empresa sem documento cadastrado, admin da plataforma com credencial errada, ou
+ * o Mercado Pago fora do ar).
+ */
+const DOMAIN_ERROR_BY_MP_FAILURE: Readonly<Record<MercadoPagoFailureKind, { code: string; message: string }>> = {
+  missing_payer_document: {
+    code: "MERCADOPAGO_MISSING_DOCUMENT",
+    message: "Cadastre o CPF ou CNPJ da empresa antes de gerar o Pix (o Mercado Pago exige essa informação).",
+  },
+  invalid_payer_document: {
+    code: "MERCADOPAGO_MISSING_DOCUMENT",
+    message: "O Mercado Pago recusou o CPF/CNPJ cadastrado da empresa. Verifique o documento em Configurações.",
+  },
+  invalid_credentials: {
+    code: "MERCADOPAGO_MISCONFIGURED",
+    message: "O Mercado Pago recusou a credencial da plataforma. Contate o suporte.",
+  },
+  pix_key_not_enabled: {
+    code: "MERCADOPAGO_MISCONFIGURED",
+    message: "A conta do Mercado Pago da plataforma não tem chave Pix habilitada. Contate o suporte.",
+  },
+  rate_limited: {
+    code: "MERCADOPAGO_UNAVAILABLE",
+    message: "O Mercado Pago recusou por excesso de chamadas. Tente novamente em alguns minutos.",
+  },
+  payload_rejected: {
+    code: "MERCADOPAGO_UNAVAILABLE",
+    message: "O Mercado Pago recusou a cobrança. Tente novamente ou contate o suporte.",
+  },
+  unavailable: {
+    code: "MERCADOPAGO_UNAVAILABLE",
+    message: "Não foi possível gerar o Pix agora. Tente novamente em alguns minutos.",
+  },
+};
+
 /** Exportada para quem já tem a fatura criada (sem passar pelo check de idempotência de `createInvoiceForPeriodTracked`, que trataria a fatura recém-criada como "já existe" e nunca chamaria isto). */
 export async function tryAttachPix(invoiceId: string, payerEmail: string, description: string, gateway?: MercadoPagoGateway) {
   try {
     const mp = gateway ?? (await getMercadoPagoGateway());
     const invoice = await getPrisma().invoice.findUniqueOrThrow({ where: { id: invoiceId } });
+    const payer = await resolvePayerForInvoice(invoiceId);
 
     const pix = await mp.createPixPayment({
       externalReference: invoice.id,
       amountCents: invoice.amountCents,
       description,
       payerEmail,
+      payerName: payer.name,
+      payerDocument: payer.document,
       idempotencyKey: invoice.id, // mesma fatura nunca gera 2 cobranças no MP
       expiresInDays: PIX_EXPIRATION_DAYS,
     });
@@ -173,26 +236,63 @@ export async function tryAttachPix(invoiceId: string, payerEmail: string, descri
       },
     });
   } catch (error) {
-    logger.warn("billing.pix.create_failed", {
+    // "Falta documento" é um estado ESPERADO enquanto a empresa não cadastrou CPF/CNPJ (nenhuma
+    // tela pública de cadastro coleta isso ainda — PENDÊNCIAS no handoff) — não é falha de
+    // infraestrutura, por isso `info` e não `warn`.
+    const kind = error instanceof MercadoPagoApiError ? error.kind : undefined;
+    const level = kind === "missing_payer_document" ? "info" : "warn";
+    logger[level]("billing.pix.create_failed", {
       invoiceId,
+      kind,
       errorMessage: error instanceof Error ? error.message : String(error),
     });
     return null;
   }
 }
 
-/** Regera o Pix de uma fatura OPEN (expirado ou nunca gerado) — mesma linha, nunca cria outra. */
+/**
+ * Regera o Pix de uma fatura OPEN (expirado ou nunca gerado) — mesma linha, nunca cria outra.
+ *
+ * Diferente de `tryAttachPix` (usado em segundo plano por `signup`/`tick`, que só loga e
+ * devolve `null` em qualquer falha), esta função é chamada por uma ação explícita do OWNER na
+ * tela de Assinatura — por isso ela CHAMA o gateway direto (não engole o erro) e traduz o
+ * `MercadoPagoFailureKind` num `DomainError` específico, para a tela dizer exatamente o que
+ * fazer (cadastrar documento vs. tentar de novo vs. contatar o suporte) em vez de um
+ * "indisponível" genérico para qualquer causa.
+ */
 export async function regeneratePixForInvoice(invoiceId: string, payerEmail: string, gateway?: MercadoPagoGateway) {
   const invoice = await getPrisma().invoice.findUnique({ where: { id: invoiceId } });
   if (!invoice) throw new DomainError("NOT_FOUND", "Fatura não encontrada.");
   if (invoice.status !== "OPEN") {
     throw new DomainError("INVALID_STATE", "Só é possível gerar Pix para uma fatura em aberto.");
   }
-  const updated = await tryAttachPix(invoiceId, payerEmail, "Assinatura InnoChat", gateway);
-  if (!updated) {
-    throw new DomainError("MERCADOPAGO_UNAVAILABLE", "Não foi possível gerar o Pix agora. Tente novamente em alguns minutos.");
+
+  const mp = gateway ?? (await getMercadoPagoGateway());
+  const payer = await resolvePayerForInvoice(invoiceId);
+
+  let pix;
+  try {
+    pix = await mp.createPixPayment({
+      externalReference: invoice.id,
+      amountCents: invoice.amountCents,
+      description: "Assinatura InnoChat",
+      payerEmail,
+      payerName: payer.name,
+      payerDocument: payer.document,
+      idempotencyKey: `${invoice.id}:${Date.now()}`, // Pix anterior expirou/nunca existiu — precisa de cobrança nova
+      expiresInDays: PIX_EXPIRATION_DAYS,
+    });
+  } catch (error) {
+    const kind = error instanceof MercadoPagoApiError ? error.kind : "unavailable";
+    const mapped = DOMAIN_ERROR_BY_MP_FAILURE[kind];
+    logger.warn("billing.pix.regenerate_failed", { invoiceId, kind, errorMessage: error instanceof Error ? error.message : String(error) });
+    throw new DomainError(mapped.code, mapped.message, { kind });
   }
-  return updated;
+
+  return getPrisma().invoice.update({
+    where: { id: invoiceId },
+    data: { mpPaymentId: pix.paymentId, pixQrCode: pix.qrCode, pixCopyPaste: pix.copyPaste, pixExpiresAt: pix.expiresAt },
+  });
 }
 
 // ---------------------------------------------------------------------------

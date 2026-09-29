@@ -11,9 +11,9 @@ const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 
 describe("computeTrialEndsAt", () => {
-  it("é +1 dia a partir do cadastro (decisão do dono, 2026-09-28)", () => {
+  it("é +3 dias a partir do cadastro (decisão do dono, 2026-09-29 — trocou de 1 para 3 dias)", () => {
     const signupAt = new Date("2026-09-28T10:00:00.000Z");
-    expect(computeTrialEndsAt(signupAt).toISOString()).toBe("2026-09-29T10:00:00.000Z");
+    expect(computeTrialEndsAt(signupAt).toISOString()).toBe("2026-10-01T10:00:00.000Z");
   });
 });
 

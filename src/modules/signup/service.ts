@@ -106,7 +106,7 @@ function slugErrorMessage(error: SlugValidationError): string {
 }
 
 /**
- * Cria `User(OWNER)` + `Tenant` + `Membership` + `Subscription(TRIALING, +1 dia)` + a primeira
+ * Cria `User(OWNER)` + `Tenant` + `Membership` + `Subscription(TRIALING, +3 dias — `TRIAL_DAYS`)` + a primeira
  * fatura (§7.3 regra 1) numa única transação — se qualquer passo falhar (ex.: e-mail duplicado
  * detectado por uma corrida), nada fica pela metade. O Pix da primeira fatura e os e-mails
  * (verificação + fatura gerada) são efeitos colaterais DEPOIS da transação confirmar: chamada de

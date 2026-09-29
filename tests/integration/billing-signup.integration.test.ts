@@ -58,7 +58,7 @@ function signupInput(overrides: Partial<Parameters<typeof signUp>[0]> = {}) {
 }
 
 describe("signUp — cadastro público completo", () => {
-  it("cria User(OWNER) + Tenant + Subscription(TRIALING) + primeira fatura com Pix", async () => {
+  it("cria User(OWNER) + Tenant + Subscription(TRIALING) + primeira fatura SEM Pix (cadastro ainda não coleta CPF/CNPJ)", async () => {
     const { gateway } = createMockMercadoPagoGateway();
     const input = signupInput();
 
@@ -76,7 +76,12 @@ describe("signUp — cadastro público completo", () => {
     expect(invoice.status).toBe("OPEN");
     expect(invoice.amountCents).toBe(subscription.plan.priceCents);
     expect(invoice.dueAt.getTime()).toBe(subscription.trialEndsAt!.getTime());
-    expect(invoice.pixCopyPaste).toBeTruthy(); // gateway mock gerou Pix
+    // O Mercado Pago exige CPF/CNPJ do pagador para Pix (`payer.identification`) — `/cadastro`
+    // ainda não coleta `Tenant.document` (PENDÊNCIAS no handoff, contrato para a Lyra), então a
+    // fatura nasce OPEN sem Pix, do mesmo jeito que nasceria se o MP estivesse fora do ar (ver o
+    // teste abaixo). `regeneratePixForInvoice` funciona depois que o CPF/CNPJ for cadastrado.
+    expect(invoice.pixCopyPaste).toBeNull();
+    expect(tenant.document).toBeNull();
 
     const membership = await prisma.membership.findFirstOrThrow({ where: { tenantId: tenant.id } });
     expect(membership.role).toBe("OWNER");
@@ -85,6 +90,26 @@ describe("signUp — cadastro público completo", () => {
     // 2 e-mails: fatura gerada + verificação.
     expect(sentEmails.some((e) => e.subject.includes("Fatura"))).toBe(true);
     expect(sentEmails.some((e) => e.subject.includes("Confirme seu e-mail"))).toBe(true);
+  });
+
+  it("com Tenant.document cadastrado, tryAttachPix gera o Pix normalmente", async () => {
+    const { updateTenantDocument } = await import("@/modules/tenant/service");
+    const { tryAttachPix } = await import("@/modules/billing/service");
+    const { gateway } = createMockMercadoPagoGateway();
+    const input = signupInput();
+
+    const result = await signUp(input, gateway);
+    const tenant = await prisma.tenant.findUniqueOrThrow({ where: { slug: result.tenantSlug } });
+    createdTenantIds.push(tenant.id);
+    createdUserIds.push(result.userId);
+
+    await updateTenantDocument(tenant.id, "529.982.247-25");
+
+    const subscription = await prisma.subscription.findUniqueOrThrow({ where: { tenantId: tenant.id } });
+    const invoice = await prisma.invoice.findFirstOrThrow({ where: { subscriptionId: subscription.id } });
+    const updated = await tryAttachPix(invoice.id, input.email, "Assinatura InnoChat", gateway);
+
+    expect(updated?.pixCopyPaste).toBeTruthy();
   });
 
   it("rejeita slug reservado (INVALID_SLUG)", async () => {

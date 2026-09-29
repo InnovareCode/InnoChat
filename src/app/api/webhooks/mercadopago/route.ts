@@ -21,12 +21,17 @@ export async function POST(req: Request) {
   // é só um fallback para notificações antigas/mal formadas que não tragam a query string.
   const url = new URL(req.url);
   const dataId = url.searchParams.get("data.id") ?? url.searchParams.get("id") ?? (body.data?.id != null ? String(body.data.id) : null);
+  // `type` (formato novo) ou `topic` (formato antigo, `?topic=merchant_order&id=...`) — o corpo é
+  // o fallback, igual ao `data.id` acima (conferido contra o Parque das Feiras,
+  // `AdaptadorMercadoPago#interpretarNotificacao`, que aceita os dois igualmente).
+  const type = url.searchParams.get("type") ?? url.searchParams.get("topic") ?? body.type ?? body.topic ?? null;
 
   try {
     const result = await handleMercadoPagoWebhook({
       xSignature: req.headers.get("x-signature"),
       xRequestId: req.headers.get("x-request-id"),
       dataId,
+      type,
     });
     return NextResponse.json(result, { status: 200 });
   } catch (error) {

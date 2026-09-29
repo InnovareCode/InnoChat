@@ -14,6 +14,11 @@ import { getMercadoPagoGateway, verifyMercadoPagoSignature, type MercadoPagoGate
  * 1. Valida `x-signature` (assinatura HMAC do MP — `verifyMercadoPagoSignature`). Assinatura
  *    inválida → 401, sem tocar no banco.
  * 2. Extrai `data.id` (id do pagamento) do corpo/query.
+ * 2b. Confere `type`/`topic` (conferido contra o Parque das Feiras,
+ *    `AdaptadorMercadoPago#interpretarNotificacao`): notificação que não é `payment` (ex.:
+ *    `merchant_order`, formato antigo de webhook do MP) é `ignored` sem chamar `getPayment` —
+ *    esse `dataId` não é necessariamente um id de pagamento, e reconsultar como se fosse
+ *    devolveria 404/erro do MP por um evento que não interessa aqui.
  * 3. Idempotência por `ProviderEvent(provider, providerEventId)` — `providerEventId` é o id do
  *    pagamento: se o MP reentregar a MESMA notificação (ou duas notificações do mesmo
  *    pagamento, ex.: "pending" e depois "approved"), só processa uma vez de verdade
@@ -31,12 +36,16 @@ export class WebhookIgnored extends Error {}
 export type MercadoPagoWebhookBody = {
   data?: { id?: string | number };
   type?: string;
+  /** Formato antigo do webhook do MP (`?topic=payment&id=...`). Aceito como sinônimo de `type`. */
+  topic?: string;
 };
 
 export async function handleMercadoPagoWebhook(params: {
   xSignature: string | null;
   xRequestId: string | null;
   dataId: string | null;
+  /** `type` (formato novo) ou `topic` (formato antigo) da notificação. `null`/ausente é tratado como "payment" — mesmo comportamento de antes desta checagem existir, para não quebrar uma notificação que não traga o campo. */
+  type?: string | null;
   gateway?: MercadoPagoGateway;
 }): Promise<{ status: "processed" | "ignored" | "already_processed" }> {
   const prisma = getPrisma();
@@ -62,6 +71,11 @@ export async function handleMercadoPagoWebhook(params: {
   if (!validSignature) {
     logger.warn("billing.webhook.invalid_signature");
     throw new WebhookAuthError("Assinatura inválida.");
+  }
+
+  if (params.type && params.type !== "payment") {
+    logger.info("billing.webhook.irrelevant_type", { type: params.type });
+    return { status: "ignored" };
   }
 
   const providerEventId = params.dataId;

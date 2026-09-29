@@ -45,7 +45,6 @@ const updatePlatformSettingsSchema = z.object({
   smtpUser: z.string().max(255).optional(),
   smtpPassword: z.string().max(500).optional(),
   smtpFrom: z.union([z.literal(""), z.string().email()]).optional(),
-  termsVersion: z.string().max(50).optional(),
 });
 
 export async function updatePlatformSettingsAction(input: unknown): Promise<Result<PlatformSettingsView>> {

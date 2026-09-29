@@ -107,6 +107,11 @@ describe("runBillingTick — regeneração de Pix expirado", () => {
   it("regera o Pix de uma fatura OPEN com pixExpiresAt vencido", async () => {
     const { tenant } = await makeTenantWithOwner("pix-expired");
     cleanupTenantIds.push(tenant.id);
+    // O Mercado Pago exige CPF/CNPJ do pagador para Pix (`payer.identification`) — sem
+    // `Tenant.document`, `createPixPayment` falha cedo com `missing_payer_document` e o tick só
+    // loga e segue (nunca derruba), o que faria este teste falhar por um motivo NÃO relacionado
+    // à regeneração em si.
+    await prisma.tenant.update({ where: { id: tenant.id }, data: { document: "52998224725" } });
     const plan = await makePlan("pix-expired");
     const currentPeriodEnd = addDays(new Date(), 20); // fora da janela de geração de fatura
     const subscription = await prisma.subscription.create({ data: { tenantId: tenant.id, planId: plan.id, status: "ACTIVE", currentPeriodEnd } });

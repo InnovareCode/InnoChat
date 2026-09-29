@@ -77,6 +77,13 @@ model Tenant {
   slug      String     @unique
   name      String
   timezone  String
+  // CPF/CNPJ da empresa (só dígitos), exigido pelo Mercado Pago para criar cobrança Pix
+  // (`payer.identification` — ver `src/modules/billing/mercadopago.ts`). Nasce `null`: a tela
+  // pública de cadastro (Fase 7.3) não coleta isto ainda — contrato pendente para a Lyra
+  // (docs/contratos.md, seção Cobrança). Enquanto for `null`, a fatura nasce sem Pix (mesmo
+  // caminho já existente de "Mercado Pago indisponível" — a tela de Assinatura oferece "gerar
+  // Pix" de novo depois que o CPF/CNPJ for cadastrado).
+  document  String?
   segment   String?
   // Tema visual do painel (decisão do dono, 2026-09-28): só os 3 temas prontos abaixo — sem cor
   // personalizada, sem modo escuro e sem logo.
@@ -179,6 +186,10 @@ model PlatformSettings {
   smtpPassword String?
   smtpFrom     String?
 
+  // ÓRFÃO (decisão do dono, 2026-09-29): nenhum código lê/grava isto — o cadastro público confere
+  // `TERMS_VERSION` (src/lib/legal.ts) direto, e nunca existiu tela de admin editando este campo.
+  // Coluna mantida de propósito (nenhuma migration destrutiva sem necessidade real) — candidata
+  // a uma migration de remoção quando convier ao Cronos.
   termsVersion String?
 
   updatedByUserId String?

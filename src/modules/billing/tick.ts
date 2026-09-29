@@ -2,7 +2,7 @@ import { addDays, addMonths } from "date-fns";
 import { getPrisma } from "@/lib/db/prisma";
 import { logger } from "@/lib/logger";
 import { sendMail, invoiceDueReminderEmail } from "@/lib/email";
-import { effectiveStatus } from "@/core/billing";
+import { effectiveStatus, validateCpfCnpj } from "@/core/billing";
 import {
   billingUrlFor,
   createInvoiceForPeriodTracked,
@@ -21,7 +21,7 @@ import { getMercadoPagoGateway, type MercadoPagoGateway } from "./mercadopago";
  * 1. Gera a próxima fatura 5 dias antes de vencer (§7.1), para assinaturas que já passaram do
  *    trial (`ACTIVE`/`PAST_DUE` — a fatura do trial já foi criada no cadastro, ver
  *    `src/modules/signup/service.ts`; incluir `TRIALING` aqui geraria uma segunda fatura quase
- *    junto da primeira, já que o trial dura só 1 dia — menos que a janela de 5 dias).
+ *    junto da primeira, já que o trial dura só `TRIAL_DAYS` (3) dias — menos que a janela de 5 dias).
  * 2. Regenera o Pix de faturas `OPEN` com Pix expirado (ou nunca gerado, se o Mercado Pago
  *    estava fora do ar na criação).
  * 3. Envia lembrete de vencimento (1 dia antes e no dia — §7.1), uma vez por fatura
@@ -149,12 +149,20 @@ async function regenerateExpiredPix(
     const payerEmail = await findBillingRecipientEmail(invoice.subscription.tenantId);
     if (!payerEmail) continue;
 
+    // O MP exige `payer.identification` para Pix (ver `mercadopago.ts#createPixPayment`) —
+    // `Tenant.document` ainda `null` (nenhuma tela pública coleta isso, PENDÊNCIAS no handoff)
+    // vira `createPixPayment` lançando `missing_payer_document`, capturado abaixo como qualquer
+    // outra falha: o tick nunca derruba por isso, só loga e tenta de novo na próxima rodada.
+    const tenantDocument = invoice.subscription.tenant.document ? validateCpfCnpj(invoice.subscription.tenant.document) : { valid: false as const };
+
     try {
       const pix = await gateway.createPixPayment({
         externalReference: invoice.id,
         amountCents: invoice.amountCents,
         description: generateInvoiceDescription(invoice.subscription.tenant.name),
         payerEmail,
+        payerName: invoice.subscription.tenant.name,
+        payerDocument: tenantDocument.valid ? tenantDocument.digits : null,
         idempotencyKey: `${invoice.id}:${now.getTime()}`, // Pix anterior expirou — precisa de cobrança nova no MP
         expiresInDays: 3,
       });

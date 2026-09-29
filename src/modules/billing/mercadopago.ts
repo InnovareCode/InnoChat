@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { getPrisma } from "@/lib/db/prisma";
 import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import { tryGetPublicBaseUrl } from "@/lib/public-url";
 
 /**
  * Adaptador do Mercado Pago (Pix pontual, docs/arquitetura.md §7.1). Interface isolada de
@@ -32,6 +33,18 @@ export type CreatePixPaymentInput = {
   amountCents: number;
   description: string;
   payerEmail: string;
+  /** Nome do pagador (`Tenant.name`) — o MP quebra em `first_name`/`last_name` (ver `splitPayerName`). */
+  payerName: string;
+  /**
+   * CPF/CNPJ do pagador, só dígitos (`Tenant.document`, já validado por
+   * `src/core/billing/document.ts` antes de chegar aqui). O Mercado Pago EXIGE
+   * `payer.identification` para criar uma cobrança Pix — sem isso ele recusa com
+   * `payer.identification.number attribute can't be null`, conferido contra o incidente real do
+   * Parque das Feiras (`payments.pix.cpf.test.ts`). `null` faz `createPixPayment` lançar
+   * `MercadoPagoApiError` com `kind: "missing_payer_document"` ANTES de chamar a API (falha
+   * cedo — mesmo padrão do PF, "nem chega a chamar o gateway").
+   */
+  payerDocument: string | null;
   /** Chave de idempotência do MP (header `X-Idempotency-Key`) — evita criar 2 cobranças se a chamada for repetida. */
   idempotencyKey: string;
   expiresInDays: number;
@@ -41,8 +54,6 @@ export interface MercadoPagoGateway {
   createPixPayment(input: CreatePixPaymentInput): Promise<PixPaymentResult>;
   getPayment(paymentId: string): Promise<MercadoPagoPayment>;
 }
-
-const PIX_EXPIRATION_DAYS = 3;
 
 const API_BASE = "https://api.mercadopago.com";
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -76,20 +87,120 @@ async function fetchWithRetry(url: string, init: RequestInit): Promise<Response>
   throw lastError instanceof Error ? lastError : new Error("Falha ao chamar Mercado Pago");
 }
 
+/**
+ * Classificação de falha do Mercado Pago (conferida contra o Parque das Feiras,
+ * `backend/src/lib/mercadopago-errors.ts` — lá corrigiu um incidente real: cobrança Pix sem CPF
+ * virava 500 mudo em produção porque nada classificava a resposta 400 do MP).
+ *
+ * `unavailable` é o lado seguro: quando não dá para saber o motivo (sem status, corpo
+ * irreconhecível), tratamos como "o MP não respondeu" — nunca como "o pagador errou algo", que
+ * mandaria a pessoa errada resolver o problema.
+ */
+export type MercadoPagoFailureKind =
+  | "missing_payer_document"
+  | "invalid_payer_document"
+  | "invalid_credentials"
+  | "pix_key_not_enabled"
+  | "rate_limited"
+  | "payload_rejected"
+  | "unavailable";
+
 export class MercadoPagoApiError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    readonly kind: MercadoPagoFailureKind = "unavailable",
   ) {
     super(message);
     this.name = "MercadoPagoApiError";
   }
 }
 
+/** Marcadores textuais de "a conta do vendedor não tem chave Pix habilitada" (erro 13253 do MP). */
+const PIX_KEY_MARKERS = ["without key enabled for qr render", "pa_unauthorized_result_from_policies", "collector user without key"];
+
+/**
+ * Marcadores ancorados no CAMPO (`payer.identification`/`identification.number`), não na
+ * palavra solta — um `includes("cpf")` classificaria qualquer menção a CPF (inclusive a nossa
+ * própria, no corpo que ENVIAMOS) como recusa, o que é o mesmo tipo de inversão que o Parque das
+ * Feiras já documentou (`mercadopago-errors.ts`, `MARCADORES_DOCUMENTO_PAGADOR`).
+ */
+const PAYER_DOCUMENT_MARKERS = [/payer[._]?identification/, /identification\.(number|type)/, /\bidentification\b[^|]{0,40}\b(number|type|attribute)\b/];
+
+/** Classifica o corpo/status de uma resposta de erro do MP na criação do Pix. */
+function classifyMercadoPagoError(status: number, body: string): MercadoPagoFailureKind {
+  const haystack = body.toLowerCase();
+
+  if (haystack.includes("13253") || PIX_KEY_MARKERS.some((m) => haystack.includes(m))) {
+    return "pix_key_not_enabled";
+  }
+  if (status === 401 || status === 403) return "invalid_credentials";
+  if (status === 429) return "rate_limited";
+  if (status >= 500) return "unavailable";
+
+  const mentionsIdentification = PAYER_DOCUMENT_MARKERS.some((r) => r.test(haystack));
+  if (mentionsIdentification) {
+    const missing = haystack.includes("can't be null") || haystack.includes("cannot be null") || haystack.includes("is required");
+    return missing ? "missing_payer_document" : "invalid_payer_document";
+  }
+
+  if (status === 400 || status === 422) return "payload_rejected";
+  return "unavailable";
+}
+
+/**
+ * Quebra `Tenant.name` em `first_name`/`last_name` para `payer` — o MP não aceita nome único.
+ * Mesma regra do Parque das Feiras (`lib/mercadopago.ts#createPixCharge`): sem sobrenome, repete
+ * o primeiro nome como último (nunca manda `last_name` vazio).
+ */
+function splitPayerName(name: string): { firstName: string; lastName: string } {
+  const [firstName, ...rest] = name.trim().split(/\s+/);
+  const lastName = rest.join(" ") || firstName || "";
+  return { firstName: firstName || "", lastName };
+}
+
+/**
+ * `payer.identification` no formato que o MP exige — CPF (11 dígitos) ou CNPJ (14 dígitos).
+ * `payerDocument` já chega só com dígitos (`src/core/billing/document.ts` normaliza e valida
+ * antes); aqui só decide o `type` pela contagem, igual ao Parque das Feiras
+ * (`lib/mercadopago.ts`: `.length === 14 ? 'CNPJ' : 'CPF'`).
+ */
+function buildPayerIdentification(payerDocument: string): { type: "CPF" | "CNPJ"; number: string } {
+  return { type: payerDocument.length === 14 ? "CNPJ" : "CPF", number: payerDocument };
+}
+
+/**
+ * `{ notification_url }` para entrar no corpo do POST via spread, ou `{}` quando não há como
+ * resolver a URL pública agora (fora de uma requisição E `PlatformSettings.publicBaseUrl` ainda
+ * não gravado — ver `getPublicBaseUrl`). Nunca lança: a criação do Pix não pode falhar por causa
+ * disto, ela só perde a URL explícita e volta a depender da cadastrada manualmente no MP.
+ */
+async function notificationUrlOrUndefined(): Promise<{ notification_url: string } | Record<string, never>> {
+  const base = await tryGetPublicBaseUrl();
+  return base ? { notification_url: `${base}/api/webhooks/mercadopago` } : {};
+}
+
 /** Implementação real, contra a API do Mercado Pago (Pagamentos Pix). */
 export function createMercadoPagoGateway(accessToken: string): MercadoPagoGateway {
   return {
     async createPixPayment(input) {
+      // Falha CEDO, sem chamar o MP — mesma defesa do incidente do Parque das Feiras
+      // (`payments.pix.cpf.test.ts`, "FALHA CEDO: nem chega a chamar o gateway"): o MP exige
+      // `payer.identification` para Pix, então mandar a cobrança sem CPF/CNPJ é certeza de
+      // recusa. Falhar antes do fetch evita gastar a chamada de rede (e o retry/timeout de
+      // `fetchWithRetry`) num pedido que o MP vai recusar de todo jeito.
+      if (!input.payerDocument) {
+        throw new MercadoPagoApiError("Falta o CPF/CNPJ do pagador para criar a cobrança Pix.", undefined, "missing_payer_document");
+      }
+
+      const { firstName, lastName } = splitPayerName(input.payerName);
+      // Instante absoluto — `.toISOString()` (sufixo `Z`) é ISO-8601 válido para o MP e
+      // equivalente a `-03:00` na mesma hora relógio; evita aritmética manual de fuso (o
+      // Parque das Feiras usa `-03:00` porque o servidor dele roda nesse fuso — aqui preferimos
+      // o formato sem deslocamento, que não tem como errar por horário de verão nem por o
+      // processo rodar em outro fuso).
+      const expiresAt = new Date(Date.now() + input.expiresInDays * 24 * 60 * 60 * 1000);
+
       const response = await fetchWithRetry(`${API_BASE}/v1/payments`, {
         method: "POST",
         headers: {
@@ -102,19 +213,33 @@ export function createMercadoPagoGateway(accessToken: string): MercadoPagoGatewa
           description: input.description,
           payment_method_id: "pix",
           external_reference: input.externalReference,
-          payer: { email: input.payerEmail },
+          date_of_expiration: expiresAt.toISOString(),
+          // URL explícita por cobrança (conferido contra o Parque das Feiras,
+          // `lib/mercadopago.ts#createPixCharge`) — mais robusto que depender só da URL
+          // cadastrada manualmente no painel de Developers do MP, e nunca falha a criação do
+          // Pix se `getPublicBaseUrl()` não tiver de onde resolver (cai no que já estava
+          // cadastrado no MP).
+          ...(await notificationUrlOrUndefined()),
+          payer: {
+            email: input.payerEmail,
+            first_name: firstName,
+            last_name: lastName,
+            identification: buildPayerIdentification(input.payerDocument),
+          },
         }),
       });
 
       if (!response.ok) {
         const body = await response.text().catch(() => "");
-        logger.error("mercadopago.createPixPayment.failed", { status: response.status });
-        throw new MercadoPagoApiError(`Mercado Pago recusou a criação do Pix (${response.status}): ${body.slice(0, 300)}`, response.status);
+        const kind = classifyMercadoPagoError(response.status, body);
+        logger.error("mercadopago.createPixPayment.failed", { status: response.status, kind });
+        throw new MercadoPagoApiError(`Mercado Pago recusou a criação do Pix (${response.status}): ${body.slice(0, 300)}`, response.status, kind);
       }
 
       const json = (await response.json()) as {
         id: number | string;
         point_of_interaction?: { transaction_data?: { qr_code?: string; qr_code_base64?: string } };
+        date_of_expiration?: string | null;
       };
       const qr = json.point_of_interaction?.transaction_data;
       if (!qr?.qr_code) {
@@ -125,7 +250,11 @@ export function createMercadoPagoGateway(accessToken: string): MercadoPagoGatewa
         paymentId: String(json.id),
         qrCode: qr.qr_code,
         copyPaste: qr.qr_code,
-        expiresAt: new Date(Date.now() + PIX_EXPIRATION_DAYS * 24 * 60 * 60 * 1000),
+        // O MP é quem define quando o QR de fato morre (ele pode ajustar o `date_of_expiration`
+        // que mandamos) — usar o valor da RESPOSTA como fonte de verdade evita que
+        // `Invoice.pixExpiresAt` diga uma coisa e o QR real diga outra. Cai no valor calculado
+        // só se a resposta vier sem o campo (nunca visto na prática, mas não é motivo pra lançar).
+        expiresAt: json.date_of_expiration ? new Date(json.date_of_expiration) : expiresAt,
       };
     },
 

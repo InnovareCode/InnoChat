@@ -1,10 +1,15 @@
-import type { CreatePixPaymentInput, MercadoPagoGateway, MercadoPagoPayment } from "./mercadopago";
+import { MercadoPagoApiError, type CreatePixPaymentInput, type MercadoPagoGateway, type MercadoPagoPayment } from "./mercadopago";
 
 /**
  * Fake do Mercado Pago para testes (sem credenciais reais ainda — PENDÊNCIAS no handoff da
  * Fase 7). Implementa `MercadoPagoGateway` de verdade — os testes injetam isto no lugar do
  * gateway real (`createMercadoPagoGateway`) nas funções de serviço que aceitam `gateway?` como
  * parâmetro, e usam `approve()`/`setStatus()` para simular o webhook confirmando o pagamento.
+ *
+ * Reproduz a MESMA falha cedo do gateway real quando falta `payerDocument` (conferido contra o
+ * incidente do Parque das Feiras, `payments.pix.cpf.test.ts`) — sem isto, um teste de
+ * integração que esquecesse de semear `Tenant.document` passaria mesmo simulando um cenário que
+ * o Mercado Pago de verdade recusaria.
  */
 export function createMockMercadoPagoGateway() {
   let counter = 0;
@@ -12,6 +17,9 @@ export function createMockMercadoPagoGateway() {
 
   const gateway: MercadoPagoGateway = {
     async createPixPayment(input: CreatePixPaymentInput) {
+      if (!input.payerDocument) {
+        throw new MercadoPagoApiError("mock: falta o CPF/CNPJ do pagador.", undefined, "missing_payer_document");
+      }
       counter += 1;
       const paymentId = `mock_pay_${counter}`;
       payments.set(paymentId, {

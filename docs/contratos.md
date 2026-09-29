@@ -675,7 +675,8 @@ sem telas (a Lyra consome o contrato abaixo).
   depois de `currentPeriodEnd`, para quem já não está mais em trial), 1 dia de carência
   (`GRACE_DAYS`) → `PAST_DUE`, depois `SUSPENDED`, depois de 60 dias em `SUSPENDED`
   (`CANCEL_AFTER_SUSPENDED_DAYS`) → `CANCELED`. Testes: `src/core/billing/__tests__/status.test.ts`.
-- `computeTrialEndsAt(signupAt): Date` — `+1 dia` (decisão do dono, 2026-09-28).
+- `computeTrialEndsAt(signupAt): Date` — `+3 dias` (`TRIAL_DAYS`; decisão do dono, 2026-09-29 —
+  era `+1 dia` até 2026-09-28).
 - `computeNextPeriodEnd({ currentPeriodEnd, wasSuspended, paidAt }): Date` — `+1 mês` a partir de
   `currentPeriodEnd` (mantém o dia-âncora) OU a partir de `paidAt` se `wasSuspended` (§7.1).
 
@@ -733,7 +734,7 @@ sem telas (a Lyra consome o contrato abaixo).
 
 - `signUpAction(input): Result<{ tenantSlug }>` — `input: { companyName, slug, segment?,
   ownerName, email, password, termsVersion, acceptedTerms: true }`. Cria `User(OWNER)` +
-  `Tenant` + `Membership` + `Subscription(TRIALING, +1 dia)` + a primeira fatura (Pix, se o MP
+  `Tenant` + `Membership` + `Subscription(TRIALING, +3 dias — `TRIAL_DAYS`)` + a primeira fatura (Pix, se o MP
   estiver configurado) numa transação; e-mail de verificação e de fatura gerada são efeitos
   colaterais fora da transação (nunca desfazem o cadastro se falharem). Rate limit: 5
   cadastros/hora por IP (`RATE_LIMITED`, `details.retryAfterMs`). Erros: `INVALID_SLUG`
@@ -1284,3 +1285,85 @@ que rodar o seed de novo nunca sobrescreve um ajuste manual.
 serviço → `npx prisma migrate deploy` — manual, sempre") já cobre esta migration.
 
 Aplicada e conferida em `innochat` (dev) e `innochat_test`.
+
+## Cobrança — alinhamento com o Parque das Feiras (Mercado Pago), 2026-09-29
+
+O dono confirmou que o Parque das Feiras tem a integração com o Mercado Pago validada em
+produção — usada como referência de verdade contra o nosso adaptador (só testado com mock).
+Comparação item a item entre `ParquedasFeiras/backend/src/lib/mercadopago.ts` +
+`lib/pagamentos/adaptadores/mercadoPago.ts` e `src/modules/billing/mercadopago.ts` +
+`webhook.ts`:
+
+| Item | Parque das Feiras (PF) | InnoChat (antes) | Decisão |
+|---|---|---|---|
+| CPF/CNPJ do pagador no Pix | Exige `payer.identification` — incidente real documentado (`payments.pix.cpf.test.ts`): sem CPF, o MP recusava e um bug ANTIGO (SDK lançando o corpo cru) virava 500 mudo | Só mandava `payer.email` — nunca enviava `identification` | **Alinhado ao PF.** O MP exige o documento para Pix; adicionamos `Tenant.document` (migration `20260929004309_tenant_billing_document`), `payerDocument`/`payerName` em `CreatePixPaymentInput`, e `createPixPayment` falha CEDO (`missing_payer_document`) sem chamar o MP se faltar. **Contrato NOVO para a Lyra:** `/cadastro` ainda não coleta CPF/CNPJ — a empresa fica sem Pix até cadastrar pela nova `updateTenantDocumentAction` (ver abaixo). |
+| `date_of_expiration` na criação | Envia (implícito via SDK, que usa o padrão do MP) e usa `date_of_expiration` da RESPOSTA como fonte de verdade | Nunca enviava; calculava `expiresAt` só localmente (`Date.now() + 3 dias`), sem saber o que o MP de fato aplicou | **Alinhado ao PF.** Passamos a mandar `date_of_expiration` (`.toISOString()`, UTC) no corpo e a usar o valor da resposta do MP como `expiresAt` — evita `Invoice.pixExpiresAt` dizer uma coisa e o QR real dizer outra. |
+| `notification_url` | Envia explícito por cobrança (`${APP_PUBLIC_URL}/api/payments/webhook`) | Nunca enviava — dependia 100% da URL cadastrada manualmente no painel de Developers do MP | **Alinhado ao PF, com fallback.** Passamos a mandar `notification_url` quando `getPublicBaseUrl()` resolve (via `tryGetPublicBaseUrl()`, nunca lança); sem URL resolvível (fora de requisição e sem `PlatformSettings.publicBaseUrl` gravado ainda), omite o campo e cai no comportamento antigo. |
+| Formato do fuso em `date_of_expiration` | `-03:00` explícito (servidor roda no fuso do Brasil) | N/A (nem enviava) | **Não copiamos o `-03:00`.** Usamos `.toISOString()` (sufixo `Z`, UTC) — instante idêntico, sem aritmética manual de fuso e sem depender do fuso do processo Node. Equivalente correto, mais simples que o do PF. |
+| `payer.first_name`/`last_name` | Quebra `order.buyer.name` no espaço; sem sobrenome, repete o primeiro nome | N/A (não enviava nome) | **Alinhado ao PF** — `splitPayerName(Tenant.name)`, mesma regra de fallback. |
+| Classificação de erro do MP (CPF ausente, credencial, sem chave Pix, rate limit) | `mercadopago-errors.ts`: `MercadoPagoError` com `kind` tipado, ancorado no CAMPO (`payer.identification`) para não confundir CPF do vendedor com CPF do pagador | Um `MercadoPagoApiError` genérico só com `status`, texto solto | **Alinhado ao PF** (versão reduzida, só o que importa para Pix): `MercadoPagoFailureKind` (`missing_payer_document`, `invalid_payer_document`, `invalid_credentials`, `pix_key_not_enabled`, `rate_limited`, `payload_rejected`, `unavailable`) + `classifyMercadoPagoError`. `regeneratePixForInvoice` traduz cada `kind` num código de `DomainError` específico (`MERCADOPAGO_MISSING_DOCUMENT`/`MERCADOPAGO_MISCONFIGURED`/`MERCADOPAGO_UNAVAILABLE`) em vez de um "indisponível" genérico para qualquer causa. |
+| Validação de CPF/CNPJ | Dígito verificador (módulo 11), não só contagem de dígitos | N/A | **Alinhado ao PF** — `src/core/billing/document.ts` (`validateCpfCnpj`), mesmo algoritmo público de CPF/CNPJ. |
+| `x-signature` (assinatura do webhook) | Usa `verifyWebhookSignature` do SDK oficial do MP (não documentado aqui em detalhe) | Implementação própria, **conferida contra o SDK oficial em Go** (`github.com/mercadopago/sdk-go/pkg/webhook`) em 2026-09-28 — ver `.claude/agent-memory/vega/mercadopago_signature_go_sdk_spec.md` | **Mantido o nosso.** Já foi verificado contra o código-fonte oficial do MP (não só a doc em prosa), incluindo 2 desvios finos (origem do `data.id` no query param, omissão de pares ausentes no manifest) que uma reimplementação "de memória" costuma errar. Não há necessidade de alinhar a algo menos verificado. |
+| `type`/`topic` da notificação (`payment` vs `merchant_order`) | `interpretarNotificacao`: `type !== 'payment'` → `evento_irrelevante`, sem reconsultar nada | Não checava `type` — qualquer `data.id` era tratado como pagamento e reconsultado via `getPayment` | **Alinhado ao PF.** `handleMercadoPagoWebhook` agora recebe `type` (de `type`/`topic`, corpo ou query) e ignora (200, sem tocar no gateway/banco) quando não é `payment` — depois da assinatura validar, igual à ordem do PF. |
+| Resposta HTTP ao MP | 200 rápido, nunca 5xx por payload malformado | Igual | **Sem divergência** — já estava certo. |
+| Reconsulta antes de dar baixa | Nunca confia no `status` do corpo; sempre reconsulta com a credencial própria | Igual | **Sem divergência** — já estava certo. |
+| Idempotência do webhook | Não documentada em detalhe aqui | `ProviderEvent(provider, providerEventId)` + `applyInvoicePayment` idempotente por si — testado contra corrida real (`billing-webhook.integration.test.ts`) | **Sem mudança** — já mais testado que o que foi possível conferir do PF neste ponto. |
+| Valor mínimo / arredondamento de centavos | `centavosDeReais`/`reaisDeCentavos`: `Math.round(reais*100)`/`centavos/100`, sem `EPSILON` | `Math.round(input.amountCents) / 100` (equivalente, já que `amountCents` já chega inteiro) | **Sem divergência real** — mesma matemática, forma textual diferente. |
+
+### `Tenant.document` (CPF/CNPJ) — schema novo
+
+Migration `20260929004309_tenant_billing_document` (aditiva, aplicada em `innochat` e
+`innochat_test`): `Tenant.document String?`, só dígitos, `null` até a empresa cadastrar. Nasce
+`null` para toda empresa — `/cadastro` não coleta isto ainda.
+
+### `updateTenantDocumentAction(tenantSlug, { document })` — NOVO (`src/modules/tenant/actions.ts`)
+
+Restrito a `OWNER` (mesma régua de `updateTenantThemeAction`). Valida CPF/CNPJ pelo dígito
+verificador (`validateCpfCnpj`) — dígitos-só/formatado, ambos aceitos. Erro `INVALID_DOCUMENT`
+para dígito verificador errado. **Contrato para a Lyra**: falta um campo em Configurações (ex.:
+Configurações → Empresa) chamando esta action — sem ele, a empresa nunca consegue gerar Pix
+(toda fatura nasce `OPEN` sem Pix até o CPF/CNPJ existir, mesmo caminho de "MP indisponível").
+
+### `regeneratePixForInvoice` — erros agora específicos
+
+Antes: qualquer falha (CPF ausente, credencial errada, MP fora do ar) virava
+`MERCADOPAGO_UNAVAILABLE` genérico. Agora: `MERCADOPAGO_MISSING_DOCUMENT` (falta ou CPF/CNPJ
+inválido — a tela deve linkar para o campo de Configurações acima),
+`MERCADOPAGO_MISCONFIGURED` (credencial da plataforma ou conta sem chave Pix — problema do
+ADMIN da plataforma, não da empresa) ou `MERCADOPAGO_UNAVAILABLE` (rate limit/indisponibilidade
+— tentar de novo). `tryAttachPix` (usado em segundo plano por `signup`/`tick`) continua só
+logando e devolvendo `null` em qualquer falha — comportamento inalterado para quem não chama a
+ação explícita.
+
+### Bug corrigido: `expiresInDays` ignorado
+
+`createPixPayment` recebia `input.expiresInDays` mas sempre usava uma constante fixa do módulo
+(`PIX_EXPIRATION_DAYS = 3`) — parâmetro morto. Sem efeito prático hoje (todo caller já passava
+3), mas corrigido enquanto o código estava sob revisão.
+
+## Teste grátis: 3 dias (decisão do dono, 2026-09-29)
+
+`TRIAL_DAYS` (`src/core/billing/status.ts`) mudou de `1` para `3` — única fonte, sem config nova
+no admin. `GRACE_DAYS` (carência, 1 dia) **não muda**. A primeira fatura continua sendo gerada
+já no cadastro. Atualizados: `computeTrialEndsAt` (era `+1 dia`, agora `+3 dias`),
+`status.test.ts`, comentários em `signup/service.ts`/`billing/tick.ts`, e este documento +
+`docs/arquitetura.md` §7.1/§7.3/§7.4. **Pendente na UI (Lyra):**
+`src/app/(public)/cadastro/cadastro-form.tsx:144` ainda diz "1 dia de teste grátis" — texto
+estático, não lido de `TRIAL_DAYS` (que é backend); precisa trocar para "3 dias".
+
+## Termos de uso: versão conferida no servidor (decisão do dono, 2026-09-29)
+
+`signUpAction` deixou de gravar `termsVersion` como o client mandou sem checar. Agora
+`assertCurrentTermsVersion` (`src/lib/legal.ts`) compara contra `TERMS_VERSION` (a mesma
+constante que `/termos`/`/privacidade` exibem) e lança `DomainError("TERMS_VERSION_OUTDATED", ...)`
+se vierem diferentes — cenário real: uma aba de `/cadastro` aberta há dias, em cache, mandando
+uma versão de termos que já não é a vigente. `signUp` sempre grava a constante do SERVIDOR
+(`TERMS_VERSION`), nunca o valor bruto do client, mesmo depois de validado igual. **Contrato para
+a Lyra:** tratar o código `TERMS_VERSION_OUTDATED` no formulário de cadastro com uma mensagem de
+"atualize a página" (ex.: `location.reload()` antes de tentar de novo) — hoje ele cai no erro
+genérico.
+
+`PlatformSettings.termsVersion` foi **descontinuado no código** (deixou de ser lido/gravado em
+`src/modules/platform/service.ts`/`actions.ts`): duplicava `TERMS_VERSION` e nenhuma tela de
+admin o editava. A coluna continua no schema (`prisma/schema.prisma`, marcada como órfã) — sem
+migration destrutiva agora; proposta para o Cronos decidir quando vale remover.

@@ -1,6 +1,176 @@
 import crypto from "node:crypto";
-import { describe, expect, it } from "vitest";
-import { verifyMercadoPagoSignature } from "./mercadopago";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// `createPixPayment` chama `tryGetPublicBaseUrl()` para montar `notification_url` — sem mockar,
+// isso bateria em `getPrisma()` de verdade (fora de escopo de um teste unitário). Fixo em
+// `null` por padrão (comportamento "sem URL pública ainda") e sobrescrevo por teste quando
+// preciso verificar o campo no corpo.
+const tryGetPublicBaseUrl = vi.hoisted(() => vi.fn(async () => null as string | null));
+vi.mock("@/lib/public-url", () => ({ tryGetPublicBaseUrl }));
+
+const { createMercadoPagoGateway, MercadoPagoApiError, verifyMercadoPagoSignature } = await import("./mercadopago");
+
+/**
+ * Corpo enviado ao Mercado Pago na criação do Pix, conferido item a item contra o Parque das
+ * Feiras (`backend/src/lib/mercadopago.ts#createPixCharge` e
+ * `backend/tests/payments.pix.cpf.test.ts`) — ver a tabela "PF vs InnoChat vs decisão" em
+ * `docs/contratos.md`.
+ */
+describe("createMercadoPagoGateway — createPixPayment", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  function jsonResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  }
+
+  const baseInput = {
+    externalReference: "invoice_1",
+    amountCents: 15050,
+    description: "Assinatura InnoChat",
+    payerEmail: "owner@example.com",
+    payerName: "Maria Silva",
+    idempotencyKey: "invoice_1",
+    expiresInDays: 3,
+  };
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    tryGetPublicBaseUrl.mockReset();
+    tryGetPublicBaseUrl.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("FALHA CEDO sem chamar o Mercado Pago quando falta payerDocument (mesma defesa do incidente do Parque das Feiras)", async () => {
+    const gateway = createMercadoPagoGateway("token");
+
+    const promise = gateway.createPixPayment({ ...baseInput, payerDocument: null });
+    await expect(promise).rejects.toBeInstanceOf(MercadoPagoApiError);
+    await expect(promise).rejects.toMatchObject({ kind: "missing_payer_document" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("envia payer.identification com CPF (11 dígitos) e first_name/last_name quebrados do nome", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        id: "MP-1",
+        point_of_interaction: { transaction_data: { qr_code: "qr-copia-e-cola" } },
+        date_of_expiration: "2026-10-01T10:00:00.000Z",
+      }),
+    );
+    const gateway = createMercadoPagoGateway("token");
+
+    await gateway.createPixPayment({ ...baseInput, payerDocument: "52998224725" });
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse(init.body as string);
+    expect(body.payer).toMatchObject({
+      email: "owner@example.com",
+      first_name: "Maria",
+      last_name: "Silva",
+      identification: { type: "CPF", number: "52998224725" },
+    });
+  });
+
+  it("envia payer.identification com CNPJ (14 dígitos)", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "MP-2", point_of_interaction: { transaction_data: { qr_code: "qr" } } }));
+    const gateway = createMercadoPagoGateway("token");
+
+    await gateway.createPixPayment({ ...baseInput, payerDocument: "11222333000181" });
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse(init.body as string);
+    expect(body.payer.identification).toEqual({ type: "CNPJ", number: "11222333000181" });
+  });
+
+  it("manda date_of_expiration no corpo e usa o valor DEVOLVIDO pelo MP como expiresAt (não o calculado localmente)", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        id: "MP-3",
+        point_of_interaction: { transaction_data: { qr_code: "qr" } },
+        date_of_expiration: "2026-10-05T00:00:00.000Z",
+      }),
+    );
+    const gateway = createMercadoPagoGateway("token");
+
+    const result = await gateway.createPixPayment({ ...baseInput, payerDocument: "52998224725" });
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse(init.body as string);
+    expect(typeof body.date_of_expiration).toBe("string");
+    expect(result.expiresAt.toISOString()).toBe("2026-10-05T00:00:00.000Z");
+  });
+
+  it("inclui notification_url quando há URL pública resolvível, omite quando não há", async () => {
+    tryGetPublicBaseUrl.mockResolvedValue("https://app.innochat.com.br");
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "MP-4", point_of_interaction: { transaction_data: { qr_code: "qr" } } }));
+    const gateway = createMercadoPagoGateway("token");
+
+    await gateway.createPixPayment({ ...baseInput, payerDocument: "52998224725" });
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse(init.body as string);
+    expect(body.notification_url).toBe("https://app.innochat.com.br/api/webhooks/mercadopago");
+  });
+
+  it("nunca lança quando não há URL pública ainda — só omite notification_url", async () => {
+    tryGetPublicBaseUrl.mockResolvedValue(null);
+    fetchMock.mockResolvedValueOnce(jsonResponse({ id: "MP-5", point_of_interaction: { transaction_data: { qr_code: "qr" } } }));
+    const gateway = createMercadoPagoGateway("token");
+
+    await gateway.createPixPayment({ ...baseInput, payerDocument: "52998224725" });
+
+    const [, init] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse(init.body as string);
+    expect(body.notification_url).toBeUndefined();
+  });
+
+  it("classifica 'payer.identification.number attribute can't be null' como missing_payer_document (defesa em profundidade, o MP ainda recusou apesar do CPF)", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ message: "payer.identification.number attribute can't be null", cause: [{ code: 4051 }] }, 400),
+    );
+    const gateway = createMercadoPagoGateway("token");
+
+    await expect(gateway.createPixPayment({ ...baseInput, payerDocument: "52998224725" })).rejects.toMatchObject({
+      kind: "missing_payer_document",
+      status: 400,
+    });
+  });
+
+  it("classifica conta sem chave Pix (13253) como pix_key_not_enabled — nunca como erro de CPF", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ message: "bad request", cause: [{ code: 13253, description: "Collector user without key enabled for QR render" }] }, 400),
+    );
+    const gateway = createMercadoPagoGateway("token");
+
+    await expect(gateway.createPixPayment({ ...baseInput, payerDocument: "52998224725" })).rejects.toMatchObject({
+      kind: "pix_key_not_enabled",
+    });
+  });
+
+  it("classifica 401 como invalid_credentials", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ message: "invalid access token" }, 401));
+    const gateway = createMercadoPagoGateway("token");
+
+    await expect(gateway.createPixPayment({ ...baseInput, payerDocument: "52998224725" })).rejects.toMatchObject({
+      kind: "invalid_credentials",
+    });
+  });
+
+  it("classifica 429 como rate_limited e 500 como unavailable", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 429));
+    const gateway = createMercadoPagoGateway("token");
+    await expect(gateway.createPixPayment({ ...baseInput, payerDocument: "52998224725" })).rejects.toMatchObject({ kind: "rate_limited" });
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 500));
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 500));
+    fetchMock.mockResolvedValueOnce(jsonResponse({}, 500));
+    await expect(gateway.createPixPayment({ ...baseInput, payerDocument: "52998224725" })).rejects.toMatchObject({ kind: "unavailable" });
+  });
+});
 
 /**
  * `verifyMercadoPagoSignature` conferido em 2026-09-28 contra o SDK oficial em Go

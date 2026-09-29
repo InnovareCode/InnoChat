@@ -141,6 +141,26 @@ describe("handleMercadoPagoWebhook — idempotência (§6.10)", () => {
     expect(reloadedSubscription.currentPeriodEnd.getTime()).toBe(expectedNextPeriodEnd.getTime());
   });
 
+  it("notificação com type diferente de 'payment' (ex.: merchant_order) é ignorada SEM reconsultar o gateway (conferido contra o Parque das Feiras)", async () => {
+    const { tenant, invoice } = await makeSubscriptionWithOpenInvoice("merchant-order");
+    cleanupTenantIds.push(tenant.id);
+    await prisma.platformSettings.upsert({ where: { id: 1 }, create: { id: 1, mercadoPagoWebhookSecret: WEBHOOK_SECRET }, update: { mercadoPagoWebhookSecret: WEBHOOK_SECRET } });
+
+    const dataId = "merchant_order_999";
+    const requestId = "req-mo";
+    const ts = String(Math.floor(Date.now() / 1000));
+    const xSignature = signManifest(dataId, requestId, ts);
+    const gateway = { createPixPayment: vi.fn(), getPayment: vi.fn() };
+
+    const result = await handleMercadoPagoWebhook({ xSignature, xRequestId: requestId, dataId, type: "merchant_order", gateway });
+
+    expect(result.status).toBe("ignored");
+    expect(gateway.getPayment).not.toHaveBeenCalled();
+
+    const reloaded = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(reloaded.status).toBe("OPEN");
+  });
+
   it("chamar applyInvoicePayment de novo (fora do webhook) também é idempotente", async () => {
     const { tenant, subscription, invoice } = await makeSubscriptionWithOpenInvoice("direct-apply");
     cleanupTenantIds.push(tenant.id);
