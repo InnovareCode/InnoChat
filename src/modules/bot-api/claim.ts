@@ -4,7 +4,7 @@ import { isUniqueViolation } from "@/lib/db/prisma-errors";
 import type { InboundIgnoreReason } from "@/lib/db/types";
 import { normalizeEvolutionMessage, resolveSenderIdentity, digitsFromJid, type NormalizedMessage } from "@/core/bot/evolution-normalize";
 import { getMergedBotTexts } from "@/modules/bot-texts/service";
-import { logChatMessage } from "@/modules/conversations/log";
+import { contactHasBusinessRelation, logChatMessage } from "@/modules/conversations/log";
 import { isTenantBotAllowed } from "./subscription-gate";
 import type { InternalApiContext } from "./internal-auth";
 
@@ -98,6 +98,13 @@ export async function claimMessage(ctx: InternalApiContext, rawPayload: unknown)
     return recordSimpleIgnore(ctx, normalized.providerMessageId, "UNRESOLVABLE_SENDER");
   }
 
+  // Mensagem enviada PELO dono do número (fromMe) para alguém que NUNCA falou com o número é conversa
+  // pessoal: não cria Contato, sessão nem histórico. (Motivo registrado como FROM_ME_ECHO — "saída
+  // nossa, nada a processar"; não existe um motivo próprio e o enum não muda sem migration.)
+  if (normalized.fromMe && !contact) {
+    return recordSimpleIgnore(ctx, normalized.providerMessageId, "FROM_ME_ECHO");
+  }
+
   const waJid = identity.waJid ?? contact!.waJid;
   contact = await prisma.contact.upsert({
     where: { tenantId_waJid: { tenantId: ctx.tenantId, waJid } },
@@ -148,7 +155,10 @@ export async function claimMessage(ctx: InternalApiContext, rawPayload: unknown)
       body: chatBody,
       providerMessageId,
     });
-  } else if (!isRecentOutboundEcho(locked.recentOutbound, normalized.content, now)) {
+  } else if (
+    !isRecentOutboundEcho(locked.recentOutbound, normalized.content, now) &&
+    (await contactHasBusinessRelation(ctx.tenantId, contact.id))
+  ) {
     await logChatMessage({
       tenantId: ctx.tenantId,
       whatsappInstanceId: ctx.instance.id,

@@ -64,7 +64,7 @@ O aceite é registrado no cadastro, com a versão destes Termos e a data e hora 
 
 O InnoChat oferece, conforme o Plano contratado: cadastro de serviços, profissionais, expedientes e bloqueios; agenda com visão por dia e por profissional; Bot de agendamento pelo WhatsApp com textos editáveis; gestão de Clientes Finais, com pausa do Bot por cliente e exportação em planilha (CSV); e gestão da assinatura.
 
-O Bot responde apenas a quem enviou mensagem para o número da Empresa. As mensagens continuam chegando normalmente ao celular da Empresa, que pode assumir a conversa a qualquer momento. **O InnoChat guarda o texto das conversas por 90 dias, para suporte ao atendimento** (veja a Política de Privacidade).
+O Bot responde apenas a quem enviou mensagem para o número da Empresa. As mensagens continuam chegando normalmente ao celular da Empresa, que pode assumir a conversa a qualquer momento. **O InnoChat guarda o texto das conversas por 90 dias, para suporte ao atendimento** (veja a Política de Privacidade). **O InnoChat também envia lembretes automáticos por WhatsApp aos clientes finais da Empresa, em nome dela, quando a Empresa ativa essa função em Configurações.** A Empresa, como controladora dos dados dos seus clientes, deve informá-los sobre esses lembretes e sobre a guarda do histórico da conversa por 90 dias.
 
 Os limites de cada Plano (números de WhatsApp, profissionais e outros) são verificados pelo sistema. Podemos melhorar, alterar ou descontinuar funcionalidades ao longo do tempo. Se uma mudança reduzir de forma relevante uma funcionalidade essencial do Plano contratado, avisaremos com antecedência razoável.
 

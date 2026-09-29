@@ -5,11 +5,11 @@
  * determinísticos. As asserções filtram pelas instâncias DESTE arquivo — o tick varre o banco
  * inteiro e sobras de outros testes não podem contaminar a contagem.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getPrisma } from "@/lib/db/prisma";
 import type { TenantContext } from "@/lib/auth/guards";
-import type { EvolutionClient } from "@/modules/whatsapp/evolution-client";
+import { EvolutionApiError, type EvolutionClient } from "@/modules/whatsapp/evolution-client";
 
 const session: { ctx: TenantContext | null } = { ctx: null };
 vi.mock("@/lib/auth/guards", () => ({
@@ -21,13 +21,23 @@ vi.mock("@/lib/auth/guards", () => ({
   },
 }));
 
-import { REMINDER_MAX_ATTEMPTS, resetReminderFailureMemory, runReminderTick } from "@/modules/reminders/tick";
+import {
+  REMINDER_MAX_ATTEMPTS,
+  REMINDER_SEND_GAP_MAX_MS,
+  REMINDER_SEND_GAP_MIN_MS,
+  REMINDER_TENANT_BATCH_LIMIT,
+  registerOutboundEcho,
+  resetReminderFailureMemory,
+  runReminderTick,
+} from "@/modules/reminders/tick";
 import { getReminderSettingsAction, updateReminderSettingsAction } from "@/modules/reminders/actions";
 import { rescheduleAppointment } from "@/modules/agenda/appointments";
 import { createProfessional, createService, setProfessionalServices, setProfessionalWorkingHours } from "@/modules/agenda/catalog";
 import { DEFAULT_BOT_TEXTS } from "@/core/bot/texts";
 
 const prisma = getPrisma();
+/** Sem pausa real entre envios (o ritmo é testado à parte, com relógio falso). */
+const FAST = { sleep: async () => {} };
 const HOUR = 3_600_000;
 const NOW = new Date("2026-10-01T15:00:00Z"); // 12:00 em America/Sao_Paulo
 const tenantIds: string[] = [];
@@ -36,11 +46,11 @@ const userIds: string[] = [];
 
 type Sent = { instanceName: string; number: string; text: string };
 
-function fakeEvolution(opts: { fail?: boolean } = {}) {
+function fakeEvolution(opts: { fail?: boolean | Error } = {}) {
   const sent: Sent[] = [];
   const client = {
     sendText: vi.fn(async (instanceName: string, number: string, text: string) => {
-      if (opts.fail) throw new Error("evolution fora do ar");
+      if (opts.fail) throw opts.fail instanceof Error ? opts.fail : new Error("evolution fora do ar");
       sent.push({ instanceName, number, text });
       return { messageId: `MSG-${randomUUID()}` };
     }),
@@ -174,7 +184,7 @@ describe("lembrete de véspera — seleção e envio", () => {
     const alreadySent = await makeAppointment(w, contact.id, at(12), { reminderSentAt: new Date("2026-10-01T10:00:00Z") });
     const { client, sent } = fakeEvolution();
 
-    await runReminderTick(NOW, { evolution: client });
+    await runReminderTick(NOW, { evolution: client, ...FAST });
 
     expect(sentBy(sent, w)).toHaveLength(2);
     expect(await reminderOf(inWindow.id)).toEqual(NOW);
@@ -196,7 +206,7 @@ describe("lembrete de véspera — seleção e envio", () => {
     await makeAppointment(w, contact.id, at(22)); // 10:00 de 02/10 (local)
     const { client, sent } = fakeEvolution();
 
-    await runReminderTick(NOW, { evolution: client });
+    await runReminderTick(NOW, { evolution: client, ...FAST });
 
     const [only] = sentBy(sent, w);
     expect(only!.text).toBe("Olá, Maria! Lembrete: você tem Massagem com Ana amanhã às 10:00.\nPara remarcar ou cancelar, responda *menu*.");
@@ -219,7 +229,7 @@ describe("lembrete de véspera — seleção e envio", () => {
     await makeAppointment(w, contact.id, at(22));
     const { client, sent } = fakeEvolution();
 
-    await runReminderTick(NOW, { evolution: client });
+    await runReminderTick(NOW, { evolution: client, ...FAST });
 
     expect(sentBy(sent, w)[0]!.text).toBe("Oi Ana, Studio custom: Massagem dia Sex 02/10 às 10:00 (amanhã).");
   });
@@ -231,7 +241,7 @@ describe("lembrete de véspera — seleção e envio", () => {
     const far = await makeAppointment(w, contact.id, at(20));
     const { client, sent } = fakeEvolution();
 
-    await runReminderTick(NOW, { evolution: client });
+    await runReminderTick(NOW, { evolution: client, ...FAST });
 
     expect(sentBy(sent, w)).toHaveLength(1);
     expect(await reminderOf(near.id)).not.toBeNull();
@@ -250,7 +260,7 @@ describe("lembrete de véspera — seleção e envio", () => {
     }
     const { client, sent } = fakeEvolution();
 
-    await runReminderTick(NOW, { evolution: client });
+    await runReminderTick(NOW, { evolution: client, ...FAST });
 
     for (const id of appts) expect(await reminderOf(id)).toBeNull();
     for (const w of [off, disconnected, sandbox, none]) expect(sentBy(sent, w)).toHaveLength(0);
@@ -270,7 +280,7 @@ describe("lembrete de véspera — seleção e envio", () => {
     await makeAppointment(w, c2.id, at(11), { whatsappInstanceId: dead.id });
     const { client, sent } = fakeEvolution();
 
-    await runReminderTick(NOW, { evolution: client });
+    await runReminderTick(NOW, { evolution: client, ...FAST });
 
     const names = sent.filter((s) => [w.instance!.instanceName, other.instanceName, dead.instanceName].includes(s.instanceName)).map((s) => s.instanceName);
     expect(names).toEqual([other.instanceName, w.instance!.instanceName]); // ordenado por horário
@@ -288,7 +298,7 @@ describe("lembrete de véspera — pausado, suspenso e silêncio", () => {
     const a3 = await makeAppointment(w, expired.id, at(10));
     const { client, sent } = fakeEvolution();
 
-    await runReminderTick(NOW, { evolution: client });
+    await runReminderTick(NOW, { evolution: client, ...FAST });
 
     expect(sentBy(sent, w)).toHaveLength(1);
     expect(await reminderOf(a1.id)).toBeNull();
@@ -302,7 +312,7 @@ describe("lembrete de véspera — pausado, suspenso e silêncio", () => {
     const appt = await makeAppointment(w, contact.id, at(10));
     const { client, sent } = fakeEvolution();
 
-    await runReminderTick(NOW, { evolution: client });
+    await runReminderTick(NOW, { evolution: client, ...FAST });
 
     expect(sentBy(sent, w)).toHaveLength(0);
     expect(await reminderOf(appt.id)).toBeNull();
@@ -316,21 +326,21 @@ describe("lembrete de véspera — pausado, suspenso e silêncio", () => {
     const night = new Date("2026-10-02T02:00:00Z"); // 23:00 local
     const { client, sent } = fakeEvolution();
 
-    await runReminderTick(night, { evolution: client });
+    await runReminderTick(night, { evolution: client, ...FAST });
     expect(sentBy(sent, w)).toHaveLength(0);
     expect(await reminderOf(appt.id)).toBeNull();
 
     const morning = new Date("2026-10-02T11:00:00Z"); // 08:00 local — faltam 1h → NÃO envia (< 2h)
-    await runReminderTick(morning, { evolution: client });
+    await runReminderTick(morning, { evolution: client, ...FAST });
     expect(sentBy(sent, w)).toHaveLength(0);
 
     const early = new Date("2026-10-02T09:59:00Z"); // 06:59 local → silêncio
-    await runReminderTick(early, { evolution: client });
+    await runReminderTick(early, { evolution: client, ...FAST });
     expect(sentBy(sent, w)).toHaveLength(0);
 
     // Compromisso mais tarde (13:00 local): às 08:00 local faltam 5h → envia no 1º tick da janela.
     const later = await makeAppointment(w, contact.id, new Date("2026-10-02T16:00:00Z"));
-    await runReminderTick(morning, { evolution: client });
+    await runReminderTick(morning, { evolution: client, ...FAST });
     expect(sentBy(sent, w)).toHaveLength(1);
     expect(await reminderOf(later.id)).toEqual(morning);
   });
@@ -343,10 +353,10 @@ describe("lembrete de véspera — idempotência, concorrência e falha", () => 
     const appt = await makeAppointment(w, contact.id, at(10));
     const { client, sent } = fakeEvolution();
 
-    await Promise.all([runReminderTick(NOW, { evolution: client }), runReminderTick(NOW, { evolution: client }), runReminderTick(NOW, { evolution: client })]);
+    await Promise.all([runReminderTick(NOW, { evolution: client, ...FAST }), runReminderTick(NOW, { evolution: client, ...FAST }), runReminderTick(NOW, { evolution: client, ...FAST })]);
     expect(sentBy(sent, w)).toHaveLength(1);
 
-    await runReminderTick(new Date(NOW.getTime() + HOUR), { evolution: client });
+    await runReminderTick(new Date(NOW.getTime() + HOUR), { evolution: client, ...FAST });
     expect(sentBy(sent, w)).toHaveLength(1);
     expect(await reminderOf(appt.id)).toEqual(NOW);
   });
@@ -357,12 +367,12 @@ describe("lembrete de véspera — idempotência, concorrência e falha", () => 
     const appt = await makeAppointment(w, contact.id, at(10));
     const failing = fakeEvolution({ fail: true });
 
-    const first = await runReminderTick(NOW, { evolution: failing.client });
+    const first = await runReminderTick(NOW, { evolution: failing.client, ...FAST });
     expect(first.remindersToClientsFailed).toBeGreaterThanOrEqual(1);
     expect(await reminderOf(appt.id)).toBeNull();
     expect(await prisma.chatMessage.count({ where: { tenantId: w.tenant.id } })).toBe(0);
 
-    for (let i = 1; i < REMINDER_MAX_ATTEMPTS + 2; i++) await runReminderTick(new Date(NOW.getTime() + i * HOUR), { evolution: failing.client });
+    for (let i = 1; i < REMINDER_MAX_ATTEMPTS + 2; i++) await runReminderTick(new Date(NOW.getTime() + i * HOUR), { evolution: failing.client, ...FAST });
     const callsForMine = (failing.client.sendText as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[0] === w.instance!.instanceName);
     expect(callsForMine).toHaveLength(REMINDER_MAX_ATTEMPTS); // sem retry infinito
     expect(await reminderOf(appt.id)).toBeNull();
@@ -373,12 +383,12 @@ describe("lembrete de véspera — idempotência, concorrência e falha", () => 
     const contact = await makeContact(w);
     const appt = await makeAppointment(w, contact.id, at(10));
 
-    await runReminderTick(NOW, { evolution: fakeEvolution({ fail: true }).client });
+    await runReminderTick(NOW, { evolution: fakeEvolution({ fail: true }).client, ...FAST });
     expect(await reminderOf(appt.id)).toBeNull();
 
     const ok = fakeEvolution();
     const later = new Date(NOW.getTime() + HOUR);
-    await runReminderTick(later, { evolution: ok.client });
+    await runReminderTick(later, { evolution: ok.client, ...FAST });
     expect(sentBy(ok.sent, w)).toHaveLength(1);
     expect(await reminderOf(appt.id)).toEqual(later);
   });
@@ -469,5 +479,148 @@ describe("get/updateReminderSettingsAction", () => {
 
     const other = await makeWorld("set-other");
     expect(await getReminderSettingsAction({ tenantSlug: other.tenant.slug })).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
+  });
+});
+
+describe("lembrete de véspera — ritmo (teto por empresa, intervalo com jitter, orçamento de tempo)", () => {
+  async function manyAppointments(w: World, n: number) {
+    const ids: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const contact = await makeContact(w);
+      ids.push((await makeAppointment(w, contact.id, at(10 + i / 100))).id);
+    }
+    return ids;
+  }
+
+  it(`no máximo ${REMINDER_TENANT_BATCH_LIMIT} por empresa por rodada; o resto entra na rodada seguinte`, async () => {
+    const w = await makeWorld("tenantcap");
+    await manyAppointments(w, REMINDER_TENANT_BATCH_LIMIT + 5);
+    const { client, sent } = fakeEvolution();
+
+    await runReminderTick(NOW, { evolution: client, ...FAST });
+    expect(sentBy(sent, w)).toHaveLength(REMINDER_TENANT_BATCH_LIMIT);
+
+    await runReminderTick(new Date(NOW.getTime() + 60_000), { evolution: client, ...FAST });
+    expect(sentBy(sent, w)).toHaveLength(REMINDER_TENANT_BATCH_LIMIT + 5);
+  });
+
+  it("pausa entre envios pelo mesmo número, dentro de 1,5–3 s (jitter), e nenhuma antes do primeiro", async () => {
+    const w = await makeWorld("gap");
+    await manyAppointments(w, 4);
+    const { client, sent } = fakeEvolution();
+    const pauses: number[] = [];
+    let n = 0;
+
+    await runReminderTick(NOW, { evolution: client, sleep: async (ms) => void pauses.push(ms), random: () => (n++ % 2 === 0 ? 0 : 1) });
+
+    expect(sentBy(sent, w)).toHaveLength(4);
+    expect(pauses).toHaveLength(3);
+    for (const ms of pauses) {
+      expect(ms).toBeGreaterThanOrEqual(REMINDER_SEND_GAP_MIN_MS);
+      expect(ms).toBeLessThanOrEqual(REMINDER_SEND_GAP_MAX_MS);
+    }
+    expect(new Set(pauses).size).toBeGreaterThan(1); // não é constante
+  });
+
+  it("estourou o orçamento de tempo: para, deixa o resto sem reserva e a próxima rodada continua", async () => {
+    const w = await makeWorld("budget");
+    const ids = await manyAppointments(w, 10);
+    const { client, sent } = fakeEvolution();
+    let clock = 0;
+    const deps = { evolution: client, clockMs: () => clock, sleep: async (ms: number) => void (clock += ms), random: () => 0, timeBudgetMs: 5_000 };
+
+    await runReminderTick(NOW, deps);
+    const firstRound = sentBy(sent, w).length;
+    expect(firstRound).toBeGreaterThan(0);
+    expect(firstRound).toBeLessThan(10);
+    const pending = await prisma.appointment.count({ where: { id: { in: ids }, reminderSentAt: null } });
+    expect(pending).toBe(10 - firstRound);
+
+    clock = 0;
+    await runReminderTick(new Date(NOW.getTime() + 60_000), deps);
+    expect(sentBy(sent, w).length).toBeGreaterThan(firstRound);
+  });
+});
+
+describe("lembrete de véspera — rollback só em falha transitória", () => {
+  it("4xx permanente (número inválido): NÃO devolve a reserva e não tenta de novo", async () => {
+    const w = await makeWorld("perm");
+    const contact = await makeContact(w);
+    const appt = await makeAppointment(w, contact.id, at(10));
+    const rejecting = fakeEvolution({ fail: new EvolutionApiError("número não existe", 400) });
+
+    const first = await runReminderTick(NOW, { evolution: rejecting.client, ...FAST });
+    expect(first.remindersToClientsFailed).toBeGreaterThanOrEqual(1);
+    expect(await reminderOf(appt.id)).toEqual(NOW);
+    expect(await prisma.chatMessage.count({ where: { tenantId: w.tenant.id } })).toBe(0);
+
+    const ok = fakeEvolution();
+    await runReminderTick(new Date(NOW.getTime() + HOUR), { evolution: ok.client, ...FAST });
+    expect(sentBy(ok.sent, w)).toHaveLength(0);
+  });
+
+  it.each([
+    ["5xx", new EvolutionApiError("indisponível", 503)],
+    ["429", new EvolutionApiError("muitas requisições", 429)],
+    ["timeout/rede (sem status)", new EvolutionApiError("timeout")],
+  ])("%s: devolve a reserva (tenta de novo depois)", async (_label, error) => {
+    const w = await makeWorld("trans");
+    const contact = await makeContact(w);
+    const appt = await makeAppointment(w, contact.id, at(10));
+
+    await runReminderTick(NOW, { evolution: fakeEvolution({ fail: error }).client, ...FAST });
+    expect(await reminderOf(appt.id)).toBeNull();
+  });
+});
+
+describe("lembrete de véspera — corrida com o bot em recentOutbound", () => {
+  it("conversa com trava ativa (bot atendendo): não envia, não marca; liberada a trava, envia", async () => {
+    const w = await makeWorld("lock");
+    const contact = await makeContact(w);
+    const appt = await makeAppointment(w, contact.id, at(10));
+    const chatSession = await prisma.chatSession.create({
+      data: {
+        whatsappInstanceId: w.instance!.id,
+        contactId: contact.id,
+        state: "MAIN_MENU",
+        lockToken: "tok",
+        lockedUntil: new Date(Date.now() + 20_000),
+      },
+    });
+    const { client, sent } = fakeEvolution();
+
+    await runReminderTick(NOW, { evolution: client, ...FAST });
+    expect(sentBy(sent, w)).toHaveLength(0);
+    expect(await reminderOf(appt.id)).toBeNull();
+
+    await prisma.chatSession.update({ where: { id: chatSession.id }, data: { lockToken: null, lockedUntil: null } });
+    await runReminderTick(new Date(NOW.getTime() + 60_000), { evolution: client, ...FAST });
+    expect(sentBy(sent, w)).toHaveLength(1);
+  });
+
+  it("appends concorrentes ao recentOutbound não perdem nenhum hash", async () => {
+    const w = await makeWorld("echo");
+    const contact = await makeContact(w);
+    const texts = ["um", "dois", "três", "quatro"].map((t) => `lembrete ${t}`);
+
+    const results = await Promise.all(texts.map((t) => registerOutboundEcho(w.instance!.id, contact.id, t, NOW)));
+
+    expect(results).toEqual(["ok", "ok", "ok", "ok"]);
+    const row = await prisma.chatSession.findUniqueOrThrow({
+      where: { whatsappInstanceId_contactId: { whatsappInstanceId: w.instance!.id, contactId: contact.id } },
+    });
+    const hashes = (row.recentOutbound as { hash: string }[]).map((e) => e.hash);
+    for (const t of texts) expect(hashes).toContain(createHash("sha256").update(t).digest("hex"));
+  });
+
+  it("trava ativa: registerOutboundEcho devolve busy e não altera a sessão", async () => {
+    const w = await makeWorld("echobusy");
+    const contact = await makeContact(w);
+    const chatSession = await prisma.chatSession.create({
+      data: { whatsappInstanceId: w.instance!.id, contactId: contact.id, state: "MAIN_MENU", lockToken: "t", lockedUntil: new Date(Date.now() + 20_000) },
+    });
+
+    expect(await registerOutboundEcho(w.instance!.id, contact.id, "x", NOW)).toBe("busy");
+    expect((await prisma.chatSession.findUniqueOrThrow({ where: { id: chatSession.id } })).recentOutbound).toEqual([]);
   });
 });

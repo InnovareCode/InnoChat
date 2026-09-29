@@ -401,7 +401,13 @@ describe("TOO_LATE em cancelar/remarcar pelo bot (§6.5)", () => {
     // `start < addMinutes(nowServidor, 60)` vira verdadeiro e o create falha com
     // `RULE_VIOLATION`/`LEAD_TIME`, mesmo a intenção do teste sendo "bem fora da janela de
     // prazo". Bug do TESTE (limiar sem margem), não do produto — corrigido aqui com folga real.
-    const startsAt = new Date(Date.now() + 90 * 60_000);
+    // Flake da meia-noite: o expediente é "00:00–23:59" por dia, então um agendamento de 30 min que
+    // atravessa a meia-noite (UTC ou de São Paulo) não cabe em nenhum dia e o create falha. Por isso
+    // o horário é AMANHÃ às 15:00 UTC (12:00 em São Paulo): longe de qualquer virada de dia e ainda
+    // bem fora do prazo mínimo de cancelamento (5 min) — o que o teste quer provar.
+    const startsAt = new Date();
+    startsAt.setUTCDate(startsAt.getUTCDate() + 1);
+    startsAt.setUTCHours(15, 0, 0, 0);
     const created = await createAppointmentBot(ctx, { contactId: contact.id, serviceId: service.id, professionalId: professional.id, startsAt, idempotencyKey: "ok-cancel-1" });
 
     const cancelled = await cancelAppointmentBot(ctx, created.appointment.id, contact.id);

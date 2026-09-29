@@ -12,9 +12,10 @@ vi.mock("@/lib/email", async () => {
   return { ...actual, sendMail: vi.fn(async () => ({ sent: true })) };
 });
 
-const reminder = vi.hoisted(() => ({ mode: "throw" as "throw" | "ok" }));
+const reminder = vi.hoisted(() => ({ mode: "throw" as "throw" | "ok", onRun: null as null | (() => Promise<void>) }));
 vi.mock("@/modules/reminders/tick", () => ({
   runReminderTick: vi.fn(async () => {
+    await reminder.onRun?.();
     if (reminder.mode === "throw") throw new Error("boom no lembrete");
     return { remindersToClientsSent: 3, remindersToClientsFailed: 0 };
   }),
@@ -67,5 +68,23 @@ describe("runBillingTick + lembrete de véspera", () => {
     reminder.mode = "ok";
     const summary = await runBillingTick(new Date());
     expect(summary.remindersToClientsSent).toBe(3);
+  });
+
+  it("registra a execução de cobrança ANTES do lembrete (o ritmo lento dele não atrasa o 'quando rodou' da Saúde)", async () => {
+    reminder.mode = "ok";
+    const now = new Date(Date.now() + 3_600_000); // instante único para reconhecer a nossa gravação
+    let recordedBeforeReminder: string | null = null;
+    reminder.onRun = async () => {
+      const row = await prisma.platformSettings.findUnique({ where: { id: 1 } });
+      recordedBeforeReminder = row?.lastBillingTickAt?.toISOString() ?? null;
+    };
+    try {
+      await runBillingTick(now);
+    } finally {
+      reminder.onRun = null;
+    }
+    expect(recordedBeforeReminder).toBe(now.toISOString());
+    const final = await prisma.platformSettings.findUniqueOrThrow({ where: { id: 1 } });
+    expect(final.lastBillingTickResult).toMatchObject({ remindersToClientsSent: 3 }); // regravado com o resumo completo
   });
 });

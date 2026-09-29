@@ -897,6 +897,9 @@ model ChatMessage {
 
   @@unique([tenantId, providerMessageId])
   @@index([tenantId, contactId, createdAt])
+  // Purga por data (retenção de 90 dias) e cascade/deleteMany por contato.
+  @@index([createdAt])
+  @@index([contactId])
   @@map("chat_messages")
 }
 

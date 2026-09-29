@@ -87,6 +87,16 @@ export async function runBillingTick(now: Date = new Date(), gateway?: MercadoPa
   await sendDueReminders(prisma, now, summary);
   await reconcileStatuses(prisma, now, summary);
 
+  // Registra a execução de COBRANÇA já aqui: o lembrete aos clientes tem ritmo lento de propósito
+  // (até ~45 s) e o "quando rodou" de Admin > Saúde não pode atrasar por causa dele. A cobrança
+  // acima está concluída; o resumo é regravado com os lembretes ao final.
+  const recordRun = () =>
+    recordBillingTickRun(summary, now).catch((error) => {
+      // Nunca falha o tick em si; o próximo tick tenta de novo e o log final tem o resultado real.
+      logger.warn("billing.tick.record_run_failed", { errorMessage: error instanceof Error ? error.message : String(error) });
+    });
+  await recordRun();
+
   // Lembrete de véspera aos clientes finais: falha isolada — nunca derruba a cobrança acima.
   try {
     const reminders = await runReminderTick(now);
@@ -96,13 +106,7 @@ export async function runBillingTick(now: Date = new Date(), gateway?: MercadoPa
   }
 
   logger.info("billing.tick.completed", { ...summary });
-
-  // Admin → Saúde (docs/contratos.md) lê isto para mostrar "quando rodou/resultado" e alertar se
-  // parar de rodar — nunca falha o tick em si (o resumo já foi calculado; se a persistência
-  // falhar, o próximo tick tenta de novo, e o log acima já registrou o resultado real).
-  await recordBillingTickRun(summary, now).catch((error) => {
-    logger.warn("billing.tick.record_run_failed", { errorMessage: error instanceof Error ? error.message : String(error) });
-  });
+  if (summary.remindersToClientsSent > 0) await recordRun();
 
   return summary;
 }
