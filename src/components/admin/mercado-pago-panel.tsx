@@ -24,7 +24,7 @@ import type {
   MercadoPagoSecretField,
 } from "./mercado-pago-types";
 
-type Pending = { kind: "production" } | { kind: "remove"; env: MercadoPagoEnv; field: MercadoPagoSecretField };
+type Pending = { kind: "production" } | { kind: "sandbox" } | { kind: "remove"; env: MercadoPagoEnv; field: MercadoPagoSecretField };
 type ActionResult = { ok: true; data: MercadoPagoConfig } | { ok: false; error: { message: string } };
 
 const EMPTY_DRAFT: CredentialsDraft = { accessToken: "", webhookSecret: "" };
@@ -232,21 +232,18 @@ export function MercadoPagoPanel({
 
   function changeEnvironment(target: MercadoPagoEnv) {
     if (target === current.environment) return;
-    if (target === "PRODUCTION") {
-      setPending({ kind: "production" });
-      return;
-    }
-    void run("env", () => setMercadoPagoEnvironmentAction({ environment: target }), "Ambiente de teste ativado.");
+    setPending({ kind: target === "PRODUCTION" ? "production" : "sandbox" });
   }
 
   function confirmPending() {
     const p = pending;
     if (!p) return;
-    if (p.kind === "production") {
+    if (p.kind === "production" || p.kind === "sandbox") {
+      const environment = p.kind === "production" ? "PRODUCTION" : "SANDBOX";
       void run(
         "env",
-        () => setMercadoPagoEnvironmentAction({ environment: "PRODUCTION" }),
-        "Produção ativada.",
+        () => setMercadoPagoEnvironmentAction({ environment }),
+        environment === "PRODUCTION" ? "Produção ativada." : "Ambiente de teste ativado.",
         () => setPending(null),
       );
     } else {
@@ -371,19 +368,25 @@ export function MercadoPagoPanel({
       <Dialog open={pending !== null} onOpenChange={(open) => !open && busy === null && setPending(null)}>
         <DialogContent>
           <DialogTitle>
-            {pending?.kind === "remove" ? `Remover ${FIELD_LABEL[pending.field]}?` : "Ativar cobranças em produção?"}
+            {pending?.kind === "remove"
+              ? `Remover ${FIELD_LABEL[pending.field]}?`
+              : pending?.kind === "sandbox"
+                ? "Mudar para o ambiente de teste?"
+                : "Ativar cobranças em produção?"}
           </DialogTitle>
           <DialogDescription>
             {pending?.kind === "remove"
               ? `A credencial salva de ${pending.env === "PRODUCTION" ? "produção" : "teste"} será apagada do servidor. Sem ela, esse ambiente deixa de funcionar até você cadastrar outra.`
-              : "A partir de agora as faturas vão gerar Pix reais pelo Mercado Pago — o dinheiro é cobrado de verdade. Só confirme se as credenciais de produção já estiverem certas."}
+              : pending?.kind === "sandbox"
+                ? "As faturas passam a gerar Pix simulado e as notificações de pagamentos reais deixam de ser aceitas até voltar para produção."
+                : "A partir de agora as faturas vão gerar Pix reais pelo Mercado Pago — o dinheiro é cobrado de verdade. Só confirme se as credenciais de produção já estiverem certas."}
           </DialogDescription>
           <DialogFooter>
             <Button type="button" variant="secondary" onClick={() => setPending(null)} disabled={busy !== null}>
               Cancelar
             </Button>
-            <Button type="button" variant="danger" onClick={confirmPending} isLoading={busy === "env" || busy === "remove"}>
-              {pending?.kind === "remove" ? "Sim, remover" : "Sim, ativar produção"}
+            <Button type="button" variant={pending?.kind === "sandbox" ? "primary" : "danger"} onClick={confirmPending} isLoading={busy === "env" || busy === "remove"}>
+              {pending?.kind === "remove" ? "Sim, remover" : pending?.kind === "sandbox" ? "Sim, usar teste" : "Sim, ativar produção"}
             </Button>
           </DialogFooter>
         </DialogContent>

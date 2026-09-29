@@ -251,12 +251,13 @@ export function AdminCobrancaClient({
       ) : null}
 
       <Card className="rounded-hero">
-        <CardContent className="flex flex-wrap items-end gap-3 p-4">
+        <CardContent className="p-4">
+          <div className="grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-[10rem_10rem_10rem_minmax(0,1fr)_auto]">
           <Field label="Status">
             {(fieldProps) => (
               <Select
                 {...fieldProps}
-                className="w-40"
+                className="w-full"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as InvoiceRow["status"] | "")}
               >
@@ -268,26 +269,30 @@ export function AdminCobrancaClient({
               </Select>
             )}
           </Field>
-          <Field label="Vencimento de" hint="Filtra pela data de vencimento.">
-            {(fieldProps) => <Input {...fieldProps} type="date" className="w-40" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />}
+          <Field label="Vencimento de">
+            {(fieldProps) => <Input {...fieldProps} type="date" className="w-full" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />}
           </Field>
           <Field label="Vencimento até">
-            {(fieldProps) => <Input {...fieldProps} type="date" className="w-40" value={toDate} onChange={(e) => setToDate(e.target.value)} />}
+            {(fieldProps) => <Input {...fieldProps} type="date" className="w-full" value={toDate} onChange={(e) => setToDate(e.target.value)} />}
           </Field>
-          <Field label="Empresa" hint="Filtra a página carregada, por nome ou identificador.">
+          <Field label="Empresa">
             {(fieldProps) => (
               <Input
                 {...fieldProps}
-                className="w-48"
+                className="w-full"
                 value={companyFilter}
                 onChange={(e) => setCompanyFilter(e.target.value)}
                 placeholder="Nome da empresa"
               />
             )}
           </Field>
-          <Button type="button" variant="secondary" onClick={applyFilters} isLoading={isPending && !isLoadingMore}>
-            Filtrar
-          </Button>
+          <Button type="button" variant="secondary" onClick={applyFilters} isLoading={isPending && !isLoadingMore} className="w-full sm:col-span-2 lg:col-span-1 lg:w-auto">
+              Filtrar
+            </Button>
+          </div>
+          <p className="mt-3 text-xs text-text-secondary">
+            Datas filtram pelo vencimento. O campo Empresa filtra só a página já carregada, por nome ou identificador.
+          </p>
         </CardContent>
       </Card>
 
