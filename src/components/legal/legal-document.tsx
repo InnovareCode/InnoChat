@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Info } from "lucide-react";
 import { LEGAL_DRAFT_NOTICE, LEGAL_EFFECTIVE_DATE, TERMS_VERSION } from "@/lib/legal";
+import { fillLegalPlaceholders, type PlatformLegalInfo } from "@/core/legal/placeholders";
 
 /**
  * Estrutura de um documento legal (Termos de Uso, Política de Privacidade).
@@ -23,6 +24,28 @@ export type LegalSection = {
   title: string;
   blocks: LegalBlock[];
 };
+
+/**
+ * Aplica `fillLegalPlaceholders` (domínio puro, `@/core/legal/placeholders`) recursivamente em
+ * cada bloco de texto de uma seção — inclusive dentro de `{ list }` e `{ subtitle, blocks }`,
+ * que também podem carregar marcadores como `[E-MAIL DE CONTATO]`. Chamado pelas páginas
+ * `/termos` e `/privacidade` ANTES de passar `sections`/`intro` para `<LegalDocument>` — o
+ * texto-fonte (`termos-content.ts`/`privacidade-content.ts`) nunca é editado, os marcadores
+ * literais só existem ali.
+ */
+function fillBlock(block: LegalBlock, info: PlatformLegalInfo): LegalBlock {
+  if (typeof block === "string") return fillLegalPlaceholders(block, info);
+  if ("list" in block) return { ...block, list: block.list.map((item) => fillLegalPlaceholders(item, info)) };
+  return { ...block, blocks: block.blocks.map((b) => fillBlock(b, info)) };
+}
+
+export function fillLegalSections(sections: LegalSection[], info: PlatformLegalInfo): LegalSection[] {
+  return sections.map((section) => ({ ...section, blocks: section.blocks.map((b) => fillBlock(b, info)) }));
+}
+
+export function fillLegalIntro(intro: string[], info: PlatformLegalInfo): string[] {
+  return intro.map((p) => fillLegalPlaceholders(p, info));
+}
 
 export type LegalDocumentProps = {
   title: string;

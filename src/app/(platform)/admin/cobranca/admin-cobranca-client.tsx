@@ -1,0 +1,419 @@
+"use client";
+
+import { useMemo, useState, useTransition } from "react";
+import { AlertTriangle, Banknote, Check, Clock, QrCode, ReceiptText, TrendingUp } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Avatar } from "@/components/ui/avatar";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Alert } from "@/components/ui/alert";
+import { EmptyState } from "@/components/ui/empty-state";
+import { useToast } from "@/components/ui/toast";
+import { cn } from "@/components/lib/cn";
+import { formatDateBR, formatCentsBRL } from "@/modules/billing/format";
+import { listInvoicesAdminAction, markInvoicePaidManuallyAction, regeneratePixForInvoiceAdminAction } from "@/modules/billing/admin-actions";
+import type { AdminInvoiceListItem, BillingMonthlyTotals, DelinquentCompany } from "@/modules/billing/admin-service";
+
+type InvoiceRow = Omit<AdminInvoiceListItem, "periodStart" | "periodEnd" | "dueAt" | "paidAt" | "createdAt"> & {
+  periodStart: string;
+  periodEnd: string;
+  dueAt: string;
+  paidAt: string | null;
+  createdAt: string;
+};
+
+const STATUS_LABEL: Record<InvoiceRow["status"], string> = {
+  OPEN: "Aberta",
+  PAID: "Paga",
+  EXPIRED: "Expirada",
+  VOID: "Anulada",
+};
+
+const STATUS_BADGE: Record<InvoiceRow["status"], BadgeProps["variant"]> = {
+  OPEN: "warning",
+  PAID: "success",
+  EXPIRED: "danger",
+  VOID: "neutral",
+};
+
+function StatBlock({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  tone: "primary" | "success" | "warning" | "danger";
+}) {
+  const TONE_CLASSES: Record<typeof tone, string> = {
+    primary: "bg-primary/10 text-primary",
+    success: "bg-success-bg text-success",
+    warning: "bg-warning-bg text-warning",
+    danger: "bg-danger-bg text-danger",
+  };
+  return (
+    <Card className="rounded-hero p-5">
+      <div className={cn("mb-4 flex h-11 w-11 items-center justify-center rounded-full [&>svg]:h-5 [&>svg]:w-5", TONE_CLASSES[tone])}>
+        {icon}
+      </div>
+      <p className="text-sm font-medium text-text-secondary">{label}</p>
+      <p className="mt-1 font-display text-3xl font-black tabular-nums text-text">{value}</p>
+    </Card>
+  );
+}
+
+type MarkPaidTarget = { invoice: InvoiceRow };
+
+export function AdminCobrancaClient({
+  totals,
+  initialItems,
+  initialNextCursor,
+  delinquents,
+}: {
+  totals: BillingMonthlyTotals;
+  initialItems: InvoiceRow[];
+  initialNextCursor: string | null;
+  delinquents: DelinquentCompany[];
+}) {
+  const { notify } = useToast();
+  const [items, setItems] = useState<InvoiceRow[]>(initialItems);
+  const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
+  const [isPending, startTransition] = useTransition();
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+
+  const [statusFilter, setStatusFilter] = useState<InvoiceRow["status"] | "">("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [companyFilter, setCompanyFilter] = useState("");
+
+  const [markPaidTarget, setMarkPaidTarget] = useState<MarkPaidTarget | null>(null);
+  const [reason, setReason] = useState("");
+  const [dialogError, setDialogError] = useState<string | null>(null);
+
+  const filteredItems = useMemo(() => {
+    if (!companyFilter.trim()) return items;
+    const needle = companyFilter.trim().toLowerCase();
+    return items.filter((i) => i.tenantName.toLowerCase().includes(needle) || i.tenantSlug.toLowerCase().includes(needle));
+  }, [items, companyFilter]);
+
+  function applyFilters() {
+    startTransition(async () => {
+      const result = await listInvoicesAdminAction({
+        status: statusFilter || undefined,
+        fromDate: fromDate || undefined,
+        toDate: toDate || undefined,
+      });
+      if (!result.ok) {
+        notify({ variant: "error", title: "Não foi possível filtrar as faturas", description: result.error.message });
+        return;
+      }
+      setItems(
+        result.data.items.map((item) => ({
+          ...item,
+          periodStart: new Date(item.periodStart).toISOString(),
+          periodEnd: new Date(item.periodEnd).toISOString(),
+          dueAt: new Date(item.dueAt).toISOString(),
+          paidAt: item.paidAt ? new Date(item.paidAt).toISOString() : null,
+          createdAt: new Date(item.createdAt).toISOString(),
+        })),
+      );
+      setNextCursor(result.data.nextCursor);
+    });
+  }
+
+  function loadMore() {
+    if (!nextCursor) return;
+    setIsLoadingMore(true);
+    startTransition(async () => {
+      const result = await listInvoicesAdminAction({
+        status: statusFilter || undefined,
+        fromDate: fromDate || undefined,
+        toDate: toDate || undefined,
+        cursor: nextCursor,
+      });
+      setIsLoadingMore(false);
+      if (!result.ok) {
+        notify({ variant: "error", title: "Não foi possível carregar mais faturas", description: result.error.message });
+        return;
+      }
+      setItems((prev) => [
+        ...prev,
+        ...result.data.items.map((item) => ({
+          ...item,
+          periodStart: new Date(item.periodStart).toISOString(),
+          periodEnd: new Date(item.periodEnd).toISOString(),
+          dueAt: new Date(item.dueAt).toISOString(),
+          paidAt: item.paidAt ? new Date(item.paidAt).toISOString() : null,
+          createdAt: new Date(item.createdAt).toISOString(),
+        })),
+      ]);
+      setNextCursor(result.data.nextCursor);
+    });
+  }
+
+  function handleRegeneratePix(invoice: InvoiceRow) {
+    setRegeneratingId(invoice.id);
+    startTransition(async () => {
+      const result = await regeneratePixForInvoiceAdminAction(invoice.id);
+      setRegeneratingId(null);
+      if (!result.ok) {
+        notify({ variant: "error", title: "Não foi possível regerar o Pix", description: result.error.message });
+        return;
+      }
+      setItems((prev) => prev.map((i) => (i.id === invoice.id ? { ...i, hasPix: result.data.hasPix } : i)));
+      notify({
+        variant: result.data.hasPix ? "success" : "error",
+        title: result.data.hasPix ? "Pix regerado." : "Pix não pôde ser gerado.",
+      });
+    });
+  }
+
+  function openMarkPaid(invoice: InvoiceRow) {
+    setMarkPaidTarget({ invoice });
+    setReason("");
+    setDialogError(null);
+  }
+
+  function handleMarkPaid(e: React.FormEvent) {
+    e.preventDefault();
+    if (!markPaidTarget) return;
+    setDialogError(null);
+    if (reason.trim().length < 3) {
+      setDialogError("Informe um motivo com pelo menos 3 caracteres.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await markInvoicePaidManuallyAction(markPaidTarget.invoice.id, { reason });
+      if (!result.ok) {
+        setDialogError(result.error.message);
+        return;
+      }
+      setItems((prev) =>
+        prev.map((i) => (i.id === markPaidTarget.invoice.id ? { ...i, status: "PAID", paidAt: new Date().toISOString() } : i)),
+      );
+      notify({
+        variant: "success",
+        title: result.data.alreadyProcessed ? "Esta fatura já estava paga." : "Fatura marcada como paga.",
+      });
+      setMarkPaidTarget(null);
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader title="Cobrança" description="Faturas de todas as empresas, totais do mês e inadimplência." />
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatBlock icon={<Banknote aria-hidden="true" />} label="Recebido no mês" value={formatCentsBRL(totals.receivedCents)} tone="success" />
+        <StatBlock icon={<ReceiptText aria-hidden="true" />} label="Em aberto" value={formatCentsBRL(totals.openCents)} tone="warning" />
+        <StatBlock icon={<AlertTriangle aria-hidden="true" />} label="Vencido" value={formatCentsBRL(totals.overdueCents)} tone="danger" />
+        <StatBlock icon={<TrendingUp aria-hidden="true" />} label="MRR estimado" value={formatCentsBRL(totals.mrrCents)} tone="primary" />
+      </div>
+
+      {delinquents.length > 0 ? (
+        <Card className="rounded-hero">
+          <CardHeader>
+            <CardTitle>Inadimplentes</CardTitle>
+            <CardDescription>Empresas com assinatura atrasada ou suspensa por falta de pagamento.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {delinquents.map((company) => (
+              <div key={company.tenantId} className="flex items-center justify-between gap-3 rounded-card border border-border p-3">
+                <div className="flex items-center gap-2.5">
+                  <Avatar id={company.tenantId} name={company.name} size="sm" />
+                  <div>
+                    <p className="text-sm font-medium text-text">{company.name}</p>
+                    <p className="text-xs text-text-secondary">/{company.slug}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={company.status === "SUSPENDED" ? "danger" : "warning"}>
+                    {company.status === "SUSPENDED" ? "Suspensa" : "Fatura atrasada"}
+                  </Badge>
+                  <span className="text-xs text-text-secondary">
+                    {company.daysOverdue} dia{company.daysOverdue === 1 ? "" : "s"} de atraso
+                  </span>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card className="rounded-hero">
+        <CardContent className="flex flex-wrap items-end gap-3 p-4">
+          <Field label="Status">
+            {(fieldProps) => (
+              <Select
+                {...fieldProps}
+                className="w-40"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as InvoiceRow["status"] | "")}
+              >
+                <option value="">Todos</option>
+                <option value="OPEN">Aberta</option>
+                <option value="PAID">Paga</option>
+                <option value="EXPIRED">Expirada</option>
+                <option value="VOID">Anulada</option>
+              </Select>
+            )}
+          </Field>
+          <Field label="Vencimento de" hint="Filtra pela data de vencimento.">
+            {(fieldProps) => <Input {...fieldProps} type="date" className="w-40" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />}
+          </Field>
+          <Field label="Vencimento até">
+            {(fieldProps) => <Input {...fieldProps} type="date" className="w-40" value={toDate} onChange={(e) => setToDate(e.target.value)} />}
+          </Field>
+          <Field label="Empresa" hint="Filtra a página carregada, por nome ou identificador.">
+            {(fieldProps) => (
+              <Input
+                {...fieldProps}
+                className="w-48"
+                value={companyFilter}
+                onChange={(e) => setCompanyFilter(e.target.value)}
+                placeholder="Nome da empresa"
+              />
+            )}
+          </Field>
+          <Button type="button" variant="secondary" onClick={applyFilters} isLoading={isPending && !isLoadingMore}>
+            Filtrar
+          </Button>
+        </CardContent>
+      </Card>
+
+      {filteredItems.length === 0 ? (
+        <EmptyState icon={ReceiptText} title="Nenhuma fatura encontrada" description="Ajuste os filtros para ver outras faturas." />
+      ) : (
+        <Card className="rounded-hero">
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeadCell>Empresa</TableHeadCell>
+                <TableHeadCell>Valor</TableHeadCell>
+                <TableHeadCell>Status</TableHeadCell>
+                <TableHeadCell>Vencimento</TableHeadCell>
+                <TableHeadCell>Pago em</TableHeadCell>
+                <TableHeadCell className="text-right">Ações</TableHeadCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredItems.map((invoice) => (
+                <TableRow key={invoice.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-2.5">
+                      <Avatar id={invoice.tenantId} name={invoice.tenantName} size="sm" />
+                      <div>
+                        <p className="font-medium text-text">{invoice.tenantName}</p>
+                        <p className="text-xs text-text-secondary">/{invoice.tenantSlug}</p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="tabular-nums">{formatCentsBRL(invoice.amountCents)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant={STATUS_BADGE[invoice.status]}>{STATUS_LABEL[invoice.status]}</Badge>
+                      {invoice.status === "OPEN" && !invoice.hasPix ? (
+                        <span title="Sem Pix gerado" className="text-text-secondary">
+                          <QrCode className="h-3.5 w-3.5" aria-hidden="true" />
+                        </span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell>{formatDateBR(new Date(invoice.dueAt))}</TableCell>
+                  <TableCell>{invoice.paidAt ? formatDateBR(new Date(invoice.paidAt)) : "—"}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      {invoice.status === "OPEN" ? (
+                        <>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Regerar Pix da fatura de ${invoice.tenantName}`}
+                            title="Regerar Pix"
+                            onClick={() => handleRegeneratePix(invoice)}
+                            disabled={isPending}
+                          >
+                            {regeneratingId === invoice.id ? (
+                              <Clock className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                            ) : (
+                              <QrCode className="h-4 w-4" aria-hidden="true" />
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Marcar como paga a fatura de ${invoice.tenantName}`}
+                            title="Marcar como paga manualmente"
+                            onClick={() => openMarkPaid(invoice)}
+                            disabled={isPending}
+                          >
+                            <Check className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
+
+      {nextCursor ? (
+        <div className="flex justify-center">
+          <Button variant="secondary" onClick={loadMore} isLoading={isLoadingMore}>
+            Carregar mais
+          </Button>
+        </div>
+      ) : null}
+
+      <Dialog open={!!markPaidTarget} onOpenChange={(open) => !open && setMarkPaidTarget(null)}>
+        <DialogContent>
+          <DialogTitle>Marcar fatura como paga manualmente</DialogTitle>
+          <DialogDescription>
+            Isso marca a fatura de &ldquo;{markPaidTarget?.invoice.tenantName}&rdquo; ({markPaidTarget ? formatCentsBRL(markPaidTarget.invoice.amountCents) : ""})
+            como paga, avança o ciclo de cobrança e reativa a assinatura se estiver suspensa. Esta ação fica registrada com seu usuário e o
+            motivo abaixo — use só para pagamentos confirmados fora do Pix.
+          </DialogDescription>
+          <form onSubmit={handleMarkPaid} className="mt-4 flex flex-col gap-4">
+            {dialogError ? <Alert variant="danger">{dialogError}</Alert> : null}
+            <Field label="Motivo da baixa manual" required hint="Explique como o pagamento foi confirmado (ex.: transferência, depósito).">
+              {(fieldProps) => (
+                <Textarea
+                  {...fieldProps}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  required
+                  placeholder="Ex.: cliente pagou por transferência bancária, comprovante recebido por e-mail em 28/09."
+                />
+              )}
+            </Field>
+            <DialogFooter>
+              <Button type="button" variant="secondary" onClick={() => setMarkPaidTarget(null)}>
+                Cancelar
+              </Button>
+              <Button type="submit" variant="danger" isLoading={isPending}>
+                Confirmar baixa manual
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

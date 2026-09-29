@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { LegalDocument } from "@/components/legal/legal-document";
+import { fillLegalIntro, fillLegalSections, LegalDocument } from "@/components/legal/legal-document";
+import { getPublicLegalInfo } from "@/modules/platform/legal-service";
 import { PRIVACIDADE_INTRO, PRIVACIDADE_SECTIONS } from "./privacidade-content";
 
 export const metadata: Metadata = {
@@ -7,12 +8,17 @@ export const metadata: Metadata = {
   description: "Como o InnoChat trata dados pessoais, de acordo com a LGPD.",
 };
 
-export default function PrivacidadePage() {
+/** Revalida a cada 60s — ver comentário equivalente em `../termos/page.tsx`. */
+export const revalidate = 60;
+
+export default async function PrivacidadePage() {
+  const legalInfo = await getPublicLegalInfo();
+
   return (
     <LegalDocument
       title="Política de privacidade"
-      intro={PRIVACIDADE_INTRO}
-      sections={PRIVACIDADE_SECTIONS}
+      intro={fillLegalIntro(PRIVACIDADE_INTRO, legalInfo)}
+      sections={fillLegalSections(PRIVACIDADE_SECTIONS, legalInfo)}
       related={{ href: "/termos", label: "Termos de uso" }}
     />
   );

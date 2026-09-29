@@ -114,6 +114,24 @@ const FRIENDLY_TIMEZONE_LABELS: Record<string, string> = {
   "America/Recife": "Horário de Recife",
 };
 
+/**
+ * "há 12 min" / "há 3h" / "há 2 dias" / "nunca executado" — usado nos cards de "última
+ * execução" da tela Admin → Saúde. `null` (nunca rodou) devolve o rótulo de ausência em vez de
+ * uma conta relativa a partir de `Date` inválida.
+ */
+export function formatRelativeTimeLabel(iso: string | null): string {
+  if (!iso) return "nunca executado";
+  const diffMs = Date.now() - new Date(iso).getTime();
+  if (diffMs < 0) return "agora mesmo";
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) return "agora mesmo";
+  if (minutes < 60) return `há ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `há ${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `há ${days} dia${days === 1 ? "" : "s"}`;
+}
+
 export function friendlyTimezoneLabel(timezone: string): string {
   const known = FRIENDLY_TIMEZONE_LABELS[timezone];
   if (known) return known;

@@ -1,14 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import type { LucideIcon } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { STAGGER_DELAY_S } from "@/components/lib/motion";
 
 export type ConfigSection = {
   href: string;
-  icon: LucideIcon;
+  /**
+   * Elemento JÁ RENDERIZADO (ex.: `<Palette aria-hidden="true" />`), nunca o COMPONENTE
+   * (`LucideIcon`) — este é um Client Component (`motion.div`) e quem o chama é sempre um Server
+   * Component (`page.tsx`). Passar a função do ícone como prop quebra o build ("Only plain
+   * objects can be passed to Client Components from Server Components"), a mesma armadilha já
+   * registrada na memória (`nav-items.ts`/`sidebar-nav.tsx`, `stat-card.tsx`).
+   */
+  icon: React.ReactNode;
   title: string;
   description: string;
   ready: boolean;
@@ -42,11 +48,11 @@ export function ConfiguracoesGrid({ tenantSlug, sections }: { tenantSlug: string
               <div
                 className={
                   section.ready
-                    ? "flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary transition-transform duration-200 group-hover:scale-110 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
-                    : "flex h-11 w-11 items-center justify-center rounded-full bg-bg text-text-secondary"
+                    ? "flex h-11 w-11 items-center justify-center rounded-full bg-primary/10 text-primary transition-transform duration-200 group-hover:scale-110 motion-reduce:transition-none motion-reduce:group-hover:scale-100 [&>svg]:h-5 [&>svg]:w-5"
+                    : "flex h-11 w-11 items-center justify-center rounded-full bg-bg text-text-secondary [&>svg]:h-5 [&>svg]:w-5"
                 }
               >
-                <section.icon className="h-5 w-5" aria-hidden="true" />
+                {section.icon}
               </div>
               <p className="mt-3 font-display text-sm font-bold text-text">{section.title}</p>
               <p className="mt-1 text-sm text-text-secondary">{section.description}</p>

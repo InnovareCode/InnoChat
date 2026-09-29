@@ -1,12 +1,20 @@
 import { Activity } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { getPlatformHealthAction } from "@/modules/platform/actions";
+import { AdminSaudeClient } from "./admin-saude-client";
 
-export default function AdminSaudePage() {
-  return (
-    <div>
-      <PageHeader title="Saúde" description="Instâncias, erros do bot e último billing/tick." />
-      <EmptyState icon={Activity} title="Em breve" description="Instâncias, erros do bot e métricas ainda estão a caminho." />
-    </div>
-  );
+export default async function AdminSaudePage() {
+  const result = await getPlatformHealthAction();
+
+  if (!result.ok) {
+    return (
+      <div>
+        <PageHeader title="Saúde" description="Instâncias, integrações e último billing/tick." />
+        <EmptyState icon={Activity} title="Não deu para carregar a saúde da plataforma" description={result.error.message} />
+      </div>
+    );
+  }
+
+  return <AdminSaudeClient initialHealth={result.data} />;
 }

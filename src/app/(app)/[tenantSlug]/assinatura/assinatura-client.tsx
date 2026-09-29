@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
-import { ArrowDown, ArrowUp, Check, Copy, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Copy, QrCode, Sparkles } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } f
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/components/lib/cn";
 import { formatDateTimeLabel } from "@/components/lib/format-date";
-import { changePlanAction, type PlanListItem } from "@/modules/billing/actions";
+import { changePlanAction, regenerateMyInvoicePixAction, type PlanListItem } from "@/modules/billing/actions";
 
 export type BillingStatus = "TRIALING" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELED";
 
@@ -30,12 +30,20 @@ export type BillingSnapshot = {
   pendingPlanId: string | null;
   pendingPlanName: string | null;
   invoice: {
+    id: string;
     amountCents: number;
     dueAt: string;
     pixCopyPaste: string | null;
     pixExpiresAt: string | null;
     paidAt: string | null;
   } | null;
+};
+
+const REGENERATE_PIX_ERROR_MESSAGE: Record<string, string> = {
+  MERCADOPAGO_MISSING_DOCUMENT: "O Mercado Pago exige o CPF ou CNPJ da empresa para gerar o Pix.",
+  MERCADOPAGO_MISCONFIGURED: "O Mercado Pago não está configurado corretamente. Fale com o suporte.",
+  MERCADOPAGO_UNAVAILABLE: "O Mercado Pago está indisponível agora. Tente em alguns instantes.",
+  RATE_LIMITED: "Muitas tentativas em pouco tempo. Aguarde alguns minutos antes de tentar de novo.",
 };
 
 const STATUS_LABEL: Record<BillingStatus, string> = {
@@ -81,9 +89,30 @@ function PixCard({
   tenantSlug: string;
   hasDocument: boolean;
 }) {
+  const router = useRouter();
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const canvasRequestId = useRef(0);
+  const [isRegenerating, startRegenerate] = useTransition();
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
+
+  function handleRegeneratePix() {
+    setRegenerateError(null);
+    startRegenerate(async () => {
+      const result = await regenerateMyInvoicePixAction(tenantSlug, invoice.id);
+      setAttempted(true);
+      if (!result.ok) {
+        setRegenerateError(REGENERATE_PIX_ERROR_MESSAGE[result.error.code] ?? result.error.message);
+        return;
+      }
+      if (!result.data.pixCopyPaste) {
+        setRegenerateError("O Pix ainda não pôde ser gerado. Tente de novo em alguns instantes.");
+        return;
+      }
+      router.refresh();
+    });
+  }
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -155,19 +184,39 @@ function PixCard({
               ) : null}
             </div>
           </>
-        ) : !hasDocument ? (
-          <Alert variant="warning" title="Cadastre o CPF/CNPJ da empresa" className="w-full">
-            O Mercado Pago exige o CPF ou CNPJ da empresa para gerar o Pix desta fatura.{" "}
-            <Link href={`/${tenantSlug}/configuracoes`} className="font-medium underline">
-              Cadastrar em Configurações
-            </Link>
-            .
-          </Alert>
         ) : (
-          <Alert variant="info" className="w-full">
-            O Pix desta fatura ainda está sendo gerado. Atualizamos esta tela automaticamente — se demorar, volte em
-            alguns minutos.
-          </Alert>
+          <div className="flex w-full flex-col gap-3">
+            {regenerateError ? (
+              <Alert variant="danger" title="Não foi possível gerar o Pix">
+                {regenerateError}
+                {regenerateError === REGENERATE_PIX_ERROR_MESSAGE.MERCADOPAGO_MISSING_DOCUMENT ? (
+                  <>
+                    {" "}
+                    <Link href={`/${tenantSlug}/configuracoes`} className="font-medium underline">
+                      Cadastrar em Configurações
+                    </Link>
+                    .
+                  </>
+                ) : null}
+              </Alert>
+            ) : !hasDocument ? (
+              <Alert variant="warning" title="Cadastre o CPF/CNPJ da empresa">
+                O Mercado Pago exige o CPF ou CNPJ da empresa para gerar o Pix desta fatura.{" "}
+                <Link href={`/${tenantSlug}/configuracoes`} className="font-medium underline">
+                  Cadastrar em Configurações
+                </Link>
+                .
+              </Alert>
+            ) : (
+              <Alert variant="info">
+                O Pix desta fatura ainda não foi gerado. Gere agora ou aguarde — atualizamos esta tela automaticamente.
+              </Alert>
+            )}
+            <Button type="button" onClick={handleRegeneratePix} isLoading={isRegenerating} className="self-start">
+              <QrCode className="h-4 w-4" aria-hidden="true" />
+              {attempted ? "Tentar de novo" : "Gerar Pix agora"}
+            </Button>
+          </div>
         )}
       </CardContent>
     </Card>

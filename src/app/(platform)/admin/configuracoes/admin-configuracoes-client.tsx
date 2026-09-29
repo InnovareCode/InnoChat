@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, CheckCircle2, Copy, KeyRound, Loader2, Power, PowerOff, RefreshCw, XCircle } from "lucide-react";
+import { Check, CheckCircle2, Copy, KeyRound, Loader2, Power, PowerOff, RefreshCw, Scale, XCircle } from "lucide-react";
 import { cn } from "@/components/lib/cn";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
+import { maskCpfCnpj } from "@/components/lib/document-mask";
+import { normalizeDocumentDigits } from "@/core/billing/document";
 import {
   activateBotWorkflowAction,
   deactivateBotWorkflowAction,
@@ -21,10 +23,12 @@ import {
   testMercadoPagoConnectionAction,
   testN8nConnectionAction,
   testSmtpConnectionAction,
+  updatePlatformLegalInfoAction,
   updatePlatformSettingsAction,
 } from "@/modules/platform/actions";
 import type { N8nSyncSummary } from "@/modules/platform/n8n-sync";
 import type { PlatformSettingsView } from "@/modules/platform/service";
+import type { PlatformLegalInfo } from "@/core/legal/placeholders";
 
 type TestResult = { ok: boolean; detalhe: string } | null;
 
@@ -122,7 +126,42 @@ function StatusCard({ label, ready }: { label: string; ready: boolean }) {
   );
 }
 
-export function AdminConfiguracoesClient({ initialSettings }: { initialSettings: PlatformSettingsView }) {
+const EMPTY_LEGAL_INFO: PlatformLegalInfo = {
+  companyLegalName: null,
+  companyCnpj: null,
+  companyAddress: null,
+  contactEmail: null,
+  dpoName: null,
+  dpoEmail: null,
+  forumCity: null,
+  hostingRegion: null,
+  backupRetentionDays: null,
+};
+
+/** "Completo" = os 9 campos preenchidos — o mesmo texto que `/termos`/`/privacidade` usam via
+ * `fillLegalPlaceholders` (docs/contratos.md, "Dados jurídicos"); um campo vazio ainda aparece
+ * como "a definir" nas páginas públicas. */
+function isLegalInfoComplete(info: PlatformLegalInfo): boolean {
+  return (
+    !!info.companyLegalName &&
+    !!info.companyCnpj &&
+    !!info.companyAddress &&
+    !!info.contactEmail &&
+    !!info.dpoName &&
+    !!info.dpoEmail &&
+    !!info.forumCity &&
+    !!info.hostingRegion &&
+    info.backupRetentionDays != null
+  );
+}
+
+export function AdminConfiguracoesClient({
+  initialSettings,
+  initialLegal,
+}: {
+  initialSettings: PlatformSettingsView;
+  initialLegal: PlatformLegalInfo | null;
+}) {
   const { notify } = useToast();
   const [settings, setSettings] = useState(initialSettings);
   const [isPending, startTransition] = useTransition();
@@ -153,11 +192,26 @@ export function AdminConfiguracoesClient({ initialSettings }: { initialSettings:
   const [botActive, setBotActive] = useState<boolean | null>(null);
   const [confirmActivate, setConfirmActivate] = useState<"on" | "off" | null>(null);
 
+  const [legal, setLegal] = useState<PlatformLegalInfo>(initialLegal ?? EMPTY_LEGAL_INFO);
+  const [legalForm, setLegalForm] = useState({
+    companyLegalName: legal.companyLegalName ?? "",
+    companyCnpj: legal.companyCnpj ?? "",
+    companyAddress: legal.companyAddress ?? "",
+    contactEmail: legal.contactEmail ?? "",
+    dpoName: legal.dpoName ?? "",
+    dpoEmail: legal.dpoEmail ?? "",
+    forumCity: legal.forumCity ?? "",
+    hostingRegion: legal.hostingRegion ?? "",
+    backupRetentionDays: legal.backupRetentionDays != null ? String(legal.backupRetentionDays) : "",
+  });
+  const [legalError, setLegalError] = useState<string | null>(null);
+
   // Checklist do topo (pedido do dono): o que já está pronto para o bot funcionar.
   const evolutionReady = !!settings.evolutionApiUrl && !!settings.evolutionApiKeyMasked;
   const n8nReady = !!settings.n8nBaseUrl && !!settings.n8nApiKeyMasked;
   const smtpReady = !!settings.smtpHost;
   const mpReady = !!settings.mercadoPagoAccessTokenMasked;
+  const legalReady = isLegalInfoComplete(legal);
 
   function handleSaveEvolution(e: React.FormEvent) {
     e.preventDefault();
@@ -257,6 +311,42 @@ export function AdminConfiguracoesClient({ initialSettings }: { initialSettings:
     setCopied(true);
   }
 
+  function handleSaveLegal(e: React.FormEvent) {
+    e.preventDefault();
+    setLegalError(null);
+    const cnpjDigits = legalForm.companyCnpj ? normalizeDocumentDigits(legalForm.companyCnpj) : "";
+    startTransition(async () => {
+      const result = await updatePlatformLegalInfoAction({
+        companyLegalName: legalForm.companyLegalName,
+        companyCnpj: cnpjDigits,
+        companyAddress: legalForm.companyAddress,
+        contactEmail: legalForm.contactEmail,
+        dpoName: legalForm.dpoName,
+        dpoEmail: legalForm.dpoEmail,
+        forumCity: legalForm.forumCity,
+        hostingRegion: legalForm.hostingRegion,
+        backupRetentionDays: legalForm.backupRetentionDays ? Number(legalForm.backupRetentionDays) : null,
+      });
+      if (!result.ok) {
+        setLegalError(result.error.message);
+        return;
+      }
+      setLegal(result.data);
+      setLegalForm({
+        companyLegalName: result.data.companyLegalName ?? "",
+        companyCnpj: result.data.companyCnpj ?? "",
+        companyAddress: result.data.companyAddress ?? "",
+        contactEmail: result.data.contactEmail ?? "",
+        dpoName: result.data.dpoName ?? "",
+        dpoEmail: result.data.dpoEmail ?? "",
+        forumCity: result.data.forumCity ?? "",
+        hostingRegion: result.data.hostingRegion ?? "",
+        backupRetentionDays: result.data.backupRetentionDays != null ? String(result.data.backupRetentionDays) : "",
+      });
+      notify({ variant: "success", title: "Dados da empresa salvos." });
+    });
+  }
+
   function handleSyncN8n() {
     setSyncSummary(null);
     startTransition(async () => {
@@ -298,11 +388,12 @@ export function AdminConfiguracoesClient({ initialSettings }: { initialSettings:
 
       {error ? <Alert variant="danger">{error}</Alert> : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatusCard label="Evolution" ready={evolutionReady} />
         <StatusCard label="n8n" ready={n8nReady} />
         <StatusCard label="SMTP" ready={smtpReady} />
         <StatusCard label="Mercado Pago" ready={mpReady} />
+        <StatusCard label="Dados da empresa" ready={legalReady} />
       </div>
 
       <Card className="rounded-hero">
@@ -649,6 +740,136 @@ export function AdminConfiguracoesClient({ initialSettings }: { initialSettings:
             {settings.internalApiSecretConfigured ? "Gerar novo segredo" : "Gerar segredo"}
           </Button>
         </CardFooter>
+      </Card>
+
+      <Card className="rounded-hero">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Scale className="h-4 w-4 text-text-secondary" aria-hidden="true" />
+            <CardTitle>Dados da empresa (Termos e Privacidade)</CardTitle>
+          </div>
+          <CardDescription>
+            Preenche os marcadores como <code className="text-xs">[CNPJ]</code>/<code className="text-xs">[ENDEREÇO]</code> nas
+            páginas públicas <code className="text-xs">/termos</code> e <code className="text-xs">/privacidade</code>. Nenhum
+            destes dados é segredo. Deixar um campo vazio limpa o dado e volta a mostrar &ldquo;a definir&rdquo; nas páginas
+            públicas.
+          </CardDescription>
+        </CardHeader>
+        <form onSubmit={handleSaveLegal}>
+          <CardContent className="flex flex-col gap-4">
+            {legalError ? <Alert variant="danger">{legalError}</Alert> : null}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Razão social">
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    value={legalForm.companyLegalName}
+                    onChange={(e) => setLegalForm((f) => ({ ...f, companyLegalName: e.target.value }))}
+                    placeholder="Innovare Code Tecnologia Ltda."
+                  />
+                )}
+              </Field>
+              <Field label="CNPJ">
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={maskCpfCnpj(legalForm.companyCnpj)}
+                    onChange={(e) => setLegalForm((f) => ({ ...f, companyCnpj: normalizeDocumentDigits(e.target.value) }))}
+                    maxLength={18}
+                    placeholder="00.000.000/0000-00"
+                  />
+                )}
+              </Field>
+            </div>
+            <Field label="Endereço">
+              {(fieldProps) => (
+                <Input
+                  {...fieldProps}
+                  value={legalForm.companyAddress}
+                  onChange={(e) => setLegalForm((f) => ({ ...f, companyAddress: e.target.value }))}
+                  placeholder="Rua Exemplo, 123, Bairro, Cidade — UF, CEP 00000-000"
+                />
+              )}
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="E-mail de contato">
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    type="email"
+                    value={legalForm.contactEmail}
+                    onChange={(e) => setLegalForm((f) => ({ ...f, contactEmail: e.target.value }))}
+                    placeholder="contato@innovarecode.com.br"
+                  />
+                )}
+              </Field>
+              <Field label="Comarca (foro)">
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    value={legalForm.forumCity}
+                    onChange={(e) => setLegalForm((f) => ({ ...f, forumCity: e.target.value }))}
+                    placeholder="São Paulo/SP"
+                  />
+                )}
+              </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Nome do encarregado (DPO)">
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    value={legalForm.dpoName}
+                    onChange={(e) => setLegalForm((f) => ({ ...f, dpoName: e.target.value }))}
+                  />
+                )}
+              </Field>
+              <Field label="E-mail do encarregado (DPO)">
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    type="email"
+                    value={legalForm.dpoEmail}
+                    onChange={(e) => setLegalForm((f) => ({ ...f, dpoEmail: e.target.value }))}
+                    placeholder="dpo@innovarecode.com.br"
+                  />
+                )}
+              </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="País/região da hospedagem">
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    value={legalForm.hostingRegion}
+                    onChange={(e) => setLegalForm((f) => ({ ...f, hostingRegion: e.target.value }))}
+                    placeholder="Brasil"
+                  />
+                )}
+              </Field>
+              <Field label="Prazo de retenção dos backups (dias)">
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    type="number"
+                    min={1}
+                    max={3650}
+                    value={legalForm.backupRetentionDays}
+                    onChange={(e) => setLegalForm((f) => ({ ...f, backupRetentionDays: e.target.value }))}
+                    placeholder="30"
+                  />
+                )}
+              </Field>
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button type="submit" isLoading={isPending}>
+              Salvar
+            </Button>
+          </CardFooter>
+        </form>
       </Card>
 
       <Dialog open={secretDialogOpen} onOpenChange={setSecretDialogOpen}>

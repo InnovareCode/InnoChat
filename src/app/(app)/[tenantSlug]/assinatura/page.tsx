@@ -74,6 +74,7 @@ export default async function AssinaturaPage({
     pendingPlanName: pendingPlan?.name ?? null,
     invoice: openInvoice
       ? {
+          id: openInvoice.id,
           amountCents: openInvoice.amountCents,
           dueAt: openInvoice.dueAt.toISOString(),
           pixCopyPaste: openInvoice.pixCopyPaste,

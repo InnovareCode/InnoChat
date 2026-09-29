@@ -35,6 +35,15 @@ NUNCA receber `icon: LucideIcon`. Duas saídas válidas, escolher pela forma de 
 perguntar "quem chama isto é Server ou Client?" — se Server, a prop é sempre elemento, nunca
 componente.
 
+3. `configuracoes-grid.tsx`/`[tenantSlug]/configuracoes/page.tsx` (onda 2) — passou despercebido
+   por lint/typecheck/build inteiros (o `LucideIcon` é um tipo válido, `tsc` não reclama) e só
+   apareceu ao abrir a tela no navegador (`Only plain objects can be passed...`, mesmíssima
+   mensagem). Achado só porque a onda 3 (Cobrança/Saúde/Pix) pediu print desta tela como
+   "pendência da onda 2" — sem aquele pedido explícito de screenshot, o bug ficaria invisível
+   indefinidamente. **Reforça**: build verde não é evidência de nada aqui, só abrir no navegador
+   prova. Se uma tela nunca foi fotografada, trate como não verificada, mesmo que o código pareça
+   idêntico ao de uma tela que já funciona.
+
 **Mesma família de bug, achado na sequência (`StatCard`, `format?: (n) => string`):** função
 também não atravessa a fronteira Server→Client ("Functions cannot be passed directly to Client
 Components unless you explicitly expose it by marking it with 'use server'."). Corrigido trocando

@@ -1,12 +1,41 @@
 import { Receipt } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { billingMonthlyTotalsAction, listDelinquentCompaniesAction, listInvoicesAdminAction } from "@/modules/billing/admin-actions";
+import { AdminCobrancaClient } from "./admin-cobranca-client";
 
-export default function AdminCobrancaPage() {
+export default async function AdminCobrancaPage() {
+  const [totalsResult, invoicesResult, delinquentsResult] = await Promise.all([
+    billingMonthlyTotalsAction(),
+    listInvoicesAdminAction(),
+    listDelinquentCompaniesAction(),
+  ]);
+
+  if (!totalsResult.ok || !invoicesResult.ok || !delinquentsResult.ok) {
+    const error = !totalsResult.ok ? totalsResult.error : !invoicesResult.ok ? invoicesResult.error : (delinquentsResult as { ok: false; error: { message: string } }).error;
+    return (
+      <div>
+        <PageHeader title="Cobrança" description="Faturas abertas, vencidas e eventos do Mercado Pago." />
+        <EmptyState icon={Receipt} title="Não deu para carregar a cobrança" description={error.message} />
+      </div>
+    );
+  }
+
+  const invoices = invoicesResult.data.items.map((item) => ({
+    ...item,
+    periodStart: item.periodStart.toISOString(),
+    periodEnd: item.periodEnd.toISOString(),
+    dueAt: item.dueAt.toISOString(),
+    paidAt: item.paidAt ? item.paidAt.toISOString() : null,
+    createdAt: item.createdAt.toISOString(),
+  }));
+
   return (
-    <div>
-      <PageHeader title="Cobrança" description="Faturas abertas, vencidas e eventos do Mercado Pago." />
-      <EmptyState icon={Receipt} title="Em breve" description="Faturas e eventos de cobrança ainda estão a caminho." />
-    </div>
+    <AdminCobrancaClient
+      totals={totalsResult.data}
+      initialItems={invoices}
+      initialNextCursor={invoicesResult.data.nextCursor}
+      delinquents={delinquentsResult.data}
+    />
   );
 }

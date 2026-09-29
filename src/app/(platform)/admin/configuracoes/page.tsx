@@ -1,20 +1,25 @@
 import { Settings } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { getPlatformSettingsAction } from "@/modules/platform/actions";
+import { getPlatformLegalInfoAction, getPlatformSettingsAction } from "@/modules/platform/actions";
 import { AdminConfiguracoesClient } from "./admin-configuracoes-client";
 
 export default async function AdminConfiguracoesPage() {
-  const result = await getPlatformSettingsAction();
+  const [settingsResult, legalResult] = await Promise.all([getPlatformSettingsAction(), getPlatformLegalInfoAction()]);
 
-  if (!result.ok) {
+  if (!settingsResult.ok) {
     return (
       <div>
         <PageHeader title="Configurações da plataforma" description="Evolution, n8n, e-mail, Mercado Pago e segredo da API interna." />
-        <EmptyState icon={Settings} title="Não deu para carregar" description={result.error.message} />
+        <EmptyState icon={Settings} title="Não deu para carregar" description={settingsResult.error.message} />
       </div>
     );
   }
 
-  return <AdminConfiguracoesClient initialSettings={result.data} />;
+  return (
+    <AdminConfiguracoesClient
+      initialSettings={settingsResult.data}
+      initialLegal={legalResult.ok ? legalResult.data : null}
+    />
+  );
 }
