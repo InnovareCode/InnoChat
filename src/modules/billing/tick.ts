@@ -1,7 +1,7 @@
 import { addDays, addMonths } from "date-fns";
 import { getPrisma } from "@/lib/db/prisma";
 import { logger } from "@/lib/logger";
-import { sendMail, invoiceDueReminderEmail } from "@/lib/email";
+import { sendMail, loadEmailContext, invoiceDueReminderEmail } from "@/lib/email";
 import { effectiveStatus, validateCpfCnpj } from "@/core/billing";
 import {
   billingUrlFor,
@@ -275,6 +275,7 @@ async function notifyDue(
     dueDateBr: formatDateBR(invoice.dueAt, invoice.subscription.tenant.timezone),
     billingUrl: await billingUrlFor(invoice.subscription.tenant.slug),
     dueToday,
+    ctx: await loadEmailContext(),
   });
   await sendMail({ to: payerEmail, subject, html, text }).catch((error) => {
     logger.error("billing.tick.due_reminder_failed", { errorMessage: error instanceof Error ? error.message : String(error) });

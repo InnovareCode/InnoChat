@@ -3,7 +3,7 @@ import { getPrisma } from "@/lib/db/prisma";
 import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { hashPassword } from "@/modules/auth/service";
-import { sendMail, verificationEmail, passwordResetEmail, teamInviteEmail } from "@/lib/email";
+import { sendMail, loadEmailContext, verificationEmail, passwordResetEmail, teamInviteEmail } from "@/lib/email";
 import { getPublicBaseUrl } from "@/lib/public-url";
 import type { MembershipRole } from "@/lib/db/types";
 import { validateSlug, type SlugValidationError } from "@/core/signup/slug";
@@ -224,7 +224,7 @@ export async function signUp(input: SignUpInput, gateway?: MercadoPagoGateway): 
 async function sendVerificationEmail(userId: string, email: string): Promise<void> {
   const { rawToken } = await createAuthToken(userId, "VERIFY_EMAIL", VERIFY_EMAIL_TTL_MS);
   const verifyUrl = `${await getPublicBaseUrl()}/verificar-email?token=${rawToken}`;
-  const { subject, html, text } = verificationEmail({ verifyUrl });
+  const { subject, html, text } = verificationEmail({ verifyUrl, ctx: await loadEmailContext() });
   await sendMail({ to: email, subject, html, text }).catch((error) => {
     logger.error("signup.verification_email.failed", { errorMessage: error instanceof Error ? error.message : String(error) });
   });
@@ -272,7 +272,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
 
   const { rawToken } = await createAuthToken(user.id, "RESET_PASSWORD", RESET_PASSWORD_TTL_MS);
   const resetUrl = `${await getPublicBaseUrl()}/redefinir-senha?token=${rawToken}`;
-  const { subject, html, text } = passwordResetEmail({ resetUrl });
+  const { subject, html, text } = passwordResetEmail({ resetUrl, ctx: await loadEmailContext() });
   await sendMail({ to: normalized, subject, html, text }).catch((error) => {
     logger.error("password_reset.email.failed", { errorMessage: error instanceof Error ? error.message : String(error) });
   });
@@ -312,7 +312,7 @@ export async function inviteTeamMember(params: { tenantId: string; tenantName: s
 
   const { rawToken } = await createAuthToken(user.id, "INVITE", INVITE_TTL_MS);
   const inviteUrl = `${await getPublicBaseUrl()}/convite?token=${rawToken}`;
-  const { subject, html, text } = teamInviteEmail({ tenantName: params.tenantName, inviteUrl });
+  const { subject, html, text } = teamInviteEmail({ tenantName: params.tenantName, inviteUrl, ctx: await loadEmailContext() });
   await sendMail({ to: email, subject, html, text }).catch((error) => {
     logger.error("invite.email.failed", { errorMessage: error instanceof Error ? error.message : String(error) });
   });

@@ -3,7 +3,7 @@ import { getPrisma } from "@/lib/db/prisma";
 import { forTenant } from "@/lib/db/tenant-client";
 import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
-import { sendMail, invoiceGeneratedEmail, subscriptionSuspendedEmail } from "@/lib/email";
+import { sendMail, loadEmailContext, invoiceGeneratedEmail, paymentConfirmedEmail, subscriptionSuspendedEmail } from "@/lib/email";
 import { getPublicBaseUrl } from "@/lib/public-url";
 import { CANCEL_AFTER_SUSPENDED_TRIAL_DAYS, computeTrialEndsAt, effectiveStatus, validateCpfCnpj, type SubscriptionStatus } from "@/core/billing";
 import { formatCentsBRL, formatDateBR } from "./format";
@@ -340,7 +340,7 @@ export async function findOwnInvoiceOrThrow(tenantId: string, invoiceId: string)
 export async function applyInvoicePayment(invoiceId: string, paidAt: Date): Promise<{ alreadyProcessed: boolean; voided?: boolean }> {
   const prisma = getPrisma();
 
-  return prisma.$transaction(async (tx) => {
+  const outcome = await prisma.$transaction(async (tx): Promise<{ alreadyProcessed: boolean; voided?: boolean; receipt?: PaymentReceipt }> => {
     const invoice = await tx.invoice.findUnique({ where: { id: invoiceId } });
     if (!invoice) {
       throw new DomainError("NOT_FOUND", "Fatura não encontrada.");
@@ -391,8 +391,54 @@ export async function applyInvoicePayment(invoiceId: string, paidAt: Date): Prom
       },
     });
 
-    return { alreadyProcessed: false };
+    const tenant = await tx.tenant.findUnique({ where: { id: subscription.tenantId }, select: { name: true, slug: true, timezone: true } });
+    return {
+      alreadyProcessed: false,
+      receipt: tenant ? { tenantId: subscription.tenantId, tenantName: tenant.name, tenantSlug: tenant.slug, timezone: tenant.timezone, amountCents: invoice.amountCents, paidAt, activeUntil: nextPeriodEnd } : undefined,
+    };
   });
+
+  // Recibo FORA da transação e só na primeira baixa (`receipt` só existe quando este chamador
+  // ganhou o UPDATE condicional — webhook reentregue, conciliação e baixa manual concorrentes
+  // caem em `alreadyProcessed` e nunca reenviam). Nunca lança: e-mail não desfaz pagamento.
+  if (outcome.receipt) {
+    await sendPaymentConfirmedEmail(outcome.receipt);
+  }
+  return outcome.voided ? { alreadyProcessed: outcome.alreadyProcessed, voided: true } : { alreadyProcessed: outcome.alreadyProcessed };
+}
+
+type PaymentReceipt = {
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  timezone: string;
+  amountCents: number;
+  paidAt: Date;
+  activeUntil: Date;
+};
+
+const RECEIPT_EMAIL_TIMEOUT_MS = 10_000;
+
+async function sendPaymentConfirmedEmail(receipt: PaymentReceipt): Promise<void> {
+  try {
+    const toEmail = await findBillingRecipientEmail(receipt.tenantId);
+    if (!toEmail) return;
+    const { subject, html, text } = paymentConfirmedEmail({
+      tenantName: receipt.tenantName,
+      amountReais: formatCentsBRL(receipt.amountCents),
+      paidDateBr: formatDateBR(receipt.paidAt, receipt.timezone),
+      activeUntilBr: formatDateBR(receipt.activeUntil, receipt.timezone),
+      billingUrl: await billingUrlFor(receipt.tenantSlug),
+      ctx: await loadEmailContext(),
+    });
+    // Teto de tempo: o webhook do Mercado Pago espera resposta rápida — SMTP lento não pode segurá-la.
+    await Promise.race([
+      sendMail({ to: toEmail, subject, html, text }),
+      new Promise((resolve) => setTimeout(resolve, RECEIPT_EMAIL_TIMEOUT_MS).unref?.()),
+    ]);
+  } catch (error) {
+    logger.error("billing.email.payment_confirmed.failed", { errorMessage: error instanceof Error ? error.message : String(error) });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -485,8 +531,9 @@ export async function sendInvoiceGeneratedEmail(params: {
     tenantName: params.tenantName,
     amountReais: formatCentsBRL(params.amountCents),
     dueDateBr: formatDateBR(params.dueAt, params.timezone),
-    pixCopyPaste: params.pixCopyPaste ?? "(gere o Pix na tela de Assinatura)",
+    pixCopyPaste: params.pixCopyPaste,
     billingUrl: await billingUrlFor(params.tenantSlug),
+    ctx: await loadEmailContext(),
   });
   await sendMail({ to: params.toEmail, subject, html, text }).catch((error) => {
     logger.error("billing.email.invoice_generated.failed", { errorMessage: error instanceof Error ? error.message : String(error) });
@@ -505,6 +552,7 @@ export async function sendSubscriptionSuspendedEmail(params: {
     billingUrl: await billingUrlFor(params.tenantSlug),
     trialNotConverted: params.trialNotConverted,
     cancelInDays: params.trialNotConverted ? CANCEL_AFTER_SUSPENDED_TRIAL_DAYS : undefined,
+    ctx: await loadEmailContext(),
   });
   await sendMail({ to: params.toEmail, subject, html, text }).catch((error) => {
     logger.error("billing.email.suspended.failed", { errorMessage: error instanceof Error ? error.message : String(error) });
