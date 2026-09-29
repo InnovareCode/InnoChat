@@ -18,7 +18,10 @@ test.describe.serial("Catálogo, profissionais e agenda (docs/contratos.md Fase 
     await page.getByRole("dialog").getByLabel("Duração (min)").fill("45");
     await page.getByRole("button", { name: "Criar" }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
-    await expect(page.getByText(SERVICE_NAME)).toBeVisible();
+    // O visual premium passou a renderizar tabela (desktop) E cartões (mobile) ao mesmo tempo —
+    // só um fica visível por CSS, mas os dois existem no DOM, então `getByText` sem `.first()`
+    // vira strict-mode violation (achado ao rodar esta suíte após a Onda 1 do visual premium).
+    await expect(page.getByText(SERVICE_NAME).first()).toBeVisible();
   });
 
   test("cria um profissional novo, com o serviço acima e expediente multi-intervalo", async ({ page }) => {
@@ -27,7 +30,8 @@ test.describe.serial("Catálogo, profissionais e agenda (docs/contratos.md Fase 
     await page.getByRole("dialog").getByLabel("Nome").fill(PROFESSIONAL_NAME);
     await page.getByRole("button", { name: "Criar" }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
-    await expect(page.getByText(PROFESSIONAL_NAME)).toBeVisible();
+    // Mesma renderização dupla (tabela desktop + cartões mobile) do visual premium.
+    await expect(page.getByText(PROFESSIONAL_NAME).first()).toBeVisible();
 
     // Entra no detalhe para marcar o serviço e configurar expediente com DOIS intervalos no
     // mesmo dia (manhã e tarde, com almoço no meio) — pedido explícito da missão.

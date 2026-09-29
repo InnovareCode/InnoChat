@@ -39,6 +39,18 @@ metadata:
   `fake-http-server.ts` (mock HTTP genérico, usado por n8n/Evolution), `fake-smtp-server.ts`
   (captura e-mail real via SMTP cru), `fake-evolution-server.ts`, `csp.ts`, `test-db-url.ts`
   (deriva `innochat_test` do `.env` sem nunca imprimir a string).
+- **Rodada C1 (2026-09-29, visual premium/Clientes/drag/Ctrl+K)** acrescentou: `clientes.spec.ts`
+  (busca/filtros, `CONTACT_EXISTS`, pausar/retomar bot, excluir com/sem histórico, CSV com
+  neutralização de fórmula), `drag-reschedule.spec.ts` (arrastar para remarcar — ver
+  [[dnd_kit_drag_testing]]), `command-palette.spec.ts` (Ctrl+K), `smoke.spec.ts` (todas as rotas,
+  painel/admin/públicas, rede de segurança contra "ícone como prop Server→Client"),
+  `responsive.spec.ts` (360/768/1024/1440 em todas as rotas, `scrollWidth<=clientWidth`),
+  `assinatura-pix.spec.ts` (RATE_LIMITED em "Gerar Pix agora" — MISSING_DOCUMENT só é testável em
+  integração, ver [[mercadopago_no_fake_server]]), `admin-cobranca.spec.ts` (marcar como paga com
+  motivo obrigatório e duplo clique, regerar Pix), `admin-saude.spec.ts`,
+  `admin-dados-juridicos.spec.ts` (salva e confirma em `/termos`, limpa os dados no final). CPF
+  válido/inválido entrou em `cadastro.spec.ts` (ver [[signup_rate_limit_e2e]] — agora 5/5 do teto
+  de sinal por rodada).
 - Rodar: `npm run test:e2e` (script adicionado ao `package.json`, NÃO inclui `instalacao.spec.ts`
   — `testIgnore` no `playwright.config.ts`), `npx playwright test <arquivo>` para uma spec
   isolada, ou `npx playwright test --config=playwright.instalacao.config.ts` só para

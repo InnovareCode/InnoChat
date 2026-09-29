@@ -1,7 +1,16 @@
 import { test, expect } from "@playwright/test";
+import { formatInTimeZone } from "date-fns-tz";
 import { SEED_TENANT_SLUG, E2E_RUN_PREFIX } from "./fixtures/test-data";
 import { OWNER_STORAGE_STATE } from "./fixtures/storage-state";
 import { prisma } from "./fixtures/db";
+
+// Fuso do tenant de seed (`prisma/seed.ts`) — a Agenda mostra "hoje" nesse fuso, não no fuso do
+// host que roda o teste. Achado ao rodar esta suíte num host com o relógio horas depois da meia-
+// noite UTC: `new Date().toISOString()` já contava "hoje" como o dia seguinte na Agenda, e
+// "Próximo período" clicava uma vez de menos — a Agenda caía num dia sem expediente (Ana/Bruna
+// de folga) e a faixa do feriado nunca aparecia. Não era bug do produto, era o teste medindo
+// "hoje" errado.
+const TENANT_TIMEZONE = "America/Sao_Paulo";
 
 // Sessão via `storageState` (ver `admin-secrets.spec.ts` / `login_rate_limit_e2e` na memória).
 test.use({ storageState: OWNER_STORAGE_STATE });
@@ -14,10 +23,14 @@ test.use({ storageState: OWNER_STORAGE_STATE });
  * só dava para criar isso direto no banco).
  */
 
+// Tudo em UTC (getUTCDay/setUTCDate) — misturar métodos de data LOCAIS (getDate/getDay) com
+// `.toISOString()` (sempre UTC) desalinha o dia quando o host roda num fuso atrás de UTC (achado
+// ao rodar este teste num container com TZ diferente: a Agenda navegava para um dia diferente do
+// calculado aqui, e a faixa do feriado nunca aparecia — não era bug do produto).
 function nextWeekdayISO(targetWeekday: number, minDaysAhead: number): string {
   const d = new Date();
-  d.setDate(d.getDate() + minDaysAhead);
-  while (d.getDay() !== targetWeekday) d.setDate(d.getDate() + 1);
+  d.setUTCDate(d.getUTCDate() + minDaysAhead);
+  while (d.getUTCDay() !== targetWeekday) d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().slice(0, 10);
 }
 
@@ -64,7 +77,7 @@ test.describe("Bloqueios da empresa inteira aparecem em toda a Agenda", () => {
     await page.goto(`/${SEED_TENANT_SLUG}/agenda`);
     // Navega até a data certa usando "Próximo período" repetidamente a partir de hoje (evita
     // depender de um seletor de data que a tela não expõe diretamente).
-    const todayISO = new Date().toISOString().slice(0, 10);
+    const todayISO = formatInTimeZone(new Date(), TENANT_TIMEZONE, "yyyy-MM-dd");
     const daysAhead = Math.round((new Date(HOLIDAY_DATE_ISO).getTime() - new Date(todayISO).getTime()) / 86_400_000);
     for (let i = 0; i < daysAhead; i++) {
       await page.getByRole("button", { name: "Próximo período" }).click();
@@ -99,7 +112,7 @@ test.describe("Bloqueios da empresa inteira aparecem em toda a Agenda", () => {
     await page.getByRole("button", { name: "Semana" }).click();
 
     // Navega até a semana do feriado.
-    const todayISO = new Date().toISOString().slice(0, 10);
+    const todayISO = formatInTimeZone(new Date(), TENANT_TIMEZONE, "yyyy-MM-dd");
     const weeksAhead = weeksBetween(todayISO, HOLIDAY_DATE_ISO);
     for (let i = 0; i < weeksAhead; i++) {
       await page.getByRole("button", { name: "Próximo período" }).click();

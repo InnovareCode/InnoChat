@@ -64,11 +64,42 @@ test.describe("Cadastro público (/cadastro) ponta a ponta", () => {
     await page.getByLabel("Nome da empresa").fill(`${E2E_RUN_PREFIX} Empresa Cadastro`);
     await page.getByLabel("Endereço da empresa").fill(opts.slug);
     await page.getByLabel("Seu nome").fill("Dona da Empresa E2E");
+    // CPF de teste com dígitos verificadores válidos (algoritmo público da Receita) — o campo
+    // ficou obrigatório (docs/plano-implementacao.md Etapa A3), sem ele o formulário nunca
+    // chega a submeter e todo o resto do teste falha em silêncio.
+    await page.getByLabel("CPF ou CNPJ *", { exact: true }).fill("52998224725");
     await page.getByLabel("E-mail *", { exact: true }).fill(opts.email);
     await page.getByLabel("Senha *", { exact: true }).fill("senha-e2e-cadastro-2026");
     await page.getByLabel("Confirmar senha").fill("senha-e2e-cadastro-2026");
     await page.locator('input[type="checkbox"]').check();
   }
+
+  test("CPF inválido (dígito verificador errado): mensagem no campo, nunca chama o servidor", async ({ page }) => {
+    await fillValidForm(page, { slug: `${RUN_PREFIX_SLUG}-cpf-invalido`, email: `${RUN_PREFIX_LC}-cpf-invalido@e2e.innochat.local` });
+    // Sobrescreve o CPF válido preenchido por `fillValidForm` com um dígito verificador errado
+    // (mesma raiz, `529.982.247-XX` só que com o último dígito trocado).
+    await page.getByLabel("CPF ou CNPJ *", { exact: true }).fill("52998224700");
+    await page.getByRole("button", { name: "Criar conta" }).click();
+    await expect(page.getByText("Informe um CPF ou CNPJ válido.")).toBeVisible();
+    // Nunca chegou a criar nada — nem tenant, nem usuário.
+    const tenant = await prisma.tenant.findUnique({ where: { slug: `${RUN_PREFIX_SLUG}-cpf-invalido` } });
+    expect(tenant).toBeNull();
+  });
+
+  test("CPF válido (com pontuação) é aceito e o cadastro segue normalmente", async ({ page }) => {
+    const slug = `${RUN_PREFIX_SLUG}-cpf-valido`;
+    const email = `${RUN_PREFIX_LC}-cpf-valido@e2e.innochat.local`;
+    CREATED_SLUGS.push(slug);
+    CREATED_EMAILS.push(email);
+    await fillValidForm(page, { slug, email });
+    // Mesmo CPF de `fillValidForm`, mas digitado com pontuação — `normalizeDocumentDigits`
+    // (`src/core/billing/document.ts`) precisa aceitar igual.
+    await page.getByLabel("CPF ou CNPJ *", { exact: true }).fill("529.982.247-25");
+    await page.getByRole("button", { name: "Criar conta" }).click();
+    await expect(page.getByText("Confirme seu e-mail")).toBeVisible();
+    const tenant = await prisma.tenant.findUnique({ where: { slug } });
+    expect(tenant).not.toBeNull();
+  });
 
   test("slug reservado: mensagem no campo, nunca chega a chamar o servidor", async ({ page }) => {
     await fillValidForm(page, { slug: "admin", email: `${RUN_PREFIX_LC}-reservado@e2e.innochat.local` });

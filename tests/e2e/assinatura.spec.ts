@@ -27,7 +27,7 @@ test.describe("Assinatura: trocar plano", () => {
   let essencialId: string;
   let profissionalId: string;
   let originalSubscription: { planId: string; status: SubscriptionStatus; pendingPlanId: string | null; currentPeriodEnd: Date };
-  let extraProfessionalId: string | null = null;
+  let extraProfessionalIds: string[] = [];
 
   test.beforeAll(async () => {
     const [essencial, profissional] = await Promise.all([
@@ -53,8 +53,8 @@ test.describe("Assinatura: trocar plano", () => {
     await prisma.subscription.update({ where: { tenantId: tenant.id }, data: originalSubscription });
     await prisma.plan.updateMany({ where: { id: { in: [essencialId, profissionalId] } }, data: { active: false } });
     await prisma.tenant.update({ where: { id: tenant.id }, data: { maxProfessionalsOverride: 10 } });
-    if (extraProfessionalId) {
-      await prisma.professional.deleteMany({ where: { id: extraProfessionalId } });
+    if (extraProfessionalIds.length) {
+      await prisma.professional.deleteMany({ where: { id: { in: extraProfessionalIds } } });
     }
   });
 
@@ -78,7 +78,9 @@ test.describe("Assinatura: trocar plano", () => {
     test("Upgrade (Essencial → Profissional) aplica imediatamente", async ({ page }) => {
       await page.goto(`/${SEED_TENANT_SLUG}/assinatura`);
 
-      await page.getByRole("button", { name: "Fazer upgrade" }).click();
+      // Mesma renderização dupla (tabela desktop + cartões mobile) do visual premium — ver o
+      // achado equivalente em `catalog-and-agenda.spec.ts`.
+      await page.getByRole("button", { name: "Fazer upgrade" }).first().click();
       const dialog = page.getByRole("dialog").filter({ hasText: "Trocar de plano" });
       await expect(dialog).toContainText(/já está em vigor|próxima fatura/);
       await dialog.getByRole("button", { name: "Confirmar" }).click();
@@ -93,13 +95,24 @@ test.describe("Assinatura: trocar plano", () => {
     test("Downgrade (Profissional → Essencial) é bloqueado quando o uso atual não cabe, e mostra o que remover", async ({ page }) => {
       const tenant = await prisma.tenant.findUniqueOrThrow({ where: { slug: SEED_TENANT_SLUG } });
 
-      // Some 1 profissional extra (total 4: Ana + Bruna + "Profissional QA" + este) e remove o
-      // override temporariamente — sem isso, `changePlan` usa o override (10) em vez do limite do
-      // plano Essencial (3), e o downgrade nunca seria bloqueado neste ambiente de seed.
-      const extra = await prisma.professional.create({
-        data: { tenantId: tenant.id, name: `${E2E_RUN_PREFIX} profissional extra`, sortOrder: 99 },
+      // Conta o que JÁ existe (nunca assume um número fixo tipo "Ana + Bruna + mais um" — achado
+      // ao rodar esta suíte cheia: um fixture de outra sessão que não fazia parte do seed
+      // ["Profissional QA"] existia e sumiu depois de uma limpeza de dado órfão, e o "4" fixo
+      // neste teste quebrou em silêncio, sem avisar que a premissa tinha mudado) e cria só os
+      // profissionais que faltam para passar do limite do Essencial (3), e remove o override
+      // temporariamente — sem isso, `changePlan` usa o override (10) em vez do limite do plano.
+      const currentCount = await prisma.professional.count({ where: { tenantId: tenant.id, active: true } });
+      const essencialLimit = 3;
+      const toCreate = Math.max(essencialLimit + 1 - currentCount, 1);
+      const extras = await prisma.professional.createManyAndReturn({
+        data: Array.from({ length: toCreate }, (_, i) => ({
+          tenantId: tenant.id,
+          name: `${E2E_RUN_PREFIX} profissional extra ${i}`,
+          sortOrder: 99 + i,
+        })),
       });
-      extraProfessionalId = extra.id;
+      extraProfessionalIds = extras.map((p) => p.id);
+      const finalCount = currentCount + toCreate;
       await prisma.tenant.update({ where: { id: tenant.id }, data: { maxProfessionalsOverride: null } });
 
       await page.goto(`/${SEED_TENANT_SLUG}/assinatura`);
@@ -110,14 +123,14 @@ test.describe("Assinatura: trocar plano", () => {
       const blockedDialog = page.getByRole("dialog").filter({ hasText: "Não é possível fazer esse downgrade ainda" });
       await expect(blockedDialog).toBeVisible();
       await expect(blockedDialog).toContainText("até 3 profissionais cadastrados");
-      await expect(blockedDialog).toContainText("empresa tem 4 hoje");
-      await expect(blockedDialog).toContainText("Remova 1");
+      await expect(blockedDialog).toContainText(`empresa tem ${finalCount} hoje`);
+      await expect(blockedDialog).toContainText(`Remova ${finalCount - essencialLimit}`);
       await blockedDialog.getByRole("button", { name: "Entendi" }).click();
 
-      // Devolve o cenário para o próximo teste (downgrade que CABE): remove o extra e o override
-      // volta a 10 (default da suíte).
-      await prisma.professional.delete({ where: { id: extra.id } });
-      extraProfessionalId = null;
+      // Devolve o cenário para o próximo teste (downgrade que CABE): remove os extras e o
+      // override volta a 10 (default da suíte).
+      await prisma.professional.deleteMany({ where: { id: { in: extraProfessionalIds } } });
+      extraProfessionalIds = [];
       await prisma.tenant.update({ where: { id: tenant.id }, data: { maxProfessionalsOverride: 10 } });
     });
 

@@ -14,7 +14,9 @@ import { OWNER_STORAGE_STATE } from "./fixtures/storage-state";
 test.describe("Autenticação e proteção de rota (docs/contratos.md Fase 1)", () => {
   test("login com credenciais corretas leva ao painel da empresa", async ({ page }) => {
     await login(page, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD);
-    await expect(page).toHaveURL(new RegExp(`/${SEED_TENANT_SLUG}/agenda`));
+    // A página Início (docs/plano-implementacao.md Etapa B) passou a ser o destino pós-login —
+    // `pos-login/page.tsx` redireciona para `/inicio`, não mais direto para `/agenda`.
+    await expect(page).toHaveURL(new RegExp(`/${SEED_TENANT_SLUG}/inicio`));
   });
 
   test("senha errada mostra mensagem genérica (sem dizer se o e-mail existe)", async ({ page }) => {

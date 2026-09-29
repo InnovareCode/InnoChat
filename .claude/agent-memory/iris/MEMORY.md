@@ -9,3 +9,7 @@
 - [getByLabel exact em campo required precisa do " *"](playwright_required_field_asterisk_label.md) — `Field` acrescenta asterisco ao label; `exact:true` sem ele nunca casa.
 - [next dev: lock de instância única por pasta, não por porta](next_dev_single_instance_lock.md) — por que `/instalacao` (banco `innochat_test`) precisa de `playwright.instalacao.config.ts` sem `webServer`.
 - [Rate limit de login (8/15min por e-mail) quebra specs com muitos re-logins](login_rate_limit_e2e.md) — reusar cookie de sessão em vez de logar de novo a cada teste.
+- [Rate limit de cadastro (5/hora por IP) esgota entre rodadas](signup_rate_limit_e2e.md) — reiniciar `next dev` antes de CADA rodada, não só da primeira.
+- [Testar arrastar-e-soltar (dnd-kit) na Agenda](dnd_kit_drag_testing.md) — mouse simulado, `scrollIntoViewIfNeeded`, checar resultado no banco em vez do pixel exato.
+- [Mercado Pago não tem servidor fake possível (API_BASE fixo)](mercadopago_no_fake_server.md) — RATE_LIMITED é E2E real; MISSING_DOCUMENT só em integração (gateway injetado).
+- [Achados da rodada C1 (2026-09-29)](bugs_found_log_round3.md) — nav dot invisível com grupo colapsado, `/termos` sem `revalidatePath`, pollution de dados antiga limpa.

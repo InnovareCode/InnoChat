@@ -174,6 +174,25 @@ describe("regeneratePixForInvoiceAdmin", () => {
   it("NOT_FOUND para fatura inexistente", async () => {
     await expect(regeneratePixForInvoiceAdmin("invoice-inexistente")).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
+
+  // MISSING_DOCUMENT: o Mercado Pago não pode ser apontado para um servidor HTTP fake local
+  // (diferente da Evolution/n8n) — `API_BASE` em `src/modules/billing/mercadopago.ts` é uma
+  // constante fixa (`https://api.mercadopago.com`), sem campo equivalente a
+  // `n8nBaseUrl`/Evolution em `PlatformSettings`. `regeneratePixForInvoice`/`...Admin` só aceitam
+  // o gateway por injeção de dependência (`gateway?: MercadoPagoGateway`) — o mock reproduz a
+  // MESMA falha cedo do gateway real quando falta `payerDocument`, o que É o comportamento sob
+  // teste aqui (ver `mercadopago.mock.ts`). Reportado no handoff como gap de arquitetura para um
+  // futuro `mercadoPagoBaseUrl` opcional, dando ao MP a mesma paridade de teste que Evolution/n8n.
+  it("MERCADOPAGO_MISSING_DOCUMENT quando o tenant não tem CPF/CNPJ cadastrado", async () => {
+    const { tenant, invoice } = await makeTenantWithSubscriptionAndInvoice({ label: "regen-pix-sem-doc", invoiceStatus: "OPEN" });
+    // `document ?? "52998224725"` no helper trata `null` como "não informado" (nullish) e
+    // aplicaria o padrão de qualquer jeito — só um UPDATE depois garante `document: null` de
+    // verdade no banco.
+    await prisma.tenant.update({ where: { id: tenant.id }, data: { document: null } });
+    const { gateway } = createMockMercadoPagoGateway();
+
+    await expect(regeneratePixForInvoiceAdmin(invoice.id, gateway)).rejects.toMatchObject({ code: "MERCADOPAGO_MISSING_DOCUMENT" });
+  });
 });
 
 describe("markInvoicePaidManually", () => {
