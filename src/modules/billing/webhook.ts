@@ -3,7 +3,7 @@ import { isUniqueViolation } from "@/lib/db/prisma-errors";
 import { logger } from "@/lib/logger";
 import { getActiveMercadoPagoCredentials, getMercadoPagoCredentials, type MercadoPagoEnv } from "@/modules/platform/mercadopago-config";
 import { applyInvoicePayment } from "./service";
-import { explainMercadoPagoSignature, getMercadoPagoGateway, type MercadoPagoGateway } from "./mercadopago";
+import { explainMercadoPagoSignature, getMercadoPagoGateway, MercadoPagoApiError, type MercadoPagoGateway } from "./mercadopago";
 import { recordWebhookReceived, recordWebhookRejected, sanitizeWebhookType, type WebhookRejectionReason } from "./webhook-diagnostics";
 
 /**
@@ -109,7 +109,19 @@ export async function handleMercadoPagoWebhook(params: {
   const providerEventId = params.dataId;
 
   const gateway = params.gateway ?? (await getMercadoPagoGateway());
-  const payment = await gateway.getPayment(providerEventId);
+  let payment: Awaited<ReturnType<typeof gateway.getPayment>>;
+  try {
+    payment = await gateway.getPayment(providerEventId);
+  } catch (error) {
+    // Pagamento que não existe nesta conta (ex.: "Simular notificação" do painel do MP manda
+    // `data.id=123456`; ou evento de outro ambiente): nada a baixar. Responde 200 `ignored` —
+    // 500 aqui faria o MP reentregar para sempre (teste real do dono em 2026-09-29).
+    if (error instanceof MercadoPagoApiError && error.status === 404) {
+      logger.info("billing.webhook.payment_not_found", { paymentId: providerEventId });
+      throw new WebhookIgnored("Pagamento não encontrado no Mercado Pago.");
+    }
+    throw error;
+  }
 
   // Corrida (revisão de segurança 2026-09-28, achado MÉDIA): o MP pode reentregar a mesma
   // notificação quase simultaneamente (retry de rede, ou 2 notificações de status diferentes

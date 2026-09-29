@@ -14,7 +14,8 @@ vi.mock("@/lib/email", async () => {
   return { ...actual, sendMail: vi.fn(async () => ({ sent: true })) };
 });
 
-const { handleMercadoPagoWebhook } = await import("@/modules/billing/webhook");
+const { handleMercadoPagoWebhook, WebhookIgnored } = await import("@/modules/billing/webhook");
+const { MercadoPagoApiError } = await import("@/modules/billing/mercadopago");
 
 const prisma = getPrisma();
 const WEBHOOK_SECRET = "it-webhook-secret";
@@ -173,6 +174,24 @@ describe("handleMercadoPagoWebhook — idempotência (§6.10)", () => {
     });
     expect(event.processedAt).not.toBeNull();
     expect(event.payload).toMatchObject({ voidedInvoicePayment: true });
+  });
+
+  it("pagamento inexistente no MP (404 — ex.: 'Simular notificação' com data.id=123456) vira ignored, nunca 500", async () => {
+    const { tenant } = await makeSubscriptionWithOpenInvoice("payment-404");
+    cleanupTenantIds.push(tenant.id);
+    await seedWebhookSecret();
+
+    const dataId = "123456";
+    const requestId = "req-404";
+    const ts = String(Math.floor(Date.now() / 1000));
+    const gateway = {
+      createPixPayment: vi.fn(),
+      getPayment: vi.fn().mockRejectedValue(new MercadoPagoApiError("Mercado Pago recusou a consulta do pagamento (404).", 404)),
+    };
+
+    await expect(
+      handleMercadoPagoWebhook({ xSignature: signManifest(dataId, requestId, ts), xRequestId: requestId, dataId, gateway }),
+    ).rejects.toBeInstanceOf(WebhookIgnored);
   });
 
   it("notificação com type diferente de 'payment' (ex.: merchant_order) é ignorada SEM reconsultar o gateway (conferido contra o Parque das Feiras)", async () => {
