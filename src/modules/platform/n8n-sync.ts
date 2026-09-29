@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { getPublicBaseUrl } from "@/lib/public-url";
 import { loadPlatformSettingsRow, readGenericSecret } from "./secrets";
 import { regenerateInternalApiSecret } from "./service";
+import { createEvolutionClient } from "@/modules/whatsapp/evolution-client";
 import { createN8nClient, N8nApiError, type N8nClient, type N8nNode, type N8nWorkflow } from "./n8n-client";
 
 /**
@@ -44,6 +45,12 @@ export type N8nSyncSummary = {
   errosWorkflowId: string | null;
   /** `null` quando `innochat-cron` não foi encontrado nesta sincronização — ver `warnings`. */
   cronWorkflowId: string | null;
+  /** Base derivada do nó Webhook do bot (ver `deriveWebhookBaseUrl`) e gravada em `n8nWebhookBaseUrl`. */
+  webhookBaseUrl: string;
+  /** Instâncias de WhatsApp (não removidas) cujo webhook na Evolution foi reapontado para `webhookBaseUrl`. */
+  webhooksReapontados: number;
+  /** Instâncias que a Evolution recusou/não respondeu — a sync continua; ver `warnings`. */
+  webhooksFalhos: number;
   credentialsRotated: number;
   nodesRebound: number;
   /** Avisos que não impedem a sync de terminar (ex.: `innochat-cron` ausente). */
@@ -196,6 +203,80 @@ function rebindHttpCredentials(workflow: N8nWorkflow, ids: { painel: string; evo
   return rebound;
 }
 
+
+const WEBHOOK_NODE_TYPE = "n8n-nodes-base.webhook";
+
+/**
+ * Base de PRODUÇÃO do webhook do bot, derivada do nó `n8n-nodes-base.webhook` do workflow.
+ *
+ * Regra do n8n (provada com curl em produção, 2026-09-29): quando o `path` do nó tem parâmetro
+ * dinâmico (`innochat/evolution/:token`), a rota registrada é PREFIXADA pelo `webhookId` do nó:
+ * `/webhook/<webhookId>/<path>` — sem o prefixo o n8n responde 404 "webhook not registered".
+ * Sem parâmetro, a rota é `/webhook/<path>`.
+ *
+ *   - com `:token` no fim: `<n8nBaseUrl>/webhook/<webhookId>/<path sem o segmento :token>`
+ *     (a URL final de cada instância é `<base>/<webhookToken>`);
+ *   - sem parâmetro:        `<n8nBaseUrl>/webhook/<path>`.
+ *
+ * Nó ausente, sem `path`, sem `webhookId` (quando exigido) ou com parâmetro fora da última
+ * posição → `DomainError` legível, em vez de gravar uma URL que dá 404 em silêncio.
+ */
+export function deriveWebhookBaseUrl(n8nBaseUrl: string, nodes: N8nNode[]): string {
+  const node = nodes.find((n) => n.type === WEBHOOK_NODE_TYPE);
+  if (!node) {
+    throw new DomainError("N8N_WEBHOOK_NODE_NOT_FOUND", 'O workflow "innochat-bot" não tem o nó Webhook — reimporte innochat-bot.json (ver n8n/README.md).');
+  }
+  const rawPath = String((node.parameters as { path?: unknown } | undefined)?.path ?? "").replace(/^\/+|\/+$/g, "");
+  if (!rawPath) {
+    throw new DomainError("N8N_WEBHOOK_PATH_INVALID", "O nó Webhook do bot está sem path — reimporte innochat-bot.json.");
+  }
+  const segments = rawPath.split("/");
+  const root = `${n8nBaseUrl.replace(/\/+$/, "")}/webhook`;
+  if (!segments.some((s) => s.startsWith(":"))) return `${root}/${rawPath}`;
+
+  const last = segments[segments.length - 1]!;
+  const fixed = segments.slice(0, -1);
+  if (!last.startsWith(":") || fixed.some((s) => s.startsWith(":"))) {
+    throw new DomainError("N8N_WEBHOOK_PATH_INVALID", `O path do nó Webhook ("${rawPath}") deve ter um único parâmetro, no último segmento (ex.: innochat/evolution/:token).`);
+  }
+  const webhookId = typeof node.webhookId === "string" ? node.webhookId.trim() : "";
+  if (!webhookId) {
+    throw new DomainError("N8N_WEBHOOK_ID_MISSING", "O nó Webhook do bot não tem webhookId — abra e salve o workflow no n8n (ou reimporte innochat-bot.json) e sincronize de novo.");
+  }
+  return `${root}/${webhookId}${fixed.length ? `/${fixed.join("/")}` : ""}`;
+}
+
+/**
+ * Reaponta o webhook de cada instância viva na Evolution para `<base>/<webhookToken>`. Falha numa
+ * instância NUNCA derruba a sync: conta, loga (sem token) e segue.
+ */
+async function repointInstanceWebhooks(
+  evolutionApiUrl: string,
+  evolutionApiKey: string,
+  webhookBaseUrl: string,
+): Promise<{ repointed: number; failed: number }> {
+  const instances = await getPrisma().whatsappInstance.findMany({
+    where: { deletedAt: null },
+    select: { instanceName: true, webhookToken: true },
+  });
+  const evolution = createEvolutionClient(evolutionApiUrl, evolutionApiKey);
+  let repointed = 0;
+  let failed = 0;
+  for (const instance of instances) {
+    try {
+      await evolution.setWebhook(instance.instanceName, `${webhookBaseUrl}/${instance.webhookToken}`);
+      repointed += 1;
+    } catch (error) {
+      failed += 1;
+      logger.warn("platform.n8n_sync.webhook_repoint_failed", {
+        instanceName: instance.instanceName,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return { repointed, failed };
+}
+
 /** `docs/contratos.md` — orquestra tudo. Nunca ativa workflow (ação separada, ver `activateBotWorkflow`). */
 export async function syncN8n(updatedByUserId: string): Promise<N8nSyncSummary> {
   const config = await loadConfigOrThrow();
@@ -234,6 +315,7 @@ export async function syncN8n(updatedByUserId: string): Promise<N8nSyncSummary> 
   }, new URL(config.n8nBaseUrl).hostname);
 
   const botWorkflow = await resolveWorkflow(client, current?.n8nWorkflowBotId ?? null, DEFAULT_BOT_WORKFLOW_ID, "innochat-bot");
+  const webhookBaseUrl = deriveWebhookBaseUrl(config.n8nBaseUrl, botWorkflow.nodes);
   const configNode = botWorkflow.nodes.find((n) => n.name === CONFIG_NODE_NAME);
   if (configNode) {
     setConfigAssignment(configNode, "painelUrl", painelUrl);
@@ -289,13 +371,23 @@ export async function syncN8n(updatedByUserId: string): Promise<N8nSyncSummary> 
       n8nCredApiId: n8nCredId,
       n8nWorkflowBotId: botWorkflow.id,
       n8nWorkflowErrosId: errosWorkflow.id,
+      // Derivado do nó Webhook: sobrescreve qualquer valor manual (o campo do admin é só ponto de partida).
+      n8nWebhookBaseUrl: webhookBaseUrl,
       // Preserva o id anterior se este round não achou o cron (transitório) — só grava um id
       // novo/confirmado; nunca apaga uma referência válida por causa de uma falha passageira.
       ...(cronWorkflow ? { n8nWorkflowCronId: cronWorkflow.id } : {}),
     },
   });
 
+  // Depois de gravar a base: instâncias criadas com a URL antiga (sem o webhookId) recebiam 404.
+  const { repointed, failed } = await repointInstanceWebhooks(config.evolutionApiUrl, config.evolutionApiKey, webhookBaseUrl);
+  if (failed > 0) {
+    warnings.push(`${failed} número(s) de WhatsApp não tiveram o webhook reapontado na Evolution — verifique a Evolution e sincronize de novo.`);
+  }
+
   logger.info("platform.n8n_sync.completed", {
+    webhooksReapontados: repointed,
+    webhooksFalhos: failed,
     botWorkflowId: botWorkflow.id,
     errosWorkflowId: errosWorkflow.id,
     cronWorkflowId: cronWorkflow?.id ?? null,
@@ -306,6 +398,9 @@ export async function syncN8n(updatedByUserId: string): Promise<N8nSyncSummary> 
     botWorkflowId: botWorkflow.id,
     errosWorkflowId: errosWorkflow.id,
     cronWorkflowId: cronWorkflow?.id ?? null,
+    webhookBaseUrl,
+    webhooksReapontados: repointed,
+    webhooksFalhos: failed,
     credentialsRotated: 3,
     nodesRebound: botRebound + errosRebound + cronRebound,
     warnings,

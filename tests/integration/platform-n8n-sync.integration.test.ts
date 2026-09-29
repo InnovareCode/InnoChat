@@ -17,8 +17,22 @@ const prisma = getPrisma();
 const N8N_BASE_URL = "https://n8n.example.test";
 const EVOLUTION_URL = "https://evolution.example.test";
 
-function makeBotWorkflow(): N8nWorkflow {
+type WebhookNodeOptions = { path: string; webhookId?: string | null } | "absent";
+
+function makeBotWorkflow(
+  webhook: WebhookNodeOptions = { path: "innochat/evolution/:token", webhookId: "b12d5bcf-6ca4-4d91-b0d7-d255d196cfd5" },
+): N8nWorkflow {
   const nodes: N8nNode[] = [
+    ...(webhook === "absent"
+      ? []
+      : [
+          {
+            name: "Webhook",
+            type: "n8n-nodes-base.webhook",
+            parameters: { httpMethod: "POST", path: webhook.path },
+            ...(webhook.webhookId ? { webhookId: webhook.webhookId } : {}),
+          } as N8nNode,
+        ]),
     {
       name: "Config",
       type: "n8n-nodes-base.set",
@@ -93,6 +107,10 @@ type FakeServerOptions = {
   hasCronWorkflow?: boolean;
   /** `true` = n8n antigo que recusa `allowedHttpRequestDomains`/`allowedDomains` ("additional property"). */
   rejectsDomainFields?: boolean;
+  /** Nó Webhook do bot (padrão: path com `:token` + webhookId de produção). */
+  webhook?: WebhookNodeOptions;
+  /** Evolution: nomes de instância cujo `POST /webhook/set` deve falhar (500). */
+  failingEvolutionInstances?: string[];
 };
 
 /** Simula a API pública do n8n, com as duas superfícies possíveis controladas por `options` — ver cabeçalho do arquivo. */
@@ -102,8 +120,9 @@ function createFakeN8nServer(options: FakeServerOptions) {
   const createdCredentials: Array<{ id: string; name: string; type: string; data: Record<string, string> }> = [];
   const patchedCredentialIds: string[] = [];
   const activateCalls: Array<{ id: string; route: "publish" | "unpublish" | "activate" | "deactivate" }> = [];
+  const evolutionWebhookCalls: Array<{ instanceName: string; url: string }> = [];
   const workflows = new Map<string, N8nWorkflow>();
-  workflows.set("levHnMSXf1dOR3gS", makeBotWorkflow());
+  workflows.set("levHnMSXf1dOR3gS", makeBotWorkflow(options.webhook));
   workflows.set("GZSwTNgvVt4LYnwW", makeErrosWorkflow());
   if (options.hasCronWorkflow !== false) {
     workflows.set("dPMhT4MqGglCpFSw", makeCronWorkflow());
@@ -117,6 +136,18 @@ function createFakeN8nServer(options: FakeServerOptions) {
     const url = new URL(String(input));
     const method = (init?.method ?? "GET").toUpperCase();
     const path = url.pathname;
+
+    if (url.origin === EVOLUTION_URL) {
+      const setMatch = path.match(/^\/webhook\/set\/([^/]+)$/);
+      if (setMatch && method === "POST") {
+        const instanceName = decodeURIComponent(setMatch[1]!);
+        const body = JSON.parse(String(init?.body)) as { webhook: { url: string } };
+        if (options.failingEvolutionInstances?.includes(instanceName)) return jsonResponse(500, { message: "boom" });
+        evolutionWebhookCalls.push({ instanceName, url: body.webhook.url });
+        return jsonResponse(200, {});
+      }
+      throw new Error(`fake evolution: rota não simulada ${method} ${path}`);
+    }
 
     if (path === "/api/v1/credentials" && method === "POST") {
       credentialCounter += 1;
@@ -184,7 +215,7 @@ function createFakeN8nServer(options: FakeServerOptions) {
     throw new Error(`fake n8n server: rota não simulada ${method} ${path}`);
   });
 
-  return { fetchMock, createdCredentials, deletedCredentialIds, patchedCredentialIds, activateCalls, workflows };
+  return { fetchMock, evolutionWebhookCalls, createdCredentials, deletedCredentialIds, patchedCredentialIds, activateCalls, workflows };
 }
 
 const createdUserIds: string[] = [];
@@ -455,5 +486,95 @@ describe("syncN8n — restrição de domínio das credenciais (allowedDomains)",
     for (const cred of server.createdCredentials) {
       expect(cred.data).not.toHaveProperty("allowedDomains");
     }
+  });
+});
+
+describe("syncN8n — URL de webhook derivada do nó Webhook do bot", () => {
+  it("path com parâmetro (:token): base = <n8n>/webhook/<webhookId>/<path sem :token>, gravada em n8nWebhookBaseUrl", async () => {
+    const { syncN8n } = await import("@/modules/platform/n8n-sync");
+    const admin = await makeAdminUser();
+    await prisma.platformSettings.update({ where: { id: 1 }, data: { n8nWebhookBaseUrl: "https://valor-manual.example.test/webhook" } });
+    const server = createFakeN8nServer({ supportsCredentialPatch: true, supportsPublish: true });
+    vi.stubGlobal("fetch", server.fetchMock);
+
+    const summary = await syncN8n(admin.id);
+
+    const expected = `${N8N_BASE_URL}/webhook/b12d5bcf-6ca4-4d91-b0d7-d255d196cfd5/innochat/evolution`;
+    expect(summary.webhookBaseUrl).toBe(expected);
+    const settings = await prisma.platformSettings.findUnique({ where: { id: 1 } });
+    expect(settings?.n8nWebhookBaseUrl).toBe(expected); // sobrescreve o valor manual
+  });
+
+  it("path sem parâmetro: base = <n8n>/webhook/<path>, sem webhookId", async () => {
+    const { syncN8n } = await import("@/modules/platform/n8n-sync");
+    const admin = await makeAdminUser();
+    const server = createFakeN8nServer({ supportsCredentialPatch: true, supportsPublish: true, webhook: { path: "innochat/evolution" } });
+    vi.stubGlobal("fetch", server.fetchMock);
+
+    const summary = await syncN8n(admin.id);
+
+    expect(summary.webhookBaseUrl).toBe(`${N8N_BASE_URL}/webhook/innochat/evolution`);
+  });
+
+  it("nó Webhook ausente: DomainError legível", async () => {
+    const { syncN8n } = await import("@/modules/platform/n8n-sync");
+    const admin = await makeAdminUser();
+    const server = createFakeN8nServer({ supportsCredentialPatch: true, supportsPublish: true, webhook: "absent" });
+    vi.stubGlobal("fetch", server.fetchMock);
+
+    await expect(syncN8n(admin.id)).rejects.toMatchObject({ code: "N8N_WEBHOOK_NODE_NOT_FOUND" });
+  });
+
+  it("path com parâmetro mas sem webhookId: DomainError legível", async () => {
+    const { syncN8n } = await import("@/modules/platform/n8n-sync");
+    const admin = await makeAdminUser();
+    const server = createFakeN8nServer({
+      supportsCredentialPatch: true,
+      supportsPublish: true,
+      webhook: { path: "innochat/evolution/:token", webhookId: null },
+    });
+    vi.stubGlobal("fetch", server.fetchMock);
+
+    await expect(syncN8n(admin.id)).rejects.toMatchObject({ code: "N8N_WEBHOOK_ID_MISSING" });
+  });
+});
+
+describe("syncN8n — reapontamento dos webhooks das instâncias na Evolution", () => {
+  const tenantIds: string[] = [];
+
+  afterEach(async () => {
+    await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
+    tenantIds.length = 0;
+  });
+
+  it("reaponta cada instância viva para <base>/<webhookToken>; falha numa não derruba a sync e é contada", async () => {
+    const { syncN8n } = await import("@/modules/platform/n8n-sync");
+    const admin = await makeAdminUser();
+    const tag = randomUUID().slice(0, 8);
+    const tenant = await prisma.tenant.create({ data: { slug: `it-sync-${tag}`, name: `IT sync ${tag}`, timezone: "UTC" } });
+    tenantIds.push(tenant.id);
+    const ok = `it-ok-${tag}`;
+    const bad = `it-bad-${tag}`;
+    const gone = `it-gone-${tag}`;
+    const okToken = `tok-${randomUUID()}`;
+    for (const [instanceName, webhookToken, deletedAt] of [
+      [ok, okToken, null],
+      [bad, `tok-${randomUUID()}`, null],
+      [gone, `tok-${randomUUID()}`, new Date()],
+    ] as const) {
+      await prisma.whatsappInstance.create({ data: { tenantId: tenant.id, instanceName, label: instanceName, webhookToken, deletedAt } });
+    }
+    const server = createFakeN8nServer({ supportsCredentialPatch: true, supportsPublish: true, failingEvolutionInstances: [bad] });
+    vi.stubGlobal("fetch", server.fetchMock);
+
+    const summary = await syncN8n(admin.id);
+
+    const base = `${N8N_BASE_URL}/webhook/b12d5bcf-6ca4-4d91-b0d7-d255d196cfd5/innochat/evolution`;
+    const mine = server.evolutionWebhookCalls.filter((c) => c.instanceName.endsWith(tag));
+    expect(mine).toEqual([{ instanceName: ok, url: `${base}/${okToken}` }]); // removida não é tocada; falha não entra
+    expect(summary.webhooksFalhos).toBeGreaterThanOrEqual(1);
+    expect(summary.webhooksReapontados).toBeGreaterThanOrEqual(1);
+    expect(summary.warnings.some((w) => w.includes("reapontado"))).toBe(true);
+    expect(summary.botWorkflowId).toBe("levHnMSXf1dOR3gS"); // a sync terminou mesmo com a falha
   });
 });

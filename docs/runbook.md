@@ -133,6 +133,17 @@ Se o banco ou n8n estiver indisponível, o status fica `degraded` ou `error`.
 
 3. Verifique o n8n (**Admin → Configurações da plataforma**):
    - `n8nWebhookBaseUrl` está preenchido? Se não, o bot não recebe mensagens.
+   - **Bot não responde e o n8n não mostra nenhuma execução?** Teste a URL com e sem o `webhookId`
+     (o n8n prefixa com o `webhookId` do nó Webhook a rota que tem parâmetro no path):
+     ```bash
+     curl -i -X POST https://<n8n>/webhook/innochat/evolution/teste                      # sem o webhookId
+     curl -i -X POST https://<n8n>/webhook/<webhookId>/innochat/evolution/teste          # com o webhookId
+     ```
+     `404 "webhook not registered"` no primeiro e `200` no segundo = a URL das instâncias está
+     sem o `webhookId`. Correção: **Admin → Configurações → Sincronizar n8n** (deriva a base
+     correta, grava em `n8nWebhookBaseUrl` e reaponta o webhook de todas as instâncias na
+     Evolution; a mensagem de sucesso mostra quantas foram reapontadas e quantas falharam).
+     Se o `webhookId` do nó mudar (workflow reimportado), sincronize de novo.
    - Os workflows `innochat-bot` estão ativos? Entre no n8n e ativa se preciso.
 
 **Ações:**

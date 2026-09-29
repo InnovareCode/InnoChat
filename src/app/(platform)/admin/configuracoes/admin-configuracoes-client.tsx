@@ -496,7 +496,7 @@ export function AdminConfiguracoesClient({
                 />
               )}
             </Field>
-            <Field label="URL base de webhook do n8n" hint="Para onde a Evolution manda os eventos de cada instância.">
+            <Field label="URL base de webhook do n8n" hint="Preenchido automaticamente por “Sincronizar n8n” (a partir do nó Webhook do bot); a sincronização sobrescreve o que estiver aqui.">
               {(fieldProps) => (
                 <Input
                   {...fieldProps}
@@ -542,7 +542,14 @@ export function AdminConfiguracoesClient({
           {syncSummary ? (
             <Alert variant="success">
               Sincronizado: {syncSummary.credentialsRotated} credencial(is) rotacionada(s), {syncSummary.nodesRebound}{" "}
-              nó(s) reconectado(s). Workflow do bot: <code className="text-xs">{syncSummary.botWorkflowId}</code>.
+              nó(s) reconectado(s). Workflow do bot: <code className="text-xs">{syncSummary.botWorkflowId}</code>. Webhook
+              reapontado em {syncSummary.webhooksReapontados} número(s) de WhatsApp
+              {syncSummary.webhooksFalhos > 0 ? `, ${syncSummary.webhooksFalhos} com falha` : ""}.
+              {syncSummary.warnings.map((w) => (
+                <span key={w} className="block">
+                  {w}
+                </span>
+              ))}
             </Alert>
           ) : null}
         </CardContent>

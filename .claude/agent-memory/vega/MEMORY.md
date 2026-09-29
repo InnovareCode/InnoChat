@@ -29,3 +29,4 @@
 - [Prisma: campo Json? precisa de Prisma.JsonNull, não `null` literal, pra zerar de verdade](prisma_json_null_field.md) — achado nos testes de Admin Saúde.
 - [ProviderEvent(provider="manual") reaproveitado pra auditoria de baixa manual de fatura](provider_event_reused_for_manual_audit.md) — por que não criei tabela de auditoria nova.
 - [Segredos da plataforma cifrados + par MP prod/sandbox](platform_secrets_encryption.md) — enc:v1:, migração preguiçosa, regra de leitura única, testes.
+- [n8n prefixa webhook com parâmetro no path pelo webhookId](n8n_webhook_path_param_prefixed_by_webhookid.md) — causa do bot mudo em prod (2026-09-29); base derivada no syncN8n + reapontamento.

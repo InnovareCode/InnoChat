@@ -1023,8 +1023,22 @@ publish/unpublish e PATCH de credencial ou vai cair nos fallbacks.
      Evolution, `n8nApiUrl` → n8n, senão → Painel). `PUT /workflows/{id}` com o objeto
      filtrado (`name`, `nodes`, `connections`, `settings`).
   5. Mesma coisa para `innochat-erros` (nó `Config erros`, campo `n8nApiUrl`).
-  6. **Nunca ativa** nenhum dos dois — grava só os ids em `PlatformSettings`.
-  Erros: `N8N_NOT_CONFIGURED`, `EVOLUTION_NOT_CONFIGURED`, `N8N_WORKFLOW_NOT_FOUND`, `FORBIDDEN`.
+  6. **URL do webhook derivada do nó Webhook do bot** (`deriveWebhookBaseUrl`). Regra do n8n:
+     quando o `path` do nó tem parâmetro dinâmico (`innochat/evolution/:token`), a rota de
+     produção é **prefixada pelo `webhookId` do nó**. Base gravada em
+     `PlatformSettings.n8nWebhookBaseUrl` (sobrescreve o valor manual do admin):
+     - com `:token` no último segmento: `<n8nBaseUrl>/webhook/<webhookId>/<path sem o :token>`
+       (ex.: `https://n8n.../webhook/b12d5bcf-.../innochat/evolution`);
+     - sem parâmetro: `<n8nBaseUrl>/webhook/<path>`.
+     A URL de cada instância continua `<base>/<webhookToken>`. Erros legíveis:
+     `N8N_WEBHOOK_NODE_NOT_FOUND`, `N8N_WEBHOOK_PATH_INVALID`, `N8N_WEBHOOK_ID_MISSING`.
+  7. **Reaponta as instâncias existentes**: para cada `WhatsappInstance` com `deletedAt = null`,
+     `evolution.setWebhook(instanceName, <base>/<webhookToken>)`. Falha numa instância não
+     derruba a sync: `N8nSyncSummary.webhooksReapontados` / `webhooksFalhos` (+ aviso em
+     `warnings`). "Atualizar status"/reconexão do tenant NÃO reaplicam o webhook (só a criação
+     da instância e esta sync o fazem).
+  8. **Nunca ativa** nenhum dos dois — grava só os ids em `PlatformSettings`.
+  Erros: `N8N_NOT_CONFIGURED`, `EVOLUTION_NOT_CONFIGURED`, `N8N_WORKFLOW_NOT_FOUND`, `N8N_WEBHOOK_*`, `FORBIDDEN`.
 - `activateBotWorkflowAction()`/`deactivateBotWorkflowAction(): Result<{ activated: boolean }>`
   — ação separada, de propósito (item 4c do pedido do dono); tenta publish/unpublish e cai para
   activate/deactivate em instância antiga. Erro `N8N_NOT_SYNCED` se `syncN8nAction` nunca rodou
