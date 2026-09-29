@@ -5,7 +5,7 @@ export type PageHeaderProps = {
   /** Normalmente uma string; aceita `ReactNode` para os casos em que o título carrega um avatar
    * ao lado do nome (ex.: detalhe de profissional) — sem criar uma segunda prop só para isso. */
   title: React.ReactNode;
-  description?: string;
+  description?: React.ReactNode;
   action?: React.ReactNode;
   className?: string;
   /** `hero` (docs premium, ajuste tipográfico pedido pelo dono): só a tela "Início" — ~40px,

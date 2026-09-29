@@ -21,6 +21,8 @@ import { navIconFor } from "@/components/shell/nav-items";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useLiveAppointments, useOnAppointmentsChanged } from "@/components/notifications/notification-center-provider";
+import { AppointmentSourceBadge, AppointmentStatusBadge } from "@/components/agenda/appointment-status";
 import { Select } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, colorForId } from "@/components/ui/avatar";
@@ -61,6 +63,7 @@ type ApptRaw = {
   startsAt: string | Date;
   endsAt: string | Date;
   status: ApptStatus;
+  source?: "WHATSAPP" | "PANEL";
   professionalId: string;
   contact: { name: string | null; phoneE164: string | null };
   service: { name: string };
@@ -137,6 +140,8 @@ function workingHoursSummary(hours: { startTime: string; endTime: string }[]): s
   return hours.map((h) => `${h.startTime}–${h.endTime}`).join(", ");
 }
 
+const DATE_PARAM_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 export function AgendaClient({
   tenantSlug,
   timezone,
@@ -151,7 +156,12 @@ export function AgendaClient({
   writeBlocked?: boolean;
 }) {
   const [view, setView] = useState<"day" | "week">("day");
-  const [dateISO, setDateISO] = useState(() => formatInTimeZone(new Date(), timezone, "yyyy-MM-dd"));
+  const searchParams = useSearchParams();
+  // `?data=YYYY-MM-DD` (link das notificações): abre a agenda direto naquele dia.
+  const [dateISO, setDateISO] = useState(() => {
+    const requested = searchParams.get("data");
+    return requested && DATE_PARAM_RE.test(requested) ? requested : formatInTimeZone(new Date(), timezone, "yyyy-MM-dd");
+  });
   const [appointments, setAppointments] = useState<ApptRaw[]>([]);
   const [exceptions, setExceptions] = useState<ScheduleExceptionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -163,7 +173,6 @@ export function AgendaClient({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [rescheduling, setRescheduling] = useState(false);
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { notify } = useToast();
 
   // Paleta de comando (Ctrl+K) e o atalho "Novo agendamento" do Início linkam para
@@ -180,6 +189,17 @@ export function AgendaClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  // Já na Agenda e clicou numa notificação de outro dia: o parâmetro muda, o dia acompanha.
+  useEffect(() => {
+    const requested = searchParams.get("data");
+    if (!requested || !DATE_PARAM_RE.test(requested)) return;
+    const id = setTimeout(() => {
+      setView("day");
+      setDateISO(requested);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [searchParams]);
+
   const activeProfessionals = useMemo(() => professionals.filter((p) => p.active), [professionals]);
   const agendaServices: AgendaService[] = services;
   const agendaProfessionals: AgendaProfessional[] = professionals;
@@ -187,8 +207,9 @@ export function AgendaClient({
   const rangeFrom = view === "day" ? dateISO : startOfWeekISO(dateISO);
   const rangeDays = view === "day" ? 1 : 7;
 
-  const load = useCallback(() => {
-    setLoading(true);
+  // `silent`: recarga por notificação nova — não pisca o skeleton, só troca os dados.
+  const load = useCallback((silent?: boolean) => {
+    if (silent !== true) setLoading(true);
     const from = fromZonedTime(`${rangeFrom}T00:00:00`, timezone);
     const to = fromZonedTime(`${addDaysISO(rangeFrom, rangeDays)}T00:00:00`, timezone);
     Promise.all([
@@ -212,6 +233,18 @@ export function AgendaClient({
     const timeoutId = setTimeout(load, 0);
     return () => clearTimeout(timeoutId);
   }, [load]);
+
+  // Entrou/mudou agendamento (ex.: cliente marcou pelo WhatsApp): recarrega sem F5.
+  useOnAppointmentsChanged(() => load(true));
+
+  // Sinaliza ao provider que há arraste em andamento (ele adia o refresh ao vivo).
+  useEffect(() => {
+    if (!draggingId) return;
+    document.body.dataset.apptDrag = "1";
+    return () => {
+      delete document.body.dataset.apptDrag;
+    };
+  }, [draggingId]);
 
   useEffect(() => {
     const interval = setInterval(() => setNowTick(new Date()), 60_000);
@@ -555,9 +588,10 @@ function HoverSummary({ appt, timezone }: { appt: ApptRaw; timezone: string }) {
       <p className="mt-0.5 tabular-nums text-text-secondary">
         {formatTimeLabel(appt.startsAt, timezone)}–{formatTimeLabel(appt.endsAt, timezone)}
       </p>
-      <Badge variant={STATUS_BADGE_VARIANT[appt.status]} className="mt-1.5">
-        {appt.status === "SCHEDULED" ? "Agendado" : appt.status === "COMPLETED" ? "Concluído" : appt.status === "NO_SHOW" ? "Faltou" : "Cancelado"}
-      </Badge>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <AppointmentStatusBadge status={appt.status} />
+        <AppointmentSourceBadge source={appt.source} />
+      </div>
     </div>
   );
 }
@@ -591,6 +625,7 @@ function DraggableAppointmentBlock({
     disabled: !draggable,
   });
   const [hover, setHover] = useState(false);
+  const highlighted = useLiveAppointments().highlightedIds.has(appt.id);
 
   return (
     <div
@@ -610,6 +645,7 @@ function DraggableAppointmentBlock({
           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
           draggable ? "cursor-grab touch-none active:cursor-grabbing" : "cursor-pointer",
           isDragging && "opacity-0",
+          highlighted && "appt-highlight",
           STATUS_BLOCK_CLASSES[appt.status],
         )}
         {...listeners}
@@ -686,6 +722,7 @@ function DayView({
   onDragStateChange?: (id: string | null) => void;
   dragDisabled?: boolean;
 }) {
+  const highlightedIds = useLiveAppointments().highlightedIds;
   const { notify } = useToast();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -938,7 +975,7 @@ function DayView({
                       key={a.id}
                       type="button"
                       onClick={() => onApptClick(a)}
-                      className="flex items-center justify-between gap-3 p-4 text-left transition-colors duration-150 hover:bg-bg motion-reduce:transition-none"
+                      className={cn("flex items-center justify-between gap-3 p-4 text-left transition-colors duration-150 hover:bg-bg motion-reduce:transition-none", highlightedIds.has(a.id) && "appt-highlight")}
                     >
                       <div>
                         <p className="text-sm font-medium text-text">{a.service.name}</p>
@@ -996,6 +1033,7 @@ function WeekView({
   onDayClick: (dateISO: string) => void;
   onApptClick: (a: ApptRaw) => void;
 }) {
+  const highlightedIds = useLiveAppointments().highlightedIds;
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysISO(weekStartISO, i)), [weekStartISO]);
 
   const filteredProfessionals = professionalId ? professionals.filter((p) => p.id === professionalId) : professionals;
@@ -1127,6 +1165,7 @@ function WeekView({
                         className={cn(
                           "absolute z-10 overflow-hidden rounded-[4px] px-1.5 py-0.5 text-left text-[11px] leading-tight shadow-card transition-transform duration-150 hover:-translate-y-px motion-reduce:transition-none motion-reduce:hover:translate-y-0",
                           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
+                          highlightedIds.has(a.id) && "appt-highlight",
                           STATUS_BLOCK_CLASSES[a.status],
                         )}
                         title={`${formatTimeLabel(a.startsAt, timezone)} · ${a.service.name} · ${a.professional.name}`}
@@ -1176,7 +1215,7 @@ function WeekView({
                       key={a.id}
                       type="button"
                       onClick={() => onApptClick(a)}
-                      className="flex items-center justify-between gap-3 p-3 text-left transition-colors duration-150 hover:bg-bg motion-reduce:transition-none"
+                      className={cn("flex items-center justify-between gap-3 p-3 text-left transition-colors duration-150 hover:bg-bg motion-reduce:transition-none", highlightedIds.has(a.id) && "appt-highlight")}
                     >
                       <div>
                         <p className="text-sm font-medium text-text">{a.service.name}</p>

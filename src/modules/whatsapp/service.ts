@@ -184,7 +184,14 @@ async function syncConnectionState(instance: InstanceRow, tenantId: string, evol
 
   const nextStatus = resolveNextConnectionStatus(instance.status, mapped ?? instance.status);
   if (nextStatus !== instance.status) {
-    await forTenant(tenantId).whatsappInstance.update({ where: { id: instance.id }, data: { status: nextStatus } });
+    await forTenant(tenantId).whatsappInstance.update({
+      where: { id: instance.id },
+      data: {
+        status: nextStatus,
+        // Queda inesperada (estava CONNECTED): alimenta a notificação WHATSAPP_DISCONNECTED.
+        ...(nextStatus === "DISCONNECTED" && instance.status === "CONNECTED" ? { disconnectedAt: new Date() } : {}),
+      },
+    });
   }
   return { status: nextStatus, phoneE164: instance.phoneE164, blockedReason: null };
 }
@@ -263,7 +270,7 @@ export async function disconnectWhatsapp(
 
   const updated = await forTenant(tenantId).whatsappInstance.update({
     where: { id: instance.id },
-    data: { status: "DISCONNECTED", phoneE164: null },
+    data: { status: "DISCONNECTED", phoneE164: null, disconnectedAt: null },
   });
   return toView(updated);
 }
@@ -288,7 +295,7 @@ export async function removeWhatsappInstance(
 
   await forTenant(tenantId).whatsappInstance.update({
     where: { id: instance.id },
-    data: { deletedAt: new Date(), status: "DISCONNECTED", phoneE164: null },
+    data: { deletedAt: new Date(), status: "DISCONNECTED", phoneE164: null, disconnectedAt: null },
   });
   return { id: instance.id };
 }

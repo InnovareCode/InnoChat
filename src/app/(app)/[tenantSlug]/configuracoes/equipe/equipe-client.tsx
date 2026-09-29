@@ -149,7 +149,7 @@ export function EquipeClient({
               <Button type="button" variant="secondary" onClick={() => setDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" isLoading={isPending}>
+              <Button type="submit" isLoading={isPending} loadingText="Enviando…">
                 Enviar convite
               </Button>
             </DialogFooter>

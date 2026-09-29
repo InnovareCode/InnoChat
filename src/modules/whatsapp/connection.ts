@@ -77,7 +77,7 @@ export async function applyConnectedNumber(params: {
 
   await db.whatsappInstance.update({
     where: { id: instanceId },
-    data: { status: "CONNECTED", phoneE164, lastConnectedAt: new Date() },
+    data: { status: "CONNECTED", phoneE164, lastConnectedAt: new Date(), disconnectedAt: null },
   });
 
   return { blocked: false };

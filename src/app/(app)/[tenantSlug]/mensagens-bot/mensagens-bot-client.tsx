@@ -248,7 +248,7 @@ export function MensagensBotClient({ tenantSlug, initialTexts }: { tenantSlug: s
             <Button type="button" variant="secondary" onClick={() => setConfirmReset(null)}>
               Cancelar
             </Button>
-            <Button type="button" variant="danger" onClick={handleReset} isLoading={isPending}>
+            <Button type="button" variant="danger" onClick={handleReset} isLoading={isPending} loadingText="Restaurando…">
               Restaurar
             </Button>
           </DialogFooter>
@@ -324,7 +324,7 @@ function EditDialogController({
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
-          <Button type="button" isLoading={isPending} onClick={() => onSave(text)}>
+          <Button type="button" isLoading={isPending} onClick={() => onSave(text)} loadingText="Salvando…">
             Salvar
           </Button>
         </DialogFooter>

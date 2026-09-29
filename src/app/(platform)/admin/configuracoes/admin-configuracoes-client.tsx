@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, CheckCircle2, Copy, KeyRound, Loader2, Power, PowerOff, RefreshCw, Scale, XCircle } from "lucide-react";
+import { Check, CheckCircle2, Copy, KeyRound, Power, PowerOff, RefreshCw, Scale, XCircle } from "lucide-react";
 import { cn } from "@/components/lib/cn";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
@@ -50,8 +50,7 @@ function TestConnectionButton({ onTest }: { onTest: () => Promise<TestResult> })
 
   return (
     <div className="flex flex-col gap-2">
-      <Button type="button" variant="secondary" size="sm" onClick={run} disabled={isPending} className="self-start">
-        {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+      <Button type="button" variant="secondary" size="sm" onClick={run} isLoading={isPending} loadingText="Testando…" className="self-start">
         Testar conexão
       </Button>
       {result ? (
@@ -453,7 +452,7 @@ export function AdminConfiguracoesClient({
             />
           </CardContent>
           <CardFooter>
-            <Button type="submit" isLoading={isPending}>
+            <Button type="submit" isLoading={isPending} loadingText="Salvando…">
               Salvar
             </Button>
           </CardFooter>
@@ -519,7 +518,7 @@ export function AdminConfiguracoesClient({
             />
           </CardContent>
           <CardFooter>
-            <Button type="submit" isLoading={isPending}>
+            <Button type="submit" isLoading={isPending} loadingText="Salvando…">
               Salvar
             </Button>
           </CardFooter>
@@ -644,7 +643,7 @@ export function AdminConfiguracoesClient({
             />
           </CardContent>
           <CardFooter>
-            <Button type="submit" isLoading={isPending}>
+            <Button type="submit" isLoading={isPending} loadingText="Salvando…">
               Salvar
             </Button>
           </CardFooter>
@@ -797,7 +796,7 @@ export function AdminConfiguracoesClient({
             </div>
           </CardContent>
           <CardFooter>
-            <Button type="submit" isLoading={isPending}>
+            <Button type="submit" isLoading={isPending} loadingText="Salvando…">
               Salvar
             </Button>
           </CardFooter>
@@ -841,7 +840,7 @@ export function AdminConfiguracoesClient({
               variant={confirmActivate === "off" ? "danger" : "primary"}
               onClick={() => handleToggleBot(confirmActivate === "on")}
               isLoading={isPending}
-            >
+             loadingText="Confirmando…">
               Confirmar
             </Button>
           </DialogFooter>

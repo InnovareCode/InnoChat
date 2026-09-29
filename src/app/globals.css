@@ -325,25 +325,92 @@ body {
   to { opacity: 0; transform: translateX(16px); }
 }
 
-/* Skeleton com shimmer (loading) — usado por `ui/skeleton.tsx`. Desliga com reduced motion
-   (fica só o tom sólido, sem o brilho correndo). */
+/* Sistema de espera padronizado (skeleton + barra de navegação + spinner + entrada de página).
+   Tudo só com tokens do tema; TODO movimento some com `prefers-reduced-motion`. */
+
+/* Skeleton: bloco sólido (tom da borda misturado à superfície). Com movimento permitido, um brilho
+   suave atravessa o bloco (1.8s, ease-in-out). Sem movimento fica só o tom sólido, estático. */
 .skeleton-shimmer {
-  background: linear-gradient(
-    100deg,
-    var(--color-border) 30%,
-    color-mix(in oklab, var(--color-border) 40%, white) 50%,
-    var(--color-border) 70%
-  );
-  background-size: 200% 100%;
+  --skeleton-base: color-mix(in oklab, var(--color-border) 70%, var(--color-surface));
+  --skeleton-glow: color-mix(in oklab, var(--color-border) 30%, var(--color-surface));
+  background-color: var(--skeleton-base);
 }
 @media (prefers-reduced-motion: no-preference) {
   .skeleton-shimmer {
-    animation: skeleton-shimmer 1.6s ease-in-out infinite;
+    background-image: linear-gradient(100deg, transparent 30%, var(--skeleton-glow) 50%, transparent 70%);
+    background-size: 220% 100%;
+    background-repeat: no-repeat;
+    animation: skeleton-shimmer 1.8s ease-in-out infinite;
   }
 }
 @keyframes skeleton-shimmer {
-  from { background-position: 150% 0; }
-  to { background-position: -50% 0; }
+  from { background-position: 160% 0; }
+  to { background-position: -60% 0; }
+}
+
+/* Entrada da página nova (150–250ms, sem bounce): fade + subida curta. Só CSS — o mesmo markup
+   no servidor e no cliente, então não há hydration mismatch com reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .page-enter {
+    animation: page-enter 200ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+}
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Barra de progresso de navegação (topo da tela). O brilho é uma sombra na cor primária. */
+.nav-progress-bar {
+  box-shadow: 0 0 10px color-mix(in oklab, var(--color-primary) 70%, transparent),
+    0 0 4px var(--color-primary);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nav-progress-run {
+    transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .nav-progress-fade {
+    transition: opacity 220ms ease-out;
+  }
+}
+
+/* Espera longa (> 1,5s): o Inno pulsando aparece sozinho, sem JS, por animation-delay. Antes do
+   atraso fica invisível e sem cliques (opacity 0 + pointer-events none). */
+.inno-wait {
+  opacity: 0;
+  pointer-events: none;
+  animation: inno-wait-in 260ms ease-out 1500ms forwards;
+}
+.inno-wait-pulse {
+  animation: inno-wait-pulse 1.6s ease-in-out 1500ms infinite;
+}
+@keyframes inno-wait-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes inno-wait-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .inno-wait { animation: inno-wait-in-static 0s linear 1500ms forwards; }
+  .inno-wait-pulse { animation: none; }
+}
+@keyframes inno-wait-in-static {
+  to { opacity: 1; }
+}
+
+/* Spinner: anel com um arco. Reduced motion: anel parado (o texto "…" comunica a espera). */
+.spinner-ring {
+  animation: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .spinner-ring {
+    animation: spinner-spin 700ms linear infinite;
+  }
+}
+@keyframes spinner-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Telas de autenticação (AuthShell) — fundo de marca escuro montado só com tokens do tema:
@@ -442,4 +509,56 @@ body {
 @keyframes wa-scan {
   from { transform: translateY(0); }
   to { transform: translateY(150px); }
+}
+
+/* Notificações (sino, painel e toasts) — 150-300 ms, sem bounce, desligado com reduced-motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .notif-panel {
+    animation: notif-sheet-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .notif-toast {
+    animation: toast-in 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .notif-bell-ring {
+    transform-origin: 50% 0;
+    animation: notif-bell-ring 800ms ease-in-out;
+  }
+  @media (min-width: 40rem) {
+    .notif-panel {
+      animation-name: notif-pop-in;
+      animation-duration: 180ms;
+    }
+  }
+}
+@keyframes notif-sheet-in {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes notif-pop-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes notif-bell-ring {
+  0%, 100% { transform: rotate(0); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-12deg); }
+  45% { transform: rotate(8deg); }
+  60% { transform: rotate(-6deg); }
+  75% { transform: rotate(3deg); }
+}
+
+/* Realce de agendamento que acabou de entrar/mudar (refresh ao vivo). Movimento: pulso do anel 2,6 s.
+   Reduced-motion: anel estático (sem animação) enquanto o realce durar. */
+.appt-highlight {
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .appt-highlight {
+    animation: appt-highlight 2600ms ease-out 1;
+  }
+}
+@keyframes appt-highlight {
+  0% { box-shadow: 0 0 0 2px var(--color-primary), 0 0 0 0 color-mix(in oklab, var(--color-primary) 45%, transparent); }
+  60% { box-shadow: 0 0 0 2px var(--color-primary), 0 0 0 10px color-mix(in oklab, var(--color-primary) 0%, transparent); }
+  100% { box-shadow: 0 0 0 2px var(--color-primary), 0 0 0 0 transparent; }
 }

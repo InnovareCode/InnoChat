@@ -136,13 +136,34 @@ model Membership {
   tenantId  String
   role      MembershipRole
   createdAt DateTime       @default(now())
+  // Central de notificações: "marcar todas como lidas" = tudo com createdAt <= este instante.
+  // Leitura individual fica em NotificationRead. Por (usuário, empresa) porque a Membership já é isso.
+  notificationsReadAllAt DateTime?
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  notificationReads NotificationRead[]
 
   @@unique([userId, tenantId])
   @@index([tenantId])
   @@map("memberships")
+}
+
+// Leitura INDIVIDUAL de uma notificação (as notificações em si são derivadas, não materializadas —
+// ver src/modules/notifications/service.ts). `notificationKey` = id estável da notificação
+// (ev:<eventId>, upcoming:<appointmentId>, wa:..., trial:..., pay:...). Sem tenantId próprio: o
+// isolamento é pela Membership (que é por usuário+empresa).
+model NotificationRead {
+  id              String   @id @default(cuid())
+  membershipId    String
+  notificationKey String
+  readAt          DateTime @default(now())
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, notificationKey])
+  @@index([readAt])
+  @@map("notification_reads")
 }
 
 enum MercadoPagoEnvironment {
@@ -448,10 +469,15 @@ model AppointmentEvent {
   authorId      String?
   note          String?
   createdAt     DateTime                   @default(now())
+  // Denormalizado para a central de notificações (consulta por empresa + período sem join).
+  // Preenchido por TRIGGER no banco (migration 20260930100000) a partir de appointments — nunca
+  // depende do código de aplicação lembrar de gravar. Nulo só transitoriamente.
+  tenantId      String?
 
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
   @@index([appointmentId, createdAt])
+  @@index([tenantId, createdAt])
   @@map("appointment_events")
 }
 
@@ -477,6 +503,9 @@ model WhatsappInstance {
   // Evolution real). Usada pela bateria de roteiros (§8) e para validar edições do dono no n8n.
   sandbox         Boolean                 @default(false)
   lastConnectedAt DateTime?
+  // Queda INESPERADA (CONNECTED → DISCONNECTED por evento/polling). Zera ao reconectar e ao
+  // desconectar manualmente. Alimenta a notificação WHATSAPP_DISCONNECTED.
+  disconnectedAt  DateTime?
   deletedAt       DateTime?
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt

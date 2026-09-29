@@ -71,7 +71,7 @@ export function RecuperarSenhaForm() {
               />
             )}
           </Field>
-          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS}>
+          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Enviando…">
             Enviar link
           </Button>
           <p className="text-center text-sm text-text-secondary">

@@ -331,7 +331,7 @@ export function ConnectWhatsappDialog({
                 <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" isLoading={isSubmitting}>
+                <Button type="submit" isLoading={isSubmitting} loadingText="Gerando QR…">
                   Gerar QR code
                 </Button>
               </DialogFooter>

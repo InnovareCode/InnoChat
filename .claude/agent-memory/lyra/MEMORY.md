@@ -18,3 +18,5 @@
 - [PageHeader com selo do menu](page-header-selo-icone-do-menu.md) — icon via navIconFor (fonte única); regra p/ páginas novas.
 - [Selo InnovareCode + auth premium](selo-innovarecode-e-auth-premium.md) — AA do selo, toast acima dele, getByLabel x botão de senha, env do next.config.
 - [Mockup de celular do WhatsApp](whatsapp-phone-mockup.md) — acoplamentos do E2E (rounded-card, rótulo único), escala mobile 44px, como medir.
+- [Sistema de espera padronizado](sistema-de-espera-padronizado.md) — barra de topo, loading.tsx por seção, Spinner/loadingText, PageTransition só CSS; rate limit de login no E2E.
+- [Central de notificações e refresh ao vivo](central-de-notificacoes-e-refresh-ao-vivo.md) — provider único, polling 15/30 s, refresh sem F5 nas telas client-side, Prisma stale no dev, substring no E2E.

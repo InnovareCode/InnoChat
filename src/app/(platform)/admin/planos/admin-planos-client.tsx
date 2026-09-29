@@ -255,7 +255,7 @@ export function AdminPlanosClient({ initialPlans }: { initialPlans: PlanRow[] })
                 <Button type="button" variant="secondary" onClick={closeEdit}>
                   Cancelar
                 </Button>
-                <Button type="submit" isLoading={isPending}>
+                <Button type="submit" isLoading={isPending} loadingText="Salvando…">
                   Salvar
                 </Button>
               </DialogFooter>

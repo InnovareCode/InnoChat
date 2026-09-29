@@ -16,6 +16,7 @@ import { Alert } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
+import { useOnAppointmentsChanged } from "@/components/notifications/notification-center-provider";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/components/lib/cn";
 import { formatPhoneDisplay } from "@/components/lib/format-phone";
@@ -119,9 +120,9 @@ export function ClientesClient({
     return () => clearTimeout(timeoutId);
   }, [search]);
 
-  const load = useCallback(() => {
+  const load = useCallback((silent?: boolean) => {
     const requestId = ++requestIdRef.current;
-    setLoading(true);
+    if (silent !== true) setLoading(true);
     setError(null);
     listContactsAction(tenantSlug, { q: debouncedSearch || undefined, filter, limit: 20 })
       .then((result) => {
@@ -139,6 +140,9 @@ export function ClientesClient({
         if (requestId === requestIdRef.current) setLoading(false);
       });
   }, [tenantSlug, debouncedSearch, filter]);
+
+  // Cliente novo/agendamento novo pelo WhatsApp muda a lista (próximo horário, contagem): recarrega em silêncio.
+  useOnAppointmentsChanged(() => load(true));
 
   useEffect(() => {
     const timeoutId = setTimeout(load, 0);
@@ -370,7 +374,7 @@ export function ClientesClient({
 
           {nextCursor ? (
             <div className="mt-4 flex justify-center">
-              <Button variant="secondary" onClick={loadMore} isLoading={loadingMore}>
+              <Button variant="secondary" onClick={loadMore} isLoading={loadingMore} loadingText="Carregando…">
                 Carregar mais
               </Button>
             </div>

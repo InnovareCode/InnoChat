@@ -101,6 +101,14 @@ test.describe("Admin da plataforma: configurações e integrações", () => {
       name: "innochat-bot",
       active: false,
       nodes: [
+        // Desde 61f3139 o sync deriva a URL de webhook do nó Webhook do bot (path com `:token` exige
+        // `webhookId`) — sem ele, `N8N_WEBHOOK_NODE_NOT_FOUND`.
+        {
+          name: "Webhook",
+          type: "n8n-nodes-base.webhook",
+          webhookId: "wh-e2e-1",
+          parameters: { path: "innochat/evolution/:token" },
+        },
         {
           name: "Config",
           type: "n8n-nodes-base.set",
@@ -169,6 +177,9 @@ test.describe("Admin da plataforma: configurações e integrações", () => {
       await expect(page.getByText(/Sincronizado:/).first()).toBeVisible({ timeout: 10_000 });
       await expect(page.getByText(/3 credencial\(is\) rotacionada\(s\)/).first()).toBeVisible();
       await expect(page.getByText(/bot-e2e-1/).first()).toBeVisible();
+      // URL de webhook derivada do nó Webhook (prefixo webhookId), gravada pela sync.
+      const settings = await prisma.platformSettings.findUniqueOrThrow({ where: { id: 1 }, select: { n8nWebhookBaseUrl: true } });
+      expect(settings.n8nWebhookBaseUrl).toBe(`${n8nFake.url}/webhook/wh-e2e-1/innochat/evolution`);
 
       // A sync NUNCA chama publish/activate — nenhuma dessas rotas foi cadastrada no fake, então
       // se o cliente tivesse chamado, teria recebido 404 do fallback do `startFakeServer` e a
@@ -193,6 +204,7 @@ test.describe("Admin da plataforma: configurações e integrações", () => {
           n8nCredApiId: null,
           n8nWorkflowBotId: null,
           n8nWorkflowErrosId: null,
+          n8nWorkflowCronId: null,
         },
       });
     }

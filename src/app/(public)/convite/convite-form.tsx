@@ -87,7 +87,7 @@ export function ConviteForm({ token }: { token: string | null }) {
               />
             )}
           </Field>
-          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS}>
+          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Entrando…">
             Entrar
           </Button>
         </form>

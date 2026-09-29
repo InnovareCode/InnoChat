@@ -248,7 +248,7 @@ export function BloqueiosClient({
               <Button type="button" variant="secondary" onClick={() => setDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" isLoading={isPending}>
+              <Button type="submit" isLoading={isPending} loadingText="Criando…">
                 Criar
               </Button>
             </DialogFooter>
@@ -264,7 +264,7 @@ export function BloqueiosClient({
             <Button type="button" variant="secondary" onClick={() => setConfirmDelete(null)}>
               Cancelar
             </Button>
-            <Button type="button" variant="danger" onClick={handleDelete} isLoading={isPending}>
+            <Button type="button" variant="danger" onClick={handleDelete} isLoading={isPending} loadingText="Excluindo…">
               Excluir
             </Button>
           </DialogFooter>

@@ -7,10 +7,12 @@ import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { useLiveAppointments, useOnAppointmentsChanged } from "@/components/notifications/notification-center-provider";
+import { AppointmentSourceBadge, AppointmentStatusBadge, APPOINTMENT_STATUS_LABEL } from "@/components/agenda/appointment-status";
 import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/components/lib/cn";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
 import { listAppointmentsAction } from "@/modules/agenda/appointment-actions";
@@ -25,24 +27,11 @@ type ApptRaw = {
   startsAt: string;
   endsAt: string;
   status: AppointmentDetail["status"];
+  source?: "WHATSAPP" | "PANEL";
   professionalId: string;
   contact: { name: string | null; phoneE164: string | null };
   service: { name: string };
   professional: { name: string };
-};
-
-const STATUS_LABEL: Record<AppointmentDetail["status"], string> = {
-  SCHEDULED: "Agendado",
-  CANCELED: "Cancelado",
-  COMPLETED: "Concluído",
-  NO_SHOW: "Não veio",
-};
-
-const STATUS_VARIANT: Record<AppointmentDetail["status"], "success" | "danger" | "neutral" | "warning"> = {
-  SCHEDULED: "success",
-  CANCELED: "danger",
-  COMPLETED: "neutral",
-  NO_SHOW: "warning",
 };
 
 function todayISO(): string {
@@ -76,8 +65,9 @@ export function AgendamentosClient({
   const [novoOpen, setNovoOpen] = useState(false);
   const [detail, setDetail] = useState<AppointmentDetail | null>(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
+  // `silent`: recarga por notificação nova — mantém a lista na tela, sem skeleton.
+  const load = useCallback((silent?: boolean) => {
+    if (silent !== true) setLoading(true);
     setError(null);
     listAppointmentsAction(tenantSlug, {
       from: new Date(`${from}T00:00:00`).toISOString(),
@@ -99,6 +89,9 @@ export function AgendamentosClient({
     const timeoutId = setTimeout(load, 0);
     return () => clearTimeout(timeoutId);
   }, [load]);
+
+  useOnAppointmentsChanged(() => load(true));
+  const highlightedIds = useLiveAppointments().highlightedIds;
 
   const filtered = appointments.filter((a) => status === "ALL" || a.status === status);
 
@@ -154,10 +147,10 @@ export function AgendamentosClient({
             <Label htmlFor="filtro-status">Status</Label>
             <Select id="filtro-status" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
               <option value="ALL">Todos</option>
-              <option value="SCHEDULED">Agendado</option>
-              <option value="CANCELED">Cancelado</option>
-              <option value="COMPLETED">Concluído</option>
-              <option value="NO_SHOW">Não veio</option>
+              <option value="SCHEDULED">{APPOINTMENT_STATUS_LABEL.SCHEDULED}</option>
+              <option value="CANCELED">{APPOINTMENT_STATUS_LABEL.CANCELED}</option>
+              <option value="COMPLETED">{APPOINTMENT_STATUS_LABEL.COMPLETED}</option>
+              <option value="NO_SHOW">{APPOINTMENT_STATUS_LABEL.NO_SHOW}</option>
             </Select>
           </div>
         </div>
@@ -189,17 +182,21 @@ export function AgendamentosClient({
                   <TableHeadCell>Serviço</TableHeadCell>
                   <TableHeadCell>Profissional</TableHeadCell>
                   <TableHeadCell>Status</TableHeadCell>
+                  <TableHeadCell>Origem</TableHeadCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {filtered.map((a) => (
-                  <TableRow key={a.id} className="cursor-pointer" onClick={() => openDetail(a)}>
+                  <TableRow key={a.id} className={cn("cursor-pointer transition-colors duration-700 motion-reduce:transition-none", highlightedIds.has(a.id) && "bg-primary/10")} onClick={() => openDetail(a)}>
                     <TableCell className="tabular-nums">{formatDateTimeShortLabel(a.startsAt, timezone)}</TableCell>
                     <TableCell>{a.contact.name ?? "Sem nome"}</TableCell>
                     <TableCell>{a.service.name}</TableCell>
                     <TableCell>{a.professional.name}</TableCell>
                     <TableCell>
-                      <Badge variant={STATUS_VARIANT[a.status]}>{STATUS_LABEL[a.status]}</Badge>
+                      <AppointmentStatusBadge status={a.status} />
+                    </TableCell>
+                    <TableCell>
+                      <AppointmentSourceBadge source={a.source} />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -220,16 +217,17 @@ export function AgendamentosClient({
                     openDetail(a);
                   }
                 }}
-                className="cursor-pointer rounded-hero p-4 transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-hover motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                className={cn("cursor-pointer rounded-hero p-4 transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-hover motion-reduce:transition-none motion-reduce:hover:translate-y-0", highlightedIds.has(a.id) && "appt-highlight")}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-medium text-text">{a.contact.name ?? "Sem nome"}</p>
-                  <Badge variant={STATUS_VARIANT[a.status]}>{STATUS_LABEL[a.status]}</Badge>
+                  <AppointmentStatusBadge status={a.status} />
                 </div>
                 <p className="mt-1 text-sm text-text-secondary">{a.service.name} · {a.professional.name}</p>
-                <p className="mt-2 text-xs tabular-nums text-text-secondary">
-                  {formatDateTimeShortLabel(a.startsAt, timezone)}
-                </p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <p className="text-xs tabular-nums text-text-secondary">{formatDateTimeShortLabel(a.startsAt, timezone)}</p>
+                  <AppointmentSourceBadge source={a.source} />
+                </div>
               </Card>
             ))}
           </div>

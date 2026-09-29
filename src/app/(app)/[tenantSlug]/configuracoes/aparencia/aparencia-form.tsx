@@ -84,7 +84,7 @@ export function AparenciaForm({ tenantSlug, currentTheme }: { tenantSlug: string
       </div>
 
       <div>
-        <Button type="submit" isLoading={isPending} className="w-fit">
+        <Button type="submit" isLoading={isPending} className="w-fit" loadingText="Salvando…">
           Salvar tema
         </Button>
       </div>

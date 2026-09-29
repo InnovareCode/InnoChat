@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { AlertTriangle, Banknote, Check, Clock, FlaskConical, QrCode, ReceiptText, TrendingUp } from "lucide-react";
+import { AlertTriangle, Banknote, Check, FlaskConical, QrCode, ReceiptText, TrendingUp } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
@@ -288,7 +289,7 @@ export function AdminCobrancaClient({
               />
             )}
           </Field>
-          <Button type="button" variant="secondary" onClick={applyFilters} isLoading={isPending && !isLoadingMore} className="w-full sm:col-span-2 lg:col-span-1 lg:w-auto">
+          <Button type="button" variant="secondary" onClick={applyFilters} isLoading={isPending && !isLoadingMore} className="w-full sm:col-span-2 lg:col-span-1 lg:w-auto" loadingText="Filtrando…">
               Filtrar
             </Button>
           </div>
@@ -353,7 +354,7 @@ export function AdminCobrancaClient({
                             disabled={isPending}
                           >
                             {regeneratingId === invoice.id ? (
-                              <Clock className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                              <Spinner />
                             ) : (
                               <QrCode className="h-4 w-4" aria-hidden="true" />
                             )}
@@ -382,7 +383,7 @@ export function AdminCobrancaClient({
 
       {nextCursor ? (
         <div className="flex justify-center">
-          <Button variant="secondary" onClick={loadMore} isLoading={isLoadingMore}>
+          <Button variant="secondary" onClick={loadMore} isLoading={isLoadingMore} loadingText="Carregando…">
             Carregar mais
           </Button>
         </div>
@@ -415,7 +416,7 @@ export function AdminCobrancaClient({
               <Button type="button" variant="secondary" onClick={() => setMarkPaidTarget(null)}>
                 Cancelar
               </Button>
-              <Button type="submit" variant="danger" isLoading={isPending}>
+              <Button type="submit" variant="danger" isLoading={isPending} loadingText="Confirmando…">
                 Confirmar baixa manual
               </Button>
             </DialogFooter>

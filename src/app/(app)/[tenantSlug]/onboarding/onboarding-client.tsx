@@ -198,7 +198,7 @@ export function OnboardingClient({
                   )}
                 </Field>
               </div>
-              <Button type="submit" isLoading={isPending}>
+              <Button type="submit" isLoading={isPending} loadingText="Adicionando…">
                 Adicionar
               </Button>
             </form>
@@ -246,7 +246,7 @@ export function OnboardingClient({
                   )}
                 </Field>
               </div>
-              <Button type="submit" isLoading={isPending}>
+              <Button type="submit" isLoading={isPending} loadingText="Adicionando…">
                 Adicionar
               </Button>
             </form>

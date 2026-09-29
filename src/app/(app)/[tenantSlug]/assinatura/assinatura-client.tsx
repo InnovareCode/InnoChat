@@ -387,7 +387,7 @@ function PlanosCard({
             <Button type="button" variant="secondary" onClick={() => setPendingPlanTarget(null)}>
               Cancelar
             </Button>
-            <Button type="button" onClick={confirmChange} isLoading={isPending}>
+            <Button type="button" onClick={confirmChange} isLoading={isPending} loadingText="Confirmando…">
               Confirmar
             </Button>
           </DialogFooter>

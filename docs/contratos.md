@@ -1727,3 +1727,40 @@ de UX; funciona com conta suspensa). Steps sempre derivados dos dados (nunca mar
 
 Escolha do `botTest`: `Appointment.source` em vez de `ChatSession` (sem `tenantId`; "concluída" é string do n8n).
 Migration `20260929200000_onboarding_state`: 2 colunas nulas, aditiva.
+
+## Notificações do painel (central de notificações, 2026-09-29, pedido do dono)
+
+Para os usuários da empresa (dono e equipe) — NÃO é o lembrete de véspera por WhatsApp ao cliente final (isso segue pós-v1). Código: `src/modules/notifications/` (`actions.ts` → `service.ts` → `format.ts` puro). Todas as actions: `requireTenantMember(tenantSlug)`, retorno `Result<T>`, sem `assertTenantCanWrite` (funcionam com a conta suspensa).
+
+### Decisão: derivadas, não materializadas
+Não existe tabela `Notification`. Cada tipo sai do estado que já existe, então nenhum ponto de escrita (painel, API do bot, drag-to-reschedule, tick) pode "esquecer" de gerar:
+
+| kind | fonte | id (chave de leitura) | createdAt |
+|---|---|---|---|
+| `APPOINTMENT_CREATED/RESCHEDULED/CANCELED/COMPLETED/NO_SHOW` | `AppointmentEvent` (janela 30 dias) | `ev:<eventId>` | `event.createdAt` |
+| `APPOINTMENT_UPCOMING` | `Appointment` SCHEDULED com `startsAt` em (agora, agora+60min] | `upcoming:<appointmentId>:<startsAt em minutos>` (estável; remarcar gera lembrete novo) | `startsAt − 60min` |
+| `WHATSAPP_DISCONNECTED` | `WhatsappInstance` DISCONNECTED, não removida, não sandbox, com `disconnectedAt` (nova coluna) | `wa:<instanceId>:<disconnectedAt ms>` | `disconnectedAt` |
+| `TRIAL_ENDING` (só OWNER) | `Subscription` TRIALING com `trialEndsAt` em (agora, agora+24h] | `trial:<subscriptionId>` | `trialEndsAt − 24h` |
+| `PAYMENT_CONFIRMED` (só OWNER) | `Invoice` PAID com `paidAt` na janela | `pay:<invoiceId>` | `paidAt` |
+
+Título e origem: na criação vale `Appointment.source` ("Novo agendamento pelo WhatsApp" / "… pelo painel"); nas demais ações vale `authorType` (CONTACT→WhatsApp, USER→painel, SYSTEM→sem sufixo). Corpo: `"Maria • Corte • com Ana • qui 02/10 às 14:00"` (fuso da empresa; só o NOME do contato, nunca telefone; sem nome → "Cliente"). `href`: `/{slug}/agenda?data=YYYY-MM-DD` (dia do agendamento; a página da agenda precisa ler o param `data`), `/{slug}/whatsapp`, `/{slug}/assinatura`.
+
+Não há restrição de profissional por STAFF no produto: STAFF vê todos os eventos de agendamento e o WhatsApp; cobrança (trial/pagamento) só OWNER.
+
+### Estado de leitura (por usuário e empresa)
+`Membership.notificationsReadAllAt` ("marcar todas": tudo com `createdAt <=` esse instante é lido) + tabela `NotificationRead(membershipId, notificationKey, readAt)` ("marcar uma"). Em vez de `User.notificationsSeenAt` porque o usuário pode ter várias empresas. "Marcar todas" apaga as leituras individuais (ficam redundantes); o `billing`/`maintenance/tick` purga leituras com mais de 45 dias.
+
+### Migration `20260930100000_notifications` (aditiva)
+`memberships.notificationsReadAllAt`, `whatsapp_instances.disconnectedAt`, `appointment_events.tenantId` (nullable + backfill + **trigger BEFORE INSERT** que preenche a partir de `appointments`, então código antigo/novo nunca precisa informar) + índice `(tenantId, createdAt)`, tabela `notification_reads`. `disconnectedAt` é carimbado só na transição CONNECTED→DISCONNECTED inesperada (`connection-events.ts`, `syncConnectionState`) e zerado ao reconectar/desconectar manualmente/remover.
+
+### Actions (`src/modules/notifications/actions.ts`)
+- `listNotificationsAction({ tenantSlug, cursor? })` → `{ items: AppNotification[]; unreadCount; nextCursor }`. Página de 20, mais recentes primeiro, janela de 30 dias. `cursor` é opaco; inválido → `INVALID_CURSOR`.
+- `pollNotificationsAction({ tenantSlug, since })` → `{ unreadCount; fresh }`. `fresh` = criadas depois de `since` (ISO), no máximo 10, mais novas primeiro. Custo: 1 leitura da Membership, 1 consulta indexada de eventos, 4 leituras pequenas das fontes derivadas, 1 de `NotificationRead`. `unreadCount` considera até 200 eventos da janela.
+- `markNotificationsReadAction({ tenantSlug, ids?, all? })` → `{ unreadCount }`. `ids` (≤100) são os `id` das notificações; sem `ids` nem `all` ou id malformado → `INVALID_PAYLOAD`. Idempotente.
+- `getUpcomingAppointmentsAction({ tenantSlug })` → `{ items }` — até 5 agendamentos SCHEDULED de hoje (fuso da empresa) a partir de agora, com `minutesUntil`.
+- `getAppointmentTimelineAction({ tenantSlug, appointmentId })` → `{ items }` cronológico (antigo→novo) com `label` pt-BR ("Cliente agendou pelo WhatsApp", "Remarcado pelo painel"…). `authorLabel`: nome do contato / parte local do e-mail do membro / "Sistema". Agendamento de outra empresa → `NOT_FOUND`.
+- Campo extra aditivo em `AppNotification`: `byMe?: boolean` (a ação foi do próprio usuário — a UI pode não exibir toast).
+
+Nota: nenhuma rota do produto grava hoje `AppointmentEvent` de `COMPLETED`/`NO_SHOW` (não existe ação de "concluir"/"faltou"); o kind já é suportado assim que houver.
+
+Testes: `tests/integration/notifications.integration.test.ts` (cada kind, leitura, isolamento, poll, upcoming, timeline, trigger, queda do WhatsApp, purge) e `src/modules/notifications/format.test.ts`. Seed local para a UI: `npm run db:seed:notifications -- [slug] [--billing] [--clean]` (`prisma/seed-notifications.ts`).

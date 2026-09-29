@@ -44,6 +44,9 @@ export default async function globalSetup() {
       emailVerifiedAt: new Date(),
       termsAcceptedAt: new Date(),
       termsVersion: "e2e",
+      // O tour do Inno abre sozinho 700ms depois da página para quem ainda não o concluiu e o
+      // overlay intercepta cliques — usuários de fixture já chegam com o tour concluído.
+      onboardingTourCompletedAt: new Date(),
     },
   });
   await prisma.membership.create({ data: { userId: ownerB.id, tenantId: tenantB.id, role: "OWNER" } });
@@ -69,6 +72,9 @@ export default async function globalSetup() {
       emailVerifiedAt: new Date(),
       termsAcceptedAt: new Date(),
       termsVersion: "e2e",
+      // O tour do Inno abre sozinho 700ms depois da página para quem ainda não o concluiu e o
+      // overlay intercepta cliques — usuários de fixture já chegam com o tour concluído.
+      onboardingTourCompletedAt: new Date(),
     },
   });
   await prisma.membership.create({ data: { userId: staffUser.id, tenantId: tenantSeed.id, role: "STAFF" } });
@@ -90,19 +96,19 @@ export default async function globalSetup() {
   fs.mkdirSync(AUTH_DIR, { recursive: true });
   const browser = await chromium.launch();
   try {
-    const ownerContext = await browser.newContext({ baseURL: "http://localhost:3000" });
+    const ownerContext = await browser.newContext({ baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000" });
     const ownerPage = await ownerContext.newPage();
     await loginAndWaitForPanel(ownerPage, SEED_OWNER_EMAIL, SEED_OWNER_PASSWORD, SEED_TENANT_SLUG);
     await ownerContext.storageState({ path: OWNER_STORAGE_STATE });
     await ownerContext.close();
 
-    const staffContext = await browser.newContext({ baseURL: "http://localhost:3000" });
+    const staffContext = await browser.newContext({ baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000" });
     const staffPage = await staffContext.newPage();
     await loginAndWaitForPanel(staffPage, generated.staffEmail, STAFF_PASSWORD, SEED_TENANT_SLUG);
     await staffContext.storageState({ path: STAFF_STORAGE_STATE });
     await staffContext.close();
 
-    const tenantBContext = await browser.newContext({ baseURL: "http://localhost:3000" });
+    const tenantBContext = await browser.newContext({ baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000" });
     const tenantBPage = await tenantBContext.newPage();
     await loginAndWaitForPanel(tenantBPage, generated.tenantBOwnerEmail, TENANT_B_OWNER_PASSWORD, generated.tenantBSlug);
     await tenantBContext.storageState({ path: TENANT_B_OWNER_STORAGE_STATE });

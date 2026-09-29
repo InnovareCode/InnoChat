@@ -368,7 +368,7 @@ export function CadastroForm() {
           </div>
 
           <div>
-            <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS}>
+            <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Criando conta…">
               Criar conta
             </Button>
             <AuthTrust trial />

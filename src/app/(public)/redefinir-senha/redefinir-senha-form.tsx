@@ -99,7 +99,7 @@ export function RedefinirSenhaForm({ token }: { token: string | null }) {
               />
             )}
           </Field>
-          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS}>
+          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Salvando…">
             Salvar nova senha
           </Button>
         </form>

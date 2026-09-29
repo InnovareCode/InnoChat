@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { AppointmentSourceBadge, AppointmentStatusBadge, type AppointmentSource } from "./appointment-status";
+import { AppointmentTimeline } from "./appointment-timeline";
 import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,23 +16,11 @@ export type AppointmentDetail = {
   startsAt: string;
   endsAt: string;
   status: "SCHEDULED" | "CANCELED" | "COMPLETED" | "NO_SHOW";
+  /** Origem do agendamento; ausente em telas que ainda não a carregam. */
+  source?: AppointmentSource;
   contact: { name: string | null; phoneE164: string | null };
   service: { name: string };
   professional: { name: string };
-};
-
-const STATUS_LABEL: Record<AppointmentDetail["status"], string> = {
-  SCHEDULED: "Agendado",
-  CANCELED: "Cancelado",
-  COMPLETED: "Concluído",
-  NO_SHOW: "Não veio",
-};
-
-const STATUS_VARIANT: Record<AppointmentDetail["status"], "success" | "danger" | "neutral" | "warning"> = {
-  SCHEDULED: "success",
-  CANCELED: "danger",
-  COMPLETED: "neutral",
-  NO_SHOW: "warning",
 };
 
 type Props = {
@@ -114,7 +103,7 @@ export function DetalheAgendamentoDialog({
 
   return (
     <Dialog open={!!appointment} onOpenChange={(open) => !open && close()}>
-      <DialogContent>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
         <DialogTitle>Agendamento</DialogTitle>
         <DialogDescription>
           {appointment.service.name} com {appointment.professional.name}
@@ -125,8 +114,14 @@ export function DetalheAgendamentoDialog({
 
           <div className="flex items-center justify-between">
             <p className="text-sm text-text-secondary">Status</p>
-            <Badge variant={STATUS_VARIANT[appointment.status]}>{STATUS_LABEL[appointment.status]}</Badge>
+            <AppointmentStatusBadge status={appointment.status} />
           </div>
+          {appointment.source ? (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-text-secondary">Origem</p>
+              <AppointmentSourceBadge source={appointment.source} className="text-sm text-text" />
+            </div>
+          ) : null}
           <div className="flex items-center justify-between">
             <p className="text-sm text-text-secondary">Cliente</p>
             <p className="text-sm text-text">{appointment.contact.name ?? "Sem nome"}</p>
@@ -158,7 +153,7 @@ export function DetalheAgendamentoDialog({
                 <Button type="button" variant="secondary" onClick={() => setMode("view")}>
                   Voltar
                 </Button>
-                <Button type="submit" isLoading={isPending}>
+                <Button type="submit" isLoading={isPending} loadingText="Remarcando…">
                   Confirmar remarcação
                 </Button>
               </div>
@@ -174,12 +169,16 @@ export function DetalheAgendamentoDialog({
                 <Button type="button" variant="secondary" onClick={() => setMode("view")}>
                   Voltar
                 </Button>
-                <Button type="button" variant="danger" onClick={handleCancel} isLoading={isPending}>
+                <Button type="button" variant="danger" onClick={handleCancel} isLoading={isPending} loadingText="Cancelando…">
                   Confirmar cancelamento
                 </Button>
               </div>
             </div>
           ) : null}
+        </div>
+
+        <div className="mt-4">
+          <AppointmentTimeline tenantSlug={tenantSlug} appointmentId={appointment.id} timezone={timezone} />
         </div>
 
         {mode === "view" && appointment.status === "SCHEDULED" ? (

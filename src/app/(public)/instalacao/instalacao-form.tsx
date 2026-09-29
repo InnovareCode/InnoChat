@@ -154,7 +154,7 @@ export function InstalacaoForm() {
             </Field>
           </div>
 
-          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS}>
+          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Concluindo…">
             Concluir instalação
           </Button>
         </form>

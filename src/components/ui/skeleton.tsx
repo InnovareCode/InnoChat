@@ -1,9 +1,12 @@
 import { cn } from "@/components/lib/cn";
 
 /**
- * Placeholder de carregamento com shimmer (docs premium, pacote "movimento e carregamento") —
- * substitui texto solto ("Carregando…") por um bloco na forma do conteúdo real. `skeleton-shimmer`
- * (globals.css) desliga a animação com `prefers-reduced-motion`, ficando só o tom sólido.
+ * Bloco de carregamento — o único componente de skeleton do produto (docs premium, pacote
+ * "movimento e carregamento"). Sempre com a MESMA forma/altura do conteúdo real, para a troca não
+ * gerar layout shift. `skeleton-shimmer` (globals.css) usa só tokens do tema e fica estático com
+ * `prefers-reduced-motion`. Decorativo: o contêiner que carrega é que leva `aria-busy`.
+ *
+ * `rounded-card` é o padrão; passe `rounded-hero`, `rounded-full` etc. para casar com o alvo.
  */
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn("skeleton-shimmer rounded-card", className)} aria-hidden="true" />;

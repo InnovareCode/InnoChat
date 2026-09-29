@@ -10,7 +10,11 @@ test.describe("Isolamento entre empresas (docs/contratos.md Fase 2 — usuário 
   test("profissional de OUTRA empresa na URL (mesmo slug de A) → 404, nunca vê os dados de B", async ({ page }) => {
     const { professionalBId } = loadRunFixtures();
     const response = await page.goto(`/${SEED_TENANT_SLUG}/profissionais/${professionalBId}`);
-    expect(response?.status()).toBe(404);
+    // Com `loading.tsx` a resposta é transmitida em streaming: o status HTTP já saiu como 200
+    // quando `notFound()` dispara (docs do Next: file-conventions/loading.md, "Status Codes").
+    // O contrato de isolamento que importa é o CONTEÚDO: tela 404 e nenhum dado de B.
+    expect([200, 404]).toContain(response?.status());
+    await expect(page.getByRole("heading", { name: "404" })).toBeVisible();
     await expect(page.getByText("Profissional da Empresa B")).toHaveCount(0);
   });
 

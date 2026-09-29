@@ -434,7 +434,7 @@ export function ServicosClient({
             <Button type="button" variant="secondary" onClick={() => setConfirmDelete(null)}>
               Cancelar
             </Button>
-            <Button type="button" variant="danger" onClick={handleDelete} isLoading={isPending}>
+            <Button type="button" variant="danger" onClick={handleDelete} isLoading={isPending} loadingText="Excluindo…">
               Excluir
             </Button>
           </DialogFooter>

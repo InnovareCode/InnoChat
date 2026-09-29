@@ -6,6 +6,8 @@ import { UserBlock } from "./user-block";
 import { TenantSectionLabel } from "./section-label";
 import { BackgroundGlow } from "./background-glow";
 import { CommandPalette } from "./command-palette";
+import { NotificationBell } from "@/components/notifications/notification-bell";
+import { NotificationCenterProvider } from "@/components/notifications/notification-center-provider";
 import { WhatsappStatusChip, type WhatsappTopbarStatus } from "./whatsapp-status-chip";
 import { PageTransition } from "./page-transition";
 import { OnboardingTourProvider, TourReplayButton } from "@/components/onboarding/onboarding-tour";
@@ -17,6 +19,8 @@ type SubscriptionStatus = "TRIALING" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CA
 type PanelShellProps = {
   tenantName: string;
   tenantSlug: string;
+  /** Fuso da empresa — agrupa notificações por dia (Hoje/Ontem) no horário certo. */
+  timezone?: string;
   userEmail: string;
   subscriptionStatus?: SubscriptionStatus;
   trialHoursLeft?: number | null;
@@ -139,6 +143,7 @@ function Brand({ tenantName }: { tenantName: string }) {
 export function PanelShell({
   tenantName,
   tenantSlug,
+  timezone = "America/Sao_Paulo",
   userEmail,
   subscriptionStatus = null,
   trialHoursLeft = null,
@@ -151,6 +156,7 @@ export function PanelShell({
 }: PanelShellProps) {
   return (
     <OnboardingTourProvider tenantSlug={tenantSlug} autoStart={tourAutoStart}>
+    <NotificationCenterProvider tenantSlug={tenantSlug}>
     <div className="relative flex min-h-screen">
       <BackgroundGlow />
       <aside data-tour="sidebar" className="relative z-10 hidden w-64 shrink-0 flex-col panel-sidebar-surface px-4 py-6 lg:flex">
@@ -193,6 +199,7 @@ export function PanelShell({
           <div className="flex shrink-0 items-center gap-3">
             <CommandPalette variant="tenant" tenantSlug={tenantSlug} />
             <WhatsappStatusChip status={whatsappStatus} />
+            <NotificationBell timezone={timezone} />
           </div>
         </header>
 
@@ -205,6 +212,7 @@ export function PanelShell({
       </div>
       <InnovareCodeBadge />
     </div>
+    </NotificationCenterProvider>
     </OnboardingTourProvider>
   );
 }

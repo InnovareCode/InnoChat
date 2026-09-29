@@ -8,13 +8,11 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CalendarEmptyIllustration } from "@/components/ui/empty-illustration";
-import { Badge } from "@/components/ui/badge";
-import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/components/lib/cn";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDateTimeLabel } from "@/components/lib/format-date";
 import { DomainError } from "@/lib/errors";
 import { getDashboardView } from "@/modules/dashboard/queries";
+import { UpcomingTodayCard } from "@/components/notifications/upcoming-today-card";
 import { InicioChart } from "./inicio-chart";
 import { OnboardingChecklistCard } from "@/components/onboarding/onboarding-checklist-card";
 import { getOnboardingStateAction } from "@/modules/onboarding/actions";
@@ -152,45 +150,7 @@ async function InicioContent({ tenantSlug }: { tenantSlug: string }) {
           </CardContent>
         </Card>
 
-        <Card className="rounded-hero">
-          <CardHeader>
-            <CardTitle>Próximos agendamentos</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {view.upcoming.length === 0 ? (
-              <div className="p-5">
-                <EmptyState
-                  icon={CalendarClock}
-                  title="Nada agendado ainda"
-                  description="Os próximos agendamentos aparecem aqui, do mais próximo para o mais distante."
-                />
-              </div>
-            ) : (
-              <ul className="divide-y divide-border">
-                {view.upcoming.map((appt, index) => (
-                  <li key={appt.id} className="flex items-center gap-3 p-4">
-                    <span className="relative flex h-2 w-2 shrink-0">
-                      {index === 0 ? (
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" aria-hidden="true" />
-                      ) : null}
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" aria-hidden="true" />
-                    </span>
-                    <Avatar id={appt.professionalName} name={appt.professionalName} size="sm" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-text">{appt.serviceName}</p>
-                      <p className="truncate text-xs text-text-secondary">
-                        {appt.contactName ?? "Sem nome"} · {appt.professionalName}
-                      </p>
-                    </div>
-                    <Badge variant="primary" className="shrink-0 tabular-nums">
-                      {formatDateTimeLabel(appt.startsAt, view.timezone)}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+        <UpcomingTodayCard tenantSlug={tenantSlug} timezone={view.timezone} />
       </div>
 
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">

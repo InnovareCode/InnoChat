@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { getPrisma } from "@/lib/db/prisma";
 import { effectiveStatus } from "@/core/billing";
 import { ToastProvider } from "@/components/ui/toast";
+import { NavigationProgress } from "@/components/shell/navigation-progress";
 import { PanelShell } from "@/components/shell/panel-shell";
 import { getOnboardingStateAction } from "@/modules/onboarding/actions";
 
@@ -43,7 +44,7 @@ export default async function TenantLayout({
   const membership = await getPrisma().membership.findFirst({
     where: { userId: session.user.id, tenant: { slug: tenantSlug } },
     select: {
-      tenant: { select: { id: true, name: true, theme: true } },
+      tenant: { select: { id: true, name: true, theme: true, timezone: true } },
     },
   });
 
@@ -106,10 +107,12 @@ export default async function TenantLayout({
   return (
     <html lang="pt-BR" data-theme={membership.tenant.theme} className={fontVariables}>
       <body>
+        <NavigationProgress />
         <ToastProvider>
           <PanelShell
             tenantName={membership.tenant.name}
             tenantSlug={tenantSlug}
+            timezone={membership.tenant.timezone}
             userEmail={session.user.email ?? ""}
             subscriptionStatus={status}
             trialHoursLeft={trialHoursLeft}

@@ -218,7 +218,7 @@ export function AdminEmpresasClient({
 
       {nextCursor ? (
         <div className="mt-4 flex justify-center">
-          <Button variant="secondary" onClick={loadMore} isLoading={isLoadingMore}>
+          <Button variant="secondary" onClick={loadMore} isLoading={isLoadingMore} loadingText="Carregando…">
             Carregar mais
           </Button>
         </div>
@@ -241,7 +241,7 @@ export function AdminEmpresasClient({
               variant={confirmAction?.type === "suspend" ? "danger" : "primary"}
               onClick={handleConfirm}
               isLoading={isPending}
-            >
+             loadingText="Confirmando…">
               Confirmar
             </Button>
           </DialogFooter>
@@ -273,7 +273,7 @@ export function AdminEmpresasClient({
               <Button type="button" variant="secondary" onClick={() => setExtendTarget(null)}>
                 Cancelar
               </Button>
-              <Button type="submit" isLoading={isPending}>
+              <Button type="submit" isLoading={isPending} loadingText="Estendendo…">
                 Estender
               </Button>
             </DialogFooter>

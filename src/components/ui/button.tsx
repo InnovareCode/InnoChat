@@ -2,6 +2,7 @@ import { forwardRef } from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@/components/lib/cn";
 import { buttonVariants, type ButtonVariants } from "./button.variants";
+import { Spinner } from "./spinner";
 
 export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
   ButtonVariants & {
@@ -9,10 +10,14 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
     asChild?: boolean;
     /** Mostra um spinner e desabilita o botão — usar durante submissão de formulário. */
     isLoading?: boolean;
+    /** Texto exibido no lugar do rótulo enquanto `isLoading` ("Salvando…"). Sem ele o rótulo
+     * original é mantido ao lado do spinner. Nunca use em botão que um teste E2E relocaliza pelo
+     * nome DURANTE o carregamento. */
+    loadingText?: string;
   };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild, isLoading, disabled, children, ...props }, ref) => {
+  ({ className, variant, size, asChild, isLoading, loadingText, disabled, children, ...props }, ref) => {
     // `Slot` (asChild) exige exatamente um elemento filho — nunca some junto
     // um spinner condicional. `asChild` é para links/`Link`, que não têm
     // estado de carregamento próprio; `isLoading` só se aplica ao `<button>`.
@@ -32,13 +37,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         aria-busy={isLoading || undefined}
         {...props}
       >
-        {isLoading ? (
-          <span
-            className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
-            aria-hidden="true"
-          />
-        ) : null}
-        {children}
+        {isLoading ? <Spinner /> : null}
+        {isLoading && loadingText ? loadingText : children}
       </button>
     );
   },

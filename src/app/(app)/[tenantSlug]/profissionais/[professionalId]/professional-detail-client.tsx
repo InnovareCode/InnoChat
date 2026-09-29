@@ -235,7 +235,7 @@ export function ProfessionalDetailClient({
               />
               Ativo
             </label>
-            <Button type="submit" isLoading={isPending} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}>
+            <Button type="submit" isLoading={isPending} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined} loadingText="Salvando…">
               Salvar
             </Button>
           </form>
@@ -273,7 +273,7 @@ export function ProfessionalDetailClient({
             isLoading={isPending}
             disabled={allServices.length === 0 || writeBlocked}
             title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
-          >
+           loadingText="Salvando…">
             Salvar serviços
           </Button>
         </CardFooter>
@@ -343,7 +343,7 @@ export function ProfessionalDetailClient({
           })}
         </CardContent>
         <CardFooter>
-          <Button onClick={saveHours} isLoading={isPending} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}>
+          <Button onClick={saveHours} isLoading={isPending} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined} loadingText="Salvando…">
             Salvar expediente
           </Button>
         </CardFooter>
@@ -450,7 +450,7 @@ export function ProfessionalDetailClient({
               <Button type="button" variant="secondary" onClick={() => setBlockDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" isLoading={isPending}>
+              <Button type="submit" isLoading={isPending} loadingText="Criando…">
                 Criar
               </Button>
             </DialogFooter>

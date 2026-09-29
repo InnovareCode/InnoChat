@@ -68,6 +68,18 @@ export async function runMaintenanceTick(now: Date = new Date()): Promise<Mainte
     contactsAnonymized += 1;
   }
 
+  // Leituras individuais de notificação: a janela da central é de 30 dias, então marcas mais
+  // antigas que isso nunca mais são consultadas. Não entra no summary (contrato do tick estável).
+  // Roda DEPOIS da anonimização (LGPD) e com falha isolada: uma limpeza cosmética nunca pode
+  // impedir a anonimização daquele tick (revisão do Órion, 2026-09-30).
+  try {
+    await prisma.notificationRead.deleteMany({ where: { readAt: { lt: new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000) } } });
+  } catch (error) {
+    logger.warn("maintenance.notification_reads_purge_failed", {
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   const summary: MaintenanceTickSummary = {
     inboundEventsPurged: purged.count,
     contactsAnonymized,

@@ -289,7 +289,7 @@ export function NovoAgendamentoDialog({
             <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" isLoading={isPending} disabled={disabled}>
+            <Button type="submit" isLoading={isPending} disabled={disabled} loadingText="Agendando…">
               Agendar
             </Button>
           </DialogFooter>

@@ -1,0 +1,49 @@
+export type NotificationKind =
+  | "APPOINTMENT_CREATED"
+  | "APPOINTMENT_RESCHEDULED"
+  | "APPOINTMENT_CANCELED"
+  | "APPOINTMENT_COMPLETED"
+  | "APPOINTMENT_NO_SHOW"
+  | "APPOINTMENT_UPCOMING"
+  | "WHATSAPP_DISCONNECTED"
+  | "TRIAL_ENDING"
+  | "PAYMENT_CONFIRMED";
+
+export type NotificationSeverity = "info" | "success" | "warning" | "danger";
+
+export type AppNotification = {
+  id: string;
+  kind: NotificationKind;
+  severity: NotificationSeverity;
+  title: string;
+  body: string;
+  href: string | null;
+  createdAt: string;
+  read: boolean;
+  source: "WHATSAPP" | "PANEL" | "SYSTEM";
+  appointment?: { id: string; startsAt: string; contactName: string; serviceName: string; professionalName: string };
+  /** Extra (aditivo): o próprio usuário logado fez a ação — a UI pode não exibir toast. */
+  byMe?: boolean;
+};
+
+export type UpcomingAppointmentItem = {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  contactName: string;
+  serviceName: string;
+  professionalName: string;
+  status: "SCHEDULED";
+  source: "WHATSAPP" | "PANEL";
+  minutesUntil: number;
+};
+
+export type TimelineItem = {
+  id: string;
+  action: "CREATED" | "CANCELED" | "RESCHEDULED" | "COMPLETED" | "NO_SHOW";
+  authorType: "CONTACT" | "USER" | "SYSTEM";
+  authorLabel: string;
+  note: string | null;
+  createdAt: string;
+  label: string;
+};

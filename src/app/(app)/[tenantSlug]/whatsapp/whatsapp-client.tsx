@@ -194,7 +194,7 @@ export function WhatsappClient({
             <Button type="button" variant="secondary" onClick={() => setConfirmDisconnect(null)}>
               Cancelar
             </Button>
-            <Button type="button" variant="danger" onClick={handleDisconnect} isLoading={isPending}>
+            <Button type="button" variant="danger" onClick={handleDisconnect} isLoading={isPending} loadingText="Desconectando…">
               Desconectar
             </Button>
           </DialogFooter>
@@ -234,7 +234,7 @@ export function WhatsappClient({
               onClick={handleRemove}
               isLoading={isPending}
               disabled={removeConfirmText !== confirmRemove?.label}
-            >
+             loadingText="Removendo…">
               Remover para sempre
             </Button>
           </DialogFooter>

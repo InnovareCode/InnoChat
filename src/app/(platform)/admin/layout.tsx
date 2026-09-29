@@ -5,6 +5,7 @@ import { fontVariables } from "@/app/fonts";
 import { auth } from "@/lib/auth";
 import { getPrisma } from "@/lib/db/prisma";
 import { ToastProvider } from "@/components/ui/toast";
+import { NavigationProgress } from "@/components/shell/navigation-progress";
 import { AdminShell } from "@/components/shell/admin-shell";
 
 export const metadata: Metadata = { title: "InnoChat — Admin da plataforma" };
@@ -33,6 +34,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <html lang="pt-BR" data-theme="INDIGO_CLINICO" className={fontVariables}>
       <body>
+        <NavigationProgress />
         <ToastProvider>
           <AdminShell userEmail={user.email}>{children}</AdminShell>
         </ToastProvider>

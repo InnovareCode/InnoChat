@@ -38,7 +38,7 @@ export async function applyConnectionEvent(ctx: InternalApiContext, payload: unk
       // o telefone assim que a Evolution devolver `fetchInstances` com o dono preenchido.
       await forTenant(tenantId).whatsappInstance.update({
         where: { id: instance.id },
-        data: { status: "CONNECTED", lastConnectedAt: new Date() },
+        data: { status: "CONNECTED", lastConnectedAt: new Date(), disconnectedAt: null },
       });
     }
     return { applied: true };
@@ -46,7 +46,13 @@ export async function applyConnectionEvent(ctx: InternalApiContext, payload: unk
 
   await forTenant(tenantId).whatsappInstance.update({
     where: { id: instance.id },
-    data: { status: event.state, ...(event.state === "DISCONNECTED" ? { phoneE164: null } : {}) },
+    data: {
+      status: event.state,
+      ...(event.state === "DISCONNECTED" ? { phoneE164: null } : {}),
+      // Queda inesperada (era CONNECTED): alimenta a notificação WHATSAPP_DISCONNECTED. Só
+      // carimba na transição, para evento repetido não "renovar" o alerta já lido.
+      ...(event.state === "DISCONNECTED" && instance.status === "CONNECTED" ? { disconnectedAt: new Date() } : {}),
+    },
   });
   return { applied: true };
 }

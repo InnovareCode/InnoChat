@@ -51,7 +51,7 @@ const STATUS_LABEL: Record<ContactAppointmentRow["status"], string> = {
   SCHEDULED: "Agendado",
   CANCELED: "Cancelado",
   COMPLETED: "Concluído",
-  NO_SHOW: "Não veio",
+  NO_SHOW: "Faltou",
 };
 
 const STATUS_VARIANT: Record<ContactAppointmentRow["status"], "success" | "danger" | "neutral" | "warning"> = {
@@ -413,7 +413,7 @@ export function ContactDetailDialog({
             <Button type="button" variant="secondary" onClick={() => setConfirmDelete(false)}>
               Cancelar
             </Button>
-            <Button type="button" variant="danger" onClick={handleDelete} isLoading={isDeletePending}>
+            <Button type="button" variant="danger" onClick={handleDelete} isLoading={isDeletePending} loadingText="Excluindo…">
               Excluir
             </Button>
           </DialogFooter>

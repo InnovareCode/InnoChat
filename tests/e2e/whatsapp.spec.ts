@@ -95,6 +95,8 @@ test.describe.serial("WhatsApp: conexão por QR com Evolution fake", () => {
         emailVerifiedAt: new Date(),
         termsAcceptedAt: new Date(),
         termsVersion: "e2e",
+        // Sem isto o tour do Inno abre sozinho 700ms depois da página e o overlay intercepta cliques.
+        onboardingTourCompletedAt: new Date(),
       },
     });
     await prisma.membership.create({ data: { userId: owner.id, tenantId: tenant.id, role: "OWNER" } });
@@ -106,6 +108,8 @@ test.describe.serial("WhatsApp: conexão por QR com Evolution fake", () => {
         emailVerifiedAt: new Date(),
         termsAcceptedAt: new Date(),
         termsVersion: "e2e",
+        // Sem isto o tour do Inno abre sozinho 700ms depois da página e o overlay intercepta cliques.
+        onboardingTourCompletedAt: new Date(),
       },
     });
     await prisma.membership.create({ data: { userId: staff.id, tenantId: tenant.id, role: "STAFF" } });

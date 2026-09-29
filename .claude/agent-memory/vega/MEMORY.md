@@ -30,3 +30,4 @@
 - [ProviderEvent(provider="manual") reaproveitado pra auditoria de baixa manual de fatura](provider_event_reused_for_manual_audit.md) — por que não criei tabela de auditoria nova.
 - [Segredos da plataforma cifrados + par MP prod/sandbox](platform_secrets_encryption.md) — enc:v1:, migração preguiçosa, regra de leitura única, testes.
 - [n8n prefixa webhook com parâmetro no path pelo webhookId](n8n_webhook_path_param_prefixed_by_webhookid.md) — causa do bot mudo em prod (2026-09-29); base derivada no syncN8n + reapontamento.
+- [Notificações do painel são derivadas + trigger de tenantId](notifications_derived_design.md) — sem tabela Notification; leitura em Membership/NotificationRead; disconnectedAt só na queda inesperada.

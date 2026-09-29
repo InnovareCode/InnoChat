@@ -47,7 +47,7 @@ export function LoginForm({ forgotLink }: { forgotLink: React.ReactNode }) {
         )}
       </Field>
 
-      <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS}>
+      <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Entrando…">
         Entrar
       </Button>
       <AuthTrust />
