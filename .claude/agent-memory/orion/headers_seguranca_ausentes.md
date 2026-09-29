@@ -19,4 +19,10 @@ CSP restritiva de início é viável sem quebrar nada visto nesta auditoria).
 **Antes de reabrir este achado numa próxima revisão:** checar se `next.config.ts` ganhou
 `headers()` (ou se apareceu um `src/middleware.ts`) antes de repetir a busca.
 
+**Confirmado corrigido em 2026-09-29** (revisão incremental,
+`docs/seguranca/revisao-incremental-2026-09-29.md`): `next.config.ts#headers()` traz CSP,
+`X-Frame-Options`, HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`; sem
+`unsafe-eval` em produção mesmo depois de `recharts`/`framer-motion`/`@dnd-kit` entrarem no
+bundle. Achado fechado.
+
 Ver também [[login_sem_rate_limit]] e [[tenant_isolation_pattern]].

@@ -23,4 +23,9 @@ deploy/trial fechado).
 `src/lib/auth.ts`/`src/modules/auth/service.ts` já ganhou `checkRateLimit` — não repetir a
 investigação do zero, só confirmar que a chamada existe e cobre o `authorize()`.
 
+**Confirmado corrigido em 2026-09-29** (revisão incremental,
+`docs/seguranca/revisao-incremental-2026-09-29.md`): `verifyCredentials` chama `checkRateLimit`
+para `login:ip:<ip>` e `login:email:<email>` dentro de `authorize()`. Achado fechado — só reabrir
+se a chamada for removida/alterada numa revisão futura.
+
 Ver também [[tenant_isolation_pattern]] e [[headers_seguranca_ausentes]].

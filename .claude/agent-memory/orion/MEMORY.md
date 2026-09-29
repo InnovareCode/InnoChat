@@ -1,4 +1,6 @@
 - [Padrão de isolamento multiempresa](tenant_isolation_pattern.md) — forTenant/guards/API interna; roteiro para auditar Server Actions novas
-- [Login sem rate limit](login_sem_rate_limit.md) — achado Alta 2026-09-28, checar se já foi corrigido antes de reauditar
-- [Headers de segurança ausentes](headers_seguranca_ausentes.md) — achado Alta 2026-09-28, checar se next.config.ts/middleware já ganhou headers()
+- [Login sem rate limit](login_sem_rate_limit.md) — achado Alta 2026-09-28, CONFIRMADO CORRIGIDO em 2026-09-29
+- [Headers de segurança ausentes](headers_seguranca_ausentes.md) — achado Alta 2026-09-28, CONFIRMADO CORRIGIDO em 2026-09-29
 - [Padrão de mascaramento de segredos](secrets_masking_pattern.md) — referência PlatformSettings, dívida de cifragem em repouso ainda proposta, não implementada
+- [Injeção de fórmula CSV via pushName](csv_injection_pushname.md) — achado Importante 2026-09-29, exportContactsCsvAction, não corrigido
+- [Ordem do lock ProviderEvent](provider_event_lock_ordering.md) — achado Médio 2026-09-29, markInvoicePaidManually inverteu a ordem do padrão do webhook
