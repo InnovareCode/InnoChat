@@ -91,6 +91,8 @@ type FakeServerOptions = {
   supportsPublish: boolean;
   /** `false` = `innochat-cron` não existe nesta instância (mission: sync não falha, só avisa). Padrão `true`. */
   hasCronWorkflow?: boolean;
+  /** `true` = n8n antigo que recusa `allowedHttpRequestDomains`/`allowedDomains` ("additional property"). */
+  rejectsDomainFields?: boolean;
 };
 
 /** Simula a API pública do n8n, com as duas superfícies possíveis controladas por `options` — ver cabeçalho do arquivo. */
@@ -119,6 +121,13 @@ function createFakeN8nServer(options: FakeServerOptions) {
     if (path === "/api/v1/credentials" && method === "POST") {
       credentialCounter += 1;
       const body = JSON.parse(String(init?.body)) as { name: string; type: string; data: Record<string, string> };
+      const hasDomainFields = "allowedDomains" in body.data || "allowedHttpRequestDomains" in body.data;
+      if (options.rejectsDomainFields && hasDomainFields) {
+        return jsonResponse(400, { message: "request.body.data is not allowed to have the additional property \"allowedDomains\"" });
+      }
+      if (!options.rejectsDomainFields && !hasDomainFields) {
+        return jsonResponse(400, { message: "request.body.data requires property \"allowedDomains\"" });
+      }
       const id = `cred-${credentialCounter}`;
       createdCredentials.push({ id, ...body });
       return jsonResponse(200, { id, name: body.name });
@@ -415,5 +424,36 @@ describe("syncN8n — compatibilidade com instância antiga (sem PATCH, sem publ
       { id: "dPMhT4MqGglCpFSw", route: "deactivate" },
     ]);
     expect(server.workflows.get("levHnMSXf1dOR3gS")!.active).toBe(false); // deactivate foi a última chamada
+  });
+});
+
+describe("syncN8n — restrição de domínio das credenciais (allowedDomains)", () => {
+  it("n8n recente: cada credencial vai restrita ao host que ela chama", async () => {
+    const { syncN8n } = await import("@/modules/platform/n8n-sync");
+    const admin = await makeAdminUser();
+    const server = createFakeN8nServer({ supportsCredentialPatch: true, supportsPublish: true });
+    vi.stubGlobal("fetch", server.fetchMock);
+
+    await syncN8n(admin.id);
+
+    expect(server.createdCredentials).toHaveLength(3);
+    for (const cred of server.createdCredentials) {
+      expect(cred.data.allowedHttpRequestDomains).toBe("domains");
+      expect(cred.data.allowedDomains).toMatch(/^[a-z0-9.-]+$/i);
+    }
+  });
+
+  it("n8n antigo que recusa os campos: reenvia sem eles e a sync termina", async () => {
+    const { syncN8n } = await import("@/modules/platform/n8n-sync");
+    const admin = await makeAdminUser();
+    const server = createFakeN8nServer({ supportsCredentialPatch: false, supportsPublish: false, rejectsDomainFields: true });
+    vi.stubGlobal("fetch", server.fetchMock);
+
+    await syncN8n(admin.id);
+
+    expect(server.createdCredentials).toHaveLength(3);
+    for (const cred of server.createdCredentials) {
+      expect(cred.data).not.toHaveProperty("allowedDomains");
+    }
   });
 });

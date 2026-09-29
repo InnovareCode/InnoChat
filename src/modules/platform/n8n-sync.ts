@@ -99,16 +99,43 @@ function setConfigAssignment(node: N8nNode, name: string, value: string): void {
  * novo" — o único caminho que sempre funciona, em qualquer versão. Sem `previousId`, cria
  * direto. Nunca deixa duas credenciais vigentes para o mesmo propósito.
  */
+/**
+ * Versões recentes do n8n exigem, na API pública, a restrição de domínio da credencial
+ * (`allowedHttpRequestDomains` + `allowedDomains`: "requires property allowedDomains" no primeiro
+ * deploy real, 2026-09-29). Restringir a credencial ao host que ela de fato chama também é o mais
+ * seguro. Versões antigas recusam essas propriedades ("additional property"): aí reenvia sem elas.
+ */
+function isDomainFieldsRejected(error: unknown): boolean {
+  return error instanceof N8nApiError && error.status === 400 && /additional propert/i.test(error.message) && /allowed/i.test(error.message);
+}
+
+async function withDomainFieldsFallback<T>(
+  data: Record<string, string>,
+  allowedHost: string,
+  send: (payload: Record<string, string>) => Promise<T>,
+): Promise<T> {
+  try {
+    return await send({ ...data, allowedHttpRequestDomains: "domains", allowedDomains: allowedHost });
+  } catch (error) {
+    if (!isDomainFieldsRejected(error)) throw error;
+    logger.info("platform.n8n_sync.domain_fields_unsupported");
+    return send(data);
+  }
+}
+
 async function rotateCredential(
   client: N8nClient,
   previousId: string | null,
   name: string,
   type: string,
   data: Record<string, string>,
+  allowedHost: string,
 ): Promise<string> {
   if (previousId) {
     try {
-      const updated = await client.updateCredential(previousId, { name, type, data });
+      const updated = await withDomainFieldsFallback(data, allowedHost, (payload) =>
+        client.updateCredential(previousId, { name, type, data: payload }),
+      );
       return updated.id;
     } catch (error) {
       if (!(error instanceof N8nApiError) || (error.status !== 404 && error.status !== 405)) {
@@ -123,7 +150,7 @@ async function rotateCredential(
       });
     }
   }
-  const created = await client.createCredential({ name, type, data });
+  const created = await withDomainFieldsFallback(data, allowedHost, (payload) => client.createCredential({ name, type, data: payload }));
   return created.id;
 }
 
@@ -192,15 +219,15 @@ export async function syncN8n(updatedByUserId: string): Promise<N8nSyncSummary> 
   const painelCredId = await rotateCredential(client, current?.n8nCredPainelId ?? null, CRED_PAINEL_NAME, "httpHeaderAuth", {
     name: "Authorization",
     value: `Bearer ${internalApiSecret}`,
-  });
+  }, new URL(painelUrl).hostname);
   const evolutionCredId = await rotateCredential(client, current?.n8nCredEvolutionId ?? null, CRED_EVOLUTION_NAME, "httpHeaderAuth", {
     name: "apikey",
     value: config.evolutionApiKey,
-  });
+  }, new URL(config.evolutionApiUrl).hostname);
   const n8nCredId = await rotateCredential(client, current?.n8nCredApiId ?? null, CRED_N8N_API_NAME, "httpHeaderAuth", {
     name: "X-N8N-API-KEY",
     value: config.n8nApiKey,
-  });
+  }, new URL(config.n8nBaseUrl).hostname);
 
   const botWorkflow = await resolveWorkflow(client, current?.n8nWorkflowBotId ?? null, DEFAULT_BOT_WORKFLOW_ID, "innochat-bot");
   const configNode = botWorkflow.nodes.find((n) => n.name === CONFIG_NODE_NAME);
