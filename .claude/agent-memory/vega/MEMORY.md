@@ -22,3 +22,7 @@
 - [Assinatura do webhook do MP conferida contra o SDK oficial em Go](mercadopago_signature_go_sdk_spec.md) — data.id vem do query param, pares ausentes são omitidos do manifest.
 - [Prisma: transação aborta inteira após P2002](prisma_transaction_aborts_after_p2002.md) — releitura de recuperação precisa de conexão/transação NOVA, nunca continuar no `tx` que falhou.
 - [SSRF leve: o que bloquear e o que NÃO bloquear em URL de admin](ssrf_guard_scope_platform_admin_urls.md) — decisão amarrada a "só requirePlatformAdmin chega aqui".
+- [Heurística do 9º dígito para waJid de Contact criado pelo painel](contact_wajid_dedup_heuristic.md) — evita duplicar quando o cliente manda a 1ª mensagem, e onde essa heurística falha.
+- [Contact.source é derivado da forma do waJid, não um campo próprio](contact_source_derived_from_wajid.md) — por que cliente cadastrado manualmente pode aparecer como "WhatsApp" e ter telefone bloqueado.
+- [Raw SQL ($queryRaw/Prisma.sql) só é permitido dentro de src/lib/db/](raw_sql_only_in_lib_db.md) — padrão usado para agregação de Contact×Appointment numa consulta só.
+- [Migration de dados que aplica preço/valor de negócio sem sobrescrever edição do admin](plan_price_data_migration_never_overwrite_edit.md) — condição "só se ainda está no estado de fábrica" dos 3 planos.

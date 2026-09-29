@@ -12,6 +12,7 @@ import { cn } from "@/components/lib/cn";
 import { createAppointmentAction } from "@/modules/agenda/appointment-actions";
 import { listAvailableSlotsAction } from "@/modules/agenda/availability-actions";
 import { formatDateTimeLabel, formatTimeLabel } from "@/components/lib/format-date";
+import { formatPhoneDisplay } from "@/components/lib/format-phone";
 
 export type AgendaService = { id: string; name: string; durationMin: number; active: boolean };
 export type AgendaProfessional = { id: string; name: string; active: boolean };
@@ -37,6 +38,11 @@ type Props = {
   timezone: string;
   /** Assinatura suspensa/cancelada (refinamento de UX — o servidor já bloqueia). */
   disabled?: boolean;
+  /**
+   * Cliente já escolhido (tela de Clientes, "Agendar para este cliente") — some com os campos
+   * de nome/telefone e manda `contactId` em vez de `contactName`/`contactPhoneE164`.
+   */
+  presetContact?: { id: string; name: string; phone: string | null } | null;
 };
 
 function todayISO(): string {
@@ -60,6 +66,7 @@ export function NovoAgendamentoDialog({
   onCreated,
   timezone,
   disabled = false,
+  presetContact = null,
 }: Props) {
   const activeServices = services.filter((s) => s.active);
   const activeProfessionals = professionals.filter((p) => p.active);
@@ -133,7 +140,7 @@ export function NovoAgendamentoDialog({
       setError("Escolha um horário.");
       return;
     }
-    if (!contactName.trim()) {
+    if (!presetContact && !contactName.trim()) {
       setError("Informe o nome do cliente.");
       return;
     }
@@ -143,8 +150,9 @@ export function NovoAgendamentoDialog({
         serviceId,
         professionalId: professionalId || null,
         startsAt,
-        contactName: contactName.trim(),
-        contactPhoneE164: contactPhone.trim() || undefined,
+        ...(presetContact
+          ? { contactId: presetContact.id }
+          : { contactName: contactName.trim(), contactPhoneE164: contactPhone.trim() || undefined }),
       });
 
       if (!result.ok) {
@@ -247,22 +255,34 @@ export function NovoAgendamentoDialog({
             </>
           )}
 
-          <Field label="Nome do cliente" required>
-            {(fieldProps) => (
-              <Input {...fieldProps} value={contactName} onChange={(e) => setContactName(e.target.value)} required maxLength={120} />
-            )}
-          </Field>
+          {presetContact ? (
+            <div className="rounded-card border border-border bg-bg p-3 text-sm">
+              <p className="text-text-secondary">Cliente</p>
+              <p className="font-medium text-text">{presetContact.name}</p>
+              {presetContact.phone ? (
+                <p className="text-text-secondary">{formatPhoneDisplay(presetContact.phone)}</p>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <Field label="Nome do cliente" required>
+                {(fieldProps) => (
+                  <Input {...fieldProps} value={contactName} onChange={(e) => setContactName(e.target.value)} required maxLength={120} />
+                )}
+              </Field>
 
-          <Field label="Telefone (opcional)">
-            {(fieldProps) => (
-              <Input
-                {...fieldProps}
-                value={contactPhone}
-                onChange={(e) => setContactPhone(e.target.value)}
-                placeholder="+55 11 99999-9999"
-              />
-            )}
-          </Field>
+              <Field label="Telefone (opcional)">
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    value={contactPhone}
+                    onChange={(e) => setContactPhone(e.target.value)}
+                    placeholder="+55 11 99999-9999"
+                  />
+                )}
+              </Field>
+            </>
+          )}
           </fieldset>
 
           <DialogFooter>

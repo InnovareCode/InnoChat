@@ -1117,3 +1117,170 @@ Aplicada em `innochat` e `innochat_test`; `DOWN.sql` presente.
 Saída: `Result<{ alreadyVerified: boolean }>`. Se já verificado, não envia nada e devolve `alreadyVerified: true`
 (a UI deve parar de oferecer o botão). Falha de SMTP só é logada, como no cadastro. Coberto em
 `tests/integration/billing-signup.integration.test.ts`.
+
+## Clientes (gestão de clientes finais — Fase 8, 2026-09-28)
+
+Tela `/[tenantSlug]/clientes` (Lyra). Todas as actions escopam por `tenantSlug` +
+`requireTenantMember` (qualquer papel para leitura/edição; `deleteContactAction` e
+`exportContactsCsvAction` exigem `["OWNER"]`). Mutações passam por `assertTenantCanWrite`
+(bloqueadas com assinatura suspensa). Todo `id` recebido é revalidado no tenant (`forTenant` +
+`findFirst`) — id de outro tenant → `NOT_FOUND`, nunca `FORBIDDEN` (mesma convenção do resto do
+painel).
+
+### Schema (`prisma/migrations/20260928000009_contact_notes`)
+
+`Contact.notes String?` (limite de 2000 caracteres aplicado no zod da action, não no banco —
+igual ao padrão do restante do schema, sem `@db.VarChar`). Aplicada em `innochat` e
+`innochat_test`; `DOWN.sql` presente.
+
+### `source: "WHATSAPP" | "PANEL"` — derivado da FORMA do `waJid`, não de um campo de origem
+
+Não existe um campo "como este cliente nasceu" — `source` é 100% calculado a partir do `waJid`:
+`@panel.local` (o padrão sintético antigo, de `createAppointmentAction` sem `contactId`) →
+`"PANEL"`; qualquer outra coisa (`@s.whatsapp.net`) → `"WHATSAPP"`.
+
+**Consequência que vale a pena registrar**: `createContactAction`/`updateContactAction`, ao
+receber um telefone real, gravam de propósito um `waJid` no formato `@s.whatsapp.net` (ver
+próxima seção) — para não duplicar o contato quando esse cliente mandar a primeira mensagem pelo
+WhatsApp. Por isso um cliente cadastrado à mão no painel, com telefone, aparece com
+`source: "WHATSAPP"` (não `"PANEL"`) — mesmo nunca tendo mandado mensagem nenhuma. Isso também é
+por que o telefone desses contatos fica bloqueado para edição (`PHONE_LOCKED`, ver
+`updateContactAction`): uma vez que o `waJid` foi derivado do telefone, trocar o telefone sem
+trocar o `waJid` junto quebraria o casamento com a próxima mensagem real do cliente. Só um
+contato ainda `@panel.local` (criado sem telefone, ou nunca editado para ganhar um) tem telefone
+editável. **Se esse comportamento (badge "WhatsApp" para alguém cadastrado manualmente) for
+indesejado no produto, a correção é um campo `Contact.origin` novo — mudança de schema fora do
+escopo desta rodada; ver PENDÊNCIAS no handoff da Vega.**
+
+### `waJid` de um `Contact` criado pelo painel — heurística do 9º dígito (`src/core/whatsapp/phone.ts`)
+
+`claimMessage` (`src/modules/bot-api/claim.ts`) NUNCA normaliza o `waJid` — grava exatamente o
+`remoteJid` que a Evolution/Baileys mandar. E esse `remoteJid` chega SEM o 9º dígito para MUITOS
+(não todos) celulares brasileiros (achado documentado desde o InnoAtendente, ver
+`normalizeBrazilianNinthDigit`). Por isso:
+
+- `phoneE164ToLikelyWhatsappJid(phoneE164)`: escolhe o candidato SEM o 9º dígito como `waJid` de
+  um `Contact` novo — bate com o caso mais comum, mas é uma HEURÍSTICA, não uma garantia. Se o
+  número específico deste cliente for um dos que chegam COM o 9º dígito, a primeira mensagem dele
+  ainda cria um segundo `Contact` (limitação conhecida, ver PENDÊNCIAS).
+- `whatsappJidCandidatesForPhone(phoneE164)`: as duas formas plausíveis (com/sem o 9º dígito) —
+  usado para PROCURAR um contato de WhatsApp real já existente com este telefone antes de criar
+  um novo (`findDuplicateByPhone`, `src/modules/contacts/contacts.ts`). Cobre o caso "cliente já
+  tinha mandado mensagem antes de ser cadastrado no painel" — que é o caso em que dava para checar
+  de verdade. Testado em `tests/integration/contacts.integration.test.ts` (descreve
+  "waJid do cliente cadastrado pelo painel bate com o que o bot gera").
+- `parseBrazilianPhoneToE164(input)`: telefone digitado (qualquer formatação) → E.164, só padrão
+  BR (DDD + 8/9 dígitos, com/sem `+55`).
+
+### `src/modules/contacts/contacts.ts` + `src/lib/db/contact-queries.ts`
+
+Agregações de agendamento por cliente (contagem, faltas, último/próximo) via **uma única query**
+raw (`$queryRaw` + `LEFT JOIN LATERAL`, em `src/lib/db/contact-queries.ts` — só ali porque é o
+único lugar fora de `src/lib/db/` autorizado a importar `Prisma.sql` cru, ver
+`eslint.config.mjs`). Decisão registrada: o `include` nativo do Prisma resolveria em 2 idas ao
+banco mas não deixaria FILTRAR por "tem agendamento futuro" nem ORDENAR por "próximo
+agendamento" no banco — teria que carregar todos os contatos do tenant para paginar em memória.
+`tenantId` sempre interpolado como parâmetro do tagged template (nunca concatenado em string).
+
+- `listContactsAction(tenantSlug, { q?, filter?, cursor?, limit? }): Result<{ items:
+  ContactListItem[], nextCursor: string | null }>` — `filter ∈ all | upcoming | botPaused |
+  inactive90d` (padrão `all`), `limit` padrão 30, máx. 100. `q` busca por nome, `pushName` e
+  telefone (compara dígitos, ignora formatação). Ordena por próximo agendamento primeiro, depois
+  cadastro mais recente. **`cursor` é um offset em base64, não um keyset cursor de verdade** —
+  decisão deliberada (a ordenação dinâmica não tem uma chave de corte estável simples); risco
+  aceito de pular/repetir uma linha sob inserção concorrente durante a paginação, nunca vaza
+  outro tenant. Exclui contatos anonimizados sempre. `inactive90d` exige que o cliente TENHA
+  histórico de agendamento (mas nenhum nos últimos 90 dias) — quem nunca agendou nada não entra
+  nesse filtro (não tem "voltar a vir").
+- `getContactAction(tenantSlug, id): Result<ContactDetail>` — `ContactDetail` = `ContactListItem`
+  + `notes`, `botPausedUntil`, `appointments` (até 50, mais recentes primeiro). `NOT_FOUND` para
+  id de outro tenant ou contato anonimizado.
+- `createContactAction(tenantSlug, { name, phone, notes? }): Result<{ id }>` — `phone` em
+  qualquer formatação BR; `INVALID_PAYLOAD` se não bater com o padrão. `CONTACT_EXISTS` (com
+  `details.contactId`) se já existir um cliente com esse telefone (painel ou WhatsApp real, ver
+  seção do `waJid` acima).
+- `updateContactAction(tenantSlug, id, { name?, phone?, notes? }): Result<{ id }>` —
+  `PHONE_LOCKED` se o contato já tem `waJid` "de WhatsApp" (ver seção `source` acima).
+  `CONTACT_EXISTS` na troca de telefone se colidir com outro cliente. `notes: ""` limpa as notas.
+- `setContactBotPausedAction(tenantSlug, id, { paused, hours? }): Result<{ botPausedUntil:
+  string | null }>` — `paused: true` sem `hours` = pausa indefinida (~100 anos no futuro, não um
+  sentinel `null` separado — simplifica o resto do código que só compara `> now`). Retomar
+  (`paused: false`) zera `Contact.botPausedUntil` **e** `humanUntil`/volta `state` para
+  `MAIN_MENU` em toda `ChatSession` deste contato (transação) — sem isso, uma sessão em modo
+  humano continuaria ignorando o bot até o prazo antigo mesmo com o cliente "retomado" no painel.
+  Conferido: `claimMessage` já respeitava `Contact.botPausedUntil` (linha existente desde a Fase
+  4, `contact.botPausedUntil > now → BOT_PAUSED`) — nada precisou mudar em `claim.ts`.
+- `deleteContactAction(tenantSlug, id): Result<{ mode: "deleted" | "anonymized" }>` — só OWNER.
+  Sem agendamento → apaga de verdade. Com qualquer agendamento → anonimiza (mesmo padrão de
+  `src/modules/maintenance/tick.ts`: zera `name`/`pushName`/`phoneE164`/`lid`/`notes`, marca
+  `waJid = anon:<id>`), preservando o histórico de `Appointment`.
+- `exportContactsCsvAction(tenantSlug): Result<{ filename, csv }>` — só OWNER. UTF-8 com BOM
+  (`﻿`) + separador `;` (Excel pt-BR). Colunas: nome, telefone, agendamentos, faltas,
+  último, próximo, criado em. Paginado internamente (`MAX_LIST_LIMIT` por página, até 5000
+  clientes por exportação) — nunca um `SELECT *` sem limite.
+
+### Agendar para um cliente existente
+
+`createAppointmentAction` (Fase 2) já aceita `contactId` desde a implementação original — nenhuma
+mudança de contrato foi necessária aqui. `NovoAgendamentoDialog`/`ContactDetailDialog` (Lyra)
+usam isso direto: "Agendar para este cliente" passa o `contactId` já resolvido.
+
+### `runMaintenanceTick` (LGPD) — atualizado
+
+`src/modules/maintenance/tick.ts`: a anonimização de `Contact` agora também zera `notes` (campo
+novo desta fase) — mesma política dos outros campos de dado pessoal.
+
+### O que a Íris deve testar (Clientes)
+
+Busca (nome/telefone)/filtros/paginação; cross-tenant (`NOT_FOUND`); `CONTACT_EXISTS` na criação
+E na troca de telefone; `PHONE_LOCKED` ao tentar editar telefone de contato "de WhatsApp";
+pausar → `claimMessage` ignora com `BOT_PAUSED` → retomar → `claimMessage` processa de novo (e a
+`ChatSession` sai do modo humano); excluir sem histórico (apaga) vs. com histórico (anonimiza,
+mantém `Appointment`); CSV (BOM, separador, colunas). Tudo coberto em
+`tests/integration/contacts.integration.test.ts` (11 testes) — a Íris deve rodar contra a UI real
+por cima disso, focando em fluxo e mensagens de erro na tela.
+
+### O que o Órion deve revisar (Clientes)
+
+- A escolha de `waJid` sem o 9º dígito é uma heurística probabilística, não uma garantia de
+  unicidade — confirmar que isso é aceitável (o pior caso é um `Contact` duplicado por telefone,
+  nunca um vazamento de dado entre tenants).
+- `exportContactsCsvAction` devolve TODOS os dados pessoais de todos os clientes de uma vez — só
+  OWNER, mas vale confirmar se isso precisa de log de auditoria (quem exportou, quando) — não
+  implementado nesta rodada.
+- `src/lib/db/contact-queries.ts` é o único lugar fora de `src/lib/db/` com `Prisma.sql` cru —
+  confirmar que todo valor interpolado usa `${}` (parametrizado) e nunca concatenação de string.
+
+### PENDÊNCIAS (Clientes)
+
+- **`source` como proxy de "origem de cadastro"**: ver seção acima — um `Contact.origin` próprio
+  resolveria a ambiguidade, mas é mudança de schema fora do escopo pedido nesta rodada.
+- **Heurística do 9º dígito**: cobre só o caso "cliente já mandou mensagem antes de ser
+  cadastrado". Se o número específico do cliente for um dos que chegam COM o 9º dígito no
+  `remoteJid` real, a primeira mensagem dele ainda cria um `Contact` duplicado — sem uma forma de
+  reconciliar automaticamente depois (ex.: casar por `phoneE164` quando os dois `Contact`
+  existirem) sem tocar em `claim.ts`, fora do escopo desta rodada.
+
+## Planos — preços aprovados pelo dono (`prisma/migrations/20260928000010_plan_prices`, 2026-09-28)
+
+Data migration idempotente (não altera schema): aplica os 3 preços aprovados — Essencial R$ 59,90
+(5990), Profissional R$ 109,90 (10990), Clínica R$ 189,90 (18990) — e marca os 3 planos
+`active = true`. Dois caminhos, sempre pelo `code` (`essencial`/`profissional`/`clinica`):
+
+1. **Cria** o plano se `code` ainda não existir (produção nasce vazia — `prisma/seed.ts` não roda
+   em produção).
+2. **Atualiza** um plano já existente SÓ SE ele estiver exatamente no estado "recém-criado pelo
+   seed, não precificado" (`priceCents = 0 AND active = false`). Qualquer plano com preço
+   diferente de 0 (mesmo que ainda inativo) é deixado intocado — nunca sobrescreve uma edição que
+   o dono já tenha feito pela tela Admin → Planos.
+
+Nada no código fixa esses valores — `admin-actions.ts`/`admin-service.ts` (Fase 7) continuam
+sendo o único jeito de mudar preço/limites/ativação depois da migration; o dono pode reajustar
+livremente pela tela. `prisma/seed.ts` (ambiente de dev) foi atualizado com os mesmos 3 valores,
+já `active: true`, para o dev ficar consistente com produção — `update: {}` no `upsert` garante
+que rodar o seed de novo nunca sobrescreve um ajuste manual.
+
+`docs/deploy-easypanel.md` não precisou de passo extra: o passo já documentado ("Console do
+serviço → `npx prisma migrate deploy` — manual, sempre") já cobre esta migration.
+
+Aplicada e conferida em `innochat` (dev) e `innochat_test`.

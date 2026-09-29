@@ -292,6 +292,7 @@ model Contact {
   lid           String?
   name          String?
   pushName      String?
+  notes         String?
   botPausedUntil DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

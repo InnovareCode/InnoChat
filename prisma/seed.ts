@@ -152,9 +152,12 @@ async function main() {
     },
   });
 
-  // Fase 7 — os 3 planos aprovados (docs/arquitetura.md §7.2), com preço ainda não definido pelo
-  // dono: nascem com priceCents = 0 e active = false de propósito (ver comentário no schema, model
-  // Plan). Ativar e definir o preço é tarefa do admin da plataforma, não do seed.
+  // Fase 7 — os 3 planos aprovados pelo dono (docs/arquitetura.md §7.2), com os preços
+  // definitivos (2026-09-28): Essencial R$ 59,90 / Profissional R$ 109,90 / Clínica R$ 189,90 —
+  // mesmos valores aplicados em produção pela migration de dados `20260928000010_plan_prices`
+  // (o seed não roda em produção; esta atualização é só para o ambiente de dev ficar consistente
+  // com o que o dono já aprovou). `update: {}` de propósito: rodar o seed de novo NUNCA
+  // sobrescreve um preço que o admin já tenha ajustado pela tela Admin → Planos.
   const [essencial, profissional, clinica] = await Promise.all([
     prisma.plan.upsert({
       where: { code: "essencial" },
@@ -162,10 +165,10 @@ async function main() {
       create: {
         code: "essencial",
         name: "Essencial",
-        priceCents: 0,
+        priceCents: 5990,
         maxWhatsappNumbers: 1,
         maxProfessionals: 3,
-        active: false,
+        active: true,
         sortOrder: 1,
       },
     }),
@@ -175,10 +178,10 @@ async function main() {
       create: {
         code: "profissional",
         name: "Profissional",
-        priceCents: 0,
+        priceCents: 10990,
         maxWhatsappNumbers: 2,
         maxProfessionals: 10,
-        active: false,
+        active: true,
         sortOrder: 2,
       },
     }),
@@ -188,10 +191,10 @@ async function main() {
       create: {
         code: "clinica",
         name: "Clínica",
-        priceCents: 0,
+        priceCents: 18990,
         maxWhatsappNumbers: 3,
         maxProfessionals: null, // ilimitado
-        active: false,
+        active: true,
         sortOrder: 3,
       },
     }),

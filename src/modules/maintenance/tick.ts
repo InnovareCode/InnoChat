@@ -59,6 +59,9 @@ export async function runMaintenanceTick(now: Date = new Date()): Promise<Mainte
         lid: null,
         name: null,
         pushName: null,
+        // `notes` (Fase 8, gestão de clientes): pode conter dado pessoal digitado à mão pela
+        // empresa — mesma política de anonimização dos outros campos identificáveis.
+        notes: null,
       },
     });
     contactsAnonymized += 1;

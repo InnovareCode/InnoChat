@@ -228,6 +228,11 @@ function PlanosCard({
               Mudança para o plano <strong>{snapshot.pendingPlanName}</strong> agendada para o próximo ciclo.
             </Alert>
           ) : null}
+          {plans.length === 0 ? (
+            <Alert variant="info">
+              Os planos ainda estão sendo definidos. Seu acesso continua normal.
+            </Alert>
+          ) : null}
           {plans.map((plan) => {
             const isCurrent = plan.id === snapshot.planId;
             const isPendingTarget = plan.id === snapshot.pendingPlanId;
