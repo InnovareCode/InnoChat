@@ -68,9 +68,20 @@ describe("ensurePublicBaseUrlFromCurrentRequest", () => {
     );
   });
 
-  it("nunca sobrescreve um publicBaseUrl já salvo", async () => {
+  it("atualiza quando o admin passa a operar por outro domínio (troca para o domínio oficial)", async () => {
     headersMock.mockResolvedValue(headerMap({ "x-forwarded-proto": "https", "x-forwarded-host": "novo-dominio.example.com" }));
     findUniqueMock.mockResolvedValue({ publicBaseUrl: "https://dominio-original.example.com" });
+
+    await ensurePublicBaseUrlFromCurrentRequest();
+
+    expect(upsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({ update: expect.objectContaining({ publicBaseUrl: "https://novo-dominio.example.com" }) }),
+    );
+  });
+
+  it("não grava de novo quando o endereço é o mesmo", async () => {
+    headersMock.mockResolvedValue(headerMap({ "x-forwarded-proto": "https", "x-forwarded-host": "app.innochat.com.br" }));
+    findUniqueMock.mockResolvedValue({ publicBaseUrl: "https://app.innochat.com.br" });
 
     await ensurePublicBaseUrlFromCurrentRequest();
 

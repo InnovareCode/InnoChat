@@ -186,6 +186,7 @@ async function translateN8nError<T>(operation: string, fn: () => Promise<T>): Pr
 export async function syncN8nAction(): Promise<Result<N8nSyncSummary>> {
   return runAction(async () => {
     const admin = await requirePlatformAdmin();
+    await ensurePublicBaseUrlFromCurrentRequest();
     return translateN8nError("sync", () => syncN8n(admin.id));
   });
 }

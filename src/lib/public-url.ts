@@ -71,10 +71,11 @@ export async function getStoredPublicBaseUrl(): Promise<string | null> {
 }
 
 /**
- * Grava `publicBaseUrl` a partir da requisição atual — chamada de dentro de uma Server Action
- * que já roda com sessão de admin (`updatePlatformSettingsAction`). Nunca sobrescreve um valor
- * já gravado: se o domínio mudar, é o admin quem decide trocar (fora do escopo da v1 — não há
- * tela para editar isto à mão, de propósito, para não reabrir a porta de "URL solta").
+ * Grava `publicBaseUrl` a partir da requisição atual — chamada só de Server Actions do admin da
+ * plataforma (salvar configurações, sincronizar n8n). O endereço de onde o admin está operando é
+ * o oficial: quando o domínio mudou no primeiro deploy real (endereço do Easypanel → domínio
+ * próprio, 2026-09-29), manter o primeiro valor deixava cron, e-mails e n8n no endereço antigo.
+ * Por isso atualiza sempre que for diferente. Sem tela para editar à mão, de propósito.
  */
 export async function ensurePublicBaseUrlFromCurrentRequest(): Promise<void> {
   const candidate = await tryBaseUrlFromRequestHeaders();
@@ -82,7 +83,7 @@ export async function ensurePublicBaseUrlFromCurrentRequest(): Promise<void> {
 
   const prisma = getPrisma();
   const current = await prisma.platformSettings.findUnique({ where: { id: 1 }, select: { publicBaseUrl: true } });
-  if (current?.publicBaseUrl) return;
+  if (current?.publicBaseUrl === candidate) return;
 
   await prisma.platformSettings.upsert({
     where: { id: 1 },
