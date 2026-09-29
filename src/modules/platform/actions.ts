@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requirePlatformAdmin } from "@/lib/auth/guards";
+import { logger } from "@/lib/logger";
+import { UnsafeUrlError } from "@/lib/net/safe-fetch";
+import { N8nApiError } from "./n8n-client";
 import { runAction, type Result } from "@/lib/result";
 import { DomainError } from "@/lib/errors";
 import { ensurePublicBaseUrlFromCurrentRequest } from "@/lib/public-url";
@@ -146,17 +149,51 @@ export async function testSmtpConnectionAction(input: unknown): Promise<Result<C
 // Sincronização do n8n (docs/contratos.md) — nunca ativa o bot sozinha.
 // ---------------------------------------------------------------------------
 
+/**
+ * Falha de rede ou resposta de erro do n8n vira mensagem legível na tela, em vez de erro 500
+ * (primeiro deploy real, 2026-09-29: "Sincronizar n8n" derrubava a página sem dizer o motivo).
+ * O detalhe técnico completo vai para o log do servidor.
+ */
+async function translateN8nError<T>(operation: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (error instanceof DomainError) throw error;
+    logger.error("platform.n8n.operation_failed", {
+      operation,
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+    if (error instanceof N8nApiError) {
+      const hint =
+        error.status === 401 || error.status === 403
+          ? " Confira a chave de API do n8n (Settings → n8n API)."
+          : error.status === 404
+            ? " Confira a URL do n8n e se os workflows do InnoChat existem nele."
+            : "";
+      throw new DomainError("N8N_REQUEST_FAILED", `${error.message}${hint}`);
+    }
+    if (error instanceof UnsafeUrlError) {
+      throw new DomainError("N8N_UNSAFE_URL", `URL do n8n recusada: ${error.message}`);
+    }
+    throw new DomainError(
+      "N8N_UNREACHABLE",
+      "Não foi possível conectar ao n8n. Confira a URL do n8n (e se ela responde a partir do servidor do painel) e tente de novo.",
+    );
+  }
+}
+
 export async function syncN8nAction(): Promise<Result<N8nSyncSummary>> {
   return runAction(async () => {
     const admin = await requirePlatformAdmin();
-    return syncN8n(admin.id);
+    return translateN8nError("sync", () => syncN8n(admin.id));
   });
 }
 
 export async function activateBotWorkflowAction(): Promise<Result<{ activated: true }>> {
   return runAction(async () => {
     await requirePlatformAdmin();
-    await activateBotWorkflow();
+    await translateN8nError("activate", () => activateBotWorkflow());
     return { activated: true };
   });
 }
@@ -164,7 +201,7 @@ export async function activateBotWorkflowAction(): Promise<Result<{ activated: t
 export async function deactivateBotWorkflowAction(): Promise<Result<{ activated: false }>> {
   return runAction(async () => {
     await requirePlatformAdmin();
-    await deactivateBotWorkflow();
+    await translateN8nError("deactivate", () => deactivateBotWorkflow());
     return { activated: false };
   });
 }
