@@ -62,7 +62,7 @@ export async function runBillingTick(now: Date = new Date(), gateway?: MercadoPa
   let resolvedGateway = gateway;
   if (!resolvedGateway) {
     try {
-      resolvedGateway = await getMercadoPagoGateway();
+      resolvedGateway = await getMercadoPagoGateway({ forNewCharge: true });
     } catch {
       resolvedGateway = undefined; // segue sem Pix — faturas nascem OPEN sem QR, regeráveis depois
     }

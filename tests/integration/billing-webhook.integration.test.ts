@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import crypto from "node:crypto";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { getPrisma } from "@/lib/db/prisma";
+import { encryptSecret } from "@/lib/crypto";
 
 vi.mock("@/lib/email", async () => {
   const actual = await vi.importActual<typeof import("@/lib/email")>("@/lib/email");
@@ -17,6 +18,12 @@ const { handleMercadoPagoWebhook } = await import("@/modules/billing/webhook");
 
 const prisma = getPrisma();
 const WEBHOOK_SECRET = "it-webhook-secret";
+
+/** Par de PRODUÇÃO ativo com o segredo do teste (o webhook valida com o segredo do ambiente ativo). */
+async function seedWebhookSecret() {
+  const data = { mpEnvironment: "PRODUCTION" as const, mpProdWebhookSecretEnc: encryptSecret(WEBHOOK_SECRET), mercadoPagoWebhookSecret: null };
+  await prisma.platformSettings.upsert({ where: { id: 1 }, create: { id: 1, ...data }, update: data });
+}
 
 function signManifest(dataId: string, requestId: string, ts: string) {
   const manifest = `id:${dataId.toLowerCase()};request-id:${requestId};ts:${ts};`;
@@ -51,7 +58,7 @@ describe("handleMercadoPagoWebhook — idempotência (§6.10)", () => {
   it("rejeita assinatura inválida (401, sem tocar no banco)", async () => {
     const { tenant, invoice } = await makeSubscriptionWithOpenInvoice("bad-sig");
     cleanupTenantIds.push(tenant.id);
-    await prisma.platformSettings.upsert({ where: { id: 1 }, create: { id: 1, mercadoPagoWebhookSecret: WEBHOOK_SECRET }, update: { mercadoPagoWebhookSecret: WEBHOOK_SECRET } });
+    await seedWebhookSecret();
 
     const dataId = "pay_bad_sig";
     await expect(
@@ -65,7 +72,7 @@ describe("handleMercadoPagoWebhook — idempotência (§6.10)", () => {
   it("o MESMO evento processado 2x só dá baixa 1 vez (não avança 2 meses)", async () => {
     const { tenant, subscription, invoice } = await makeSubscriptionWithOpenInvoice("dup-event");
     cleanupTenantIds.push(tenant.id);
-    await prisma.platformSettings.upsert({ where: { id: 1 }, create: { id: 1, mercadoPagoWebhookSecret: WEBHOOK_SECRET }, update: { mercadoPagoWebhookSecret: WEBHOOK_SECRET } });
+    await seedWebhookSecret();
 
     const dataId = `pay_${invoice.id}`;
     const requestId = "req-dup";
@@ -100,7 +107,7 @@ describe("handleMercadoPagoWebhook — idempotência (§6.10)", () => {
   it("2 webhooks concorrentes para o MESMO evento: 1 efeito, nenhum 500 (revisão 2026-09-28, achado MÉDIA)", async () => {
     const { tenant, subscription, invoice } = await makeSubscriptionWithOpenInvoice("concurrent");
     cleanupTenantIds.push(tenant.id);
-    await prisma.platformSettings.upsert({ where: { id: 1 }, create: { id: 1, mercadoPagoWebhookSecret: WEBHOOK_SECRET }, update: { mercadoPagoWebhookSecret: WEBHOOK_SECRET } });
+    await seedWebhookSecret();
 
     const dataId = `pay_${invoice.id}_concurrent`;
     const requestId = "req-concurrent";
@@ -144,7 +151,7 @@ describe("handleMercadoPagoWebhook — idempotência (§6.10)", () => {
   it("notificação com type diferente de 'payment' (ex.: merchant_order) é ignorada SEM reconsultar o gateway (conferido contra o Parque das Feiras)", async () => {
     const { tenant, invoice } = await makeSubscriptionWithOpenInvoice("merchant-order");
     cleanupTenantIds.push(tenant.id);
-    await prisma.platformSettings.upsert({ where: { id: 1 }, create: { id: 1, mercadoPagoWebhookSecret: WEBHOOK_SECRET }, update: { mercadoPagoWebhookSecret: WEBHOOK_SECRET } });
+    await seedWebhookSecret();
 
     const dataId = "merchant_order_999";
     const requestId = "req-mo";

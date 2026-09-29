@@ -1,6 +1,9 @@
 import crypto from "node:crypto";
 import { getPrisma } from "@/lib/db/prisma";
 import { maskSecret } from "@/lib/mask";
+import { encryptSecret } from "@/lib/crypto";
+import { isMercadoPagoConfigured } from "./mercadopago-config";
+import { getPlatformSecrets, loadPlatformSettingsRow, readGenericSecret } from "./secrets";
 
 /**
  * Visão segura de `PlatformSettings` para a UI de admin (docs/arquitetura.md §5, §9, §11):
@@ -26,8 +29,9 @@ export type PlatformSettingsView = {
   n8nBaseUrl: string | null;
   n8nApiKeyMasked: string | null;
   internalApiSecretConfigured: boolean;
-  mercadoPagoAccessTokenMasked: string | null;
-  mercadoPagoWebhookSecretMasked: string | null;
+  // "Mercado Pago configurado" = par do ambiente ATIVO com access token e webhook secret salvos e
+  // decifráveis. Os campos de Mercado Pago em si vêm de `getMercadoPagoConfigAction`.
+  mercadoPagoReady: boolean;
   smtpHost: string | null;
   smtpPort: number | null;
   smtpSecure: boolean | null;
@@ -46,8 +50,6 @@ type PlatformSettingsRow = {
   n8nBaseUrl: string | null;
   n8nApiKey: string | null;
   internalApiSecretHash: string | null;
-  mercadoPagoAccessToken: string | null;
-  mercadoPagoWebhookSecret: string | null;
   smtpHost: string | null;
   smtpPort: number | null;
   smtpSecure: boolean | null;
@@ -58,7 +60,7 @@ type PlatformSettingsRow = {
   updatedByUserId: string | null;
 } | null;
 
-function toView(row: PlatformSettingsRow): PlatformSettingsView {
+function toView(row: PlatformSettingsRow, mercadoPagoReady: boolean): PlatformSettingsView {
   if (!row) {
     return {
       publicBaseUrl: null,
@@ -68,8 +70,7 @@ function toView(row: PlatformSettingsRow): PlatformSettingsView {
       n8nBaseUrl: null,
       n8nApiKeyMasked: null,
       internalApiSecretConfigured: false,
-      mercadoPagoAccessTokenMasked: null,
-      mercadoPagoWebhookSecretMasked: null,
+      mercadoPagoReady: false,
       smtpHost: null,
       smtpPort: null,
       smtpSecure: null,
@@ -84,18 +85,17 @@ function toView(row: PlatformSettingsRow): PlatformSettingsView {
   return {
     publicBaseUrl: row.publicBaseUrl,
     evolutionApiUrl: row.evolutionApiUrl,
-    evolutionApiKeyMasked: maskSecret(row.evolutionApiKey),
+    evolutionApiKeyMasked: maskSecret(readGenericSecret(row.evolutionApiKey, "evolutionApiKey")),
     n8nWebhookBaseUrl: row.n8nWebhookBaseUrl,
     n8nBaseUrl: row.n8nBaseUrl,
-    n8nApiKeyMasked: maskSecret(row.n8nApiKey),
+    n8nApiKeyMasked: maskSecret(readGenericSecret(row.n8nApiKey, "n8nApiKey")),
     internalApiSecretConfigured: !!row.internalApiSecretHash,
-    mercadoPagoAccessTokenMasked: maskSecret(row.mercadoPagoAccessToken),
-    mercadoPagoWebhookSecretMasked: maskSecret(row.mercadoPagoWebhookSecret),
+    mercadoPagoReady,
     smtpHost: row.smtpHost,
     smtpPort: row.smtpPort,
     smtpSecure: row.smtpSecure,
     smtpUser: row.smtpUser,
-    smtpPasswordMasked: maskSecret(row.smtpPassword),
+    smtpPasswordMasked: maskSecret(readGenericSecret(row.smtpPassword, "smtpPassword")),
     smtpFrom: row.smtpFrom,
     updatedAt: row.updatedAt.toISOString(),
     updatedByUserId: row.updatedByUserId,
@@ -103,25 +103,17 @@ function toView(row: PlatformSettingsRow): PlatformSettingsView {
 }
 
 /**
- * Segredos salvos em claro, SÓ para uso no servidor (ex.: "Testar conexão" com o campo da chave em
- * branco usa a chave já salva). Nunca devolver o resultado disto ao client.
+ * Segredos salvos em claro (decifrados), SÓ para uso no servidor (ex.: "Testar conexão" com o campo
+ * da chave em branco usa a chave já salva). Nunca devolver o resultado disto ao client. O access
+ * token do Mercado Pago é por ambiente: `getSavedMercadoPagoAccessToken(env)`.
  */
 export async function getSavedIntegrationSecrets() {
-  const row = await getPrisma().platformSettings.findUnique({
-    where: { id: 1 },
-    select: { evolutionApiKey: true, n8nApiKey: true, mercadoPagoAccessToken: true, smtpPassword: true },
-  });
-  return {
-    evolutionApiKey: row?.evolutionApiKey ?? null,
-    n8nApiKey: row?.n8nApiKey ?? null,
-    mercadoPagoAccessToken: row?.mercadoPagoAccessToken ?? null,
-    smtpPassword: row?.smtpPassword ?? null,
-  };
+  return getPlatformSecrets();
 }
 
 export async function getMaskedPlatformSettings(): Promise<PlatformSettingsView> {
-  const row = await getPrisma().platformSettings.findUnique({ where: { id: 1 } });
-  return toView(row);
+  const row = await loadPlatformSettingsRow(); // aplica a migração preguiçosa dos segredos
+  return toView(row, await isMercadoPagoConfigured());
 }
 
 /**
@@ -135,8 +127,6 @@ export type PlatformSettingsInput = {
   n8nWebhookBaseUrl?: string;
   n8nBaseUrl?: string;
   n8nApiKey?: string;
-  mercadoPagoAccessToken?: string;
-  mercadoPagoWebhookSecret?: string;
   smtpHost?: string;
   smtpPort?: number;
   smtpSecure?: boolean;
@@ -145,6 +135,12 @@ export type PlatformSettingsInput = {
   smtpFrom?: string;
 };
 
+/** Segredo novo => cifra; vazio/ausente => mantém o valor atual (já cifrado). */
+function encryptOrKeep(incoming: string | undefined, existing: string | null | undefined): string | null {
+  if (incoming === undefined || incoming === "") return existing ?? null;
+  return encryptSecret(incoming);
+}
+
 function keepIfEmpty(incoming: string | undefined, existing: string | null | undefined): string | null {
   if (incoming === undefined || incoming === "") return existing ?? null;
   return incoming;
@@ -152,21 +148,19 @@ function keepIfEmpty(incoming: string | undefined, existing: string | null | und
 
 export async function updatePlatformSettings(input: PlatformSettingsInput, updatedByUserId: string): Promise<PlatformSettingsView> {
   const prisma = getPrisma();
-  const current = await prisma.platformSettings.findUnique({ where: { id: 1 } });
+  const current = await loadPlatformSettingsRow(); // já migrado: segredos existentes vêm cifrados
 
   const data = {
     evolutionApiUrl: keepIfEmpty(input.evolutionApiUrl, current?.evolutionApiUrl),
-    evolutionApiKey: keepIfEmpty(input.evolutionApiKey, current?.evolutionApiKey),
+    evolutionApiKey: encryptOrKeep(input.evolutionApiKey, current?.evolutionApiKey),
     n8nWebhookBaseUrl: keepIfEmpty(input.n8nWebhookBaseUrl, current?.n8nWebhookBaseUrl),
     n8nBaseUrl: keepIfEmpty(input.n8nBaseUrl, current?.n8nBaseUrl),
-    n8nApiKey: keepIfEmpty(input.n8nApiKey, current?.n8nApiKey),
-    mercadoPagoAccessToken: keepIfEmpty(input.mercadoPagoAccessToken, current?.mercadoPagoAccessToken),
-    mercadoPagoWebhookSecret: keepIfEmpty(input.mercadoPagoWebhookSecret, current?.mercadoPagoWebhookSecret),
+    n8nApiKey: encryptOrKeep(input.n8nApiKey, current?.n8nApiKey),
     smtpHost: keepIfEmpty(input.smtpHost, current?.smtpHost),
     smtpPort: input.smtpPort ?? current?.smtpPort ?? null,
     smtpSecure: input.smtpSecure ?? current?.smtpSecure ?? null,
     smtpUser: keepIfEmpty(input.smtpUser, current?.smtpUser),
-    smtpPassword: keepIfEmpty(input.smtpPassword, current?.smtpPassword),
+    smtpPassword: encryptOrKeep(input.smtpPassword, current?.smtpPassword),
     smtpFrom: keepIfEmpty(input.smtpFrom, current?.smtpFrom),
     updatedByUserId,
   };
@@ -177,7 +171,7 @@ export async function updatePlatformSettings(input: PlatformSettingsInput, updat
     update: data,
   });
 
-  return toView(row);
+  return toView(row, await isMercadoPagoConfigured());
 }
 
 const INTERNAL_SECRET_BYTES = 32;

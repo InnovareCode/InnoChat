@@ -1,5 +1,7 @@
 import { getPrisma } from "@/lib/db/prisma";
 import type { SubscriptionStatus, WhatsappInstanceStatus } from "@/lib/db/types";
+import { getActiveMercadoPagoCredentials } from "./mercadopago-config";
+import { loadPlatformSettingsRow, readGenericSecret } from "./secrets";
 import { testEvolutionConnection, testMercadoPagoConnection, testN8nConnection, testSmtpConnection, type ConnectionTestResult } from "./connection-tests";
 
 /**
@@ -31,21 +33,20 @@ const INTEGRATIONS_CACHE_TTL_MS = 60_000;
 let cachedIntegrations: { at: number; data: IntegrationsHealth } | null = null;
 
 async function computeIntegrationsHealth(): Promise<IntegrationsHealth> {
-  const settings = await getPrisma().platformSettings.findUnique({
-    where: { id: 1 },
-    select: {
-      evolutionApiUrl: true,
-      evolutionApiKey: true,
-      n8nBaseUrl: true,
-      n8nApiKey: true,
-      mercadoPagoAccessToken: true,
-      smtpHost: true,
-      smtpPort: true,
-      smtpSecure: true,
-      smtpUser: true,
-      smtpPassword: true,
-    },
-  });
+  const row = await loadPlatformSettingsRow(); // já migrado; segredos decifrados abaixo
+  const mp = await getActiveMercadoPagoCredentials();
+  const settings = {
+    evolutionApiUrl: row?.evolutionApiUrl ?? null,
+    evolutionApiKey: readGenericSecret(row?.evolutionApiKey, "evolutionApiKey"),
+    n8nBaseUrl: row?.n8nBaseUrl ?? null,
+    n8nApiKey: readGenericSecret(row?.n8nApiKey, "n8nApiKey"),
+    mercadoPagoAccessToken: mp.accessToken,
+    smtpHost: row?.smtpHost ?? null,
+    smtpPort: row?.smtpPort ?? null,
+    smtpSecure: row?.smtpSecure ?? null,
+    smtpUser: row?.smtpUser ?? null,
+    smtpPassword: readGenericSecret(row?.smtpPassword, "smtpPassword"),
+  };
 
   const [evolution, n8n, smtp, mercadoPago] = await Promise.all([
     settings?.evolutionApiUrl && settings.evolutionApiKey

@@ -2,6 +2,7 @@ import { getPrisma } from "@/lib/db/prisma";
 import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { getPublicBaseUrl } from "@/lib/public-url";
+import { loadPlatformSettingsRow, readGenericSecret } from "./secrets";
 import { regenerateInternalApiSecret } from "./service";
 import { createN8nClient, N8nApiError, type N8nClient, type N8nNode, type N8nWorkflow } from "./n8n-client";
 
@@ -57,10 +58,13 @@ type PlatformN8nConfig = {
 };
 
 async function loadConfigOrThrow(): Promise<PlatformN8nConfig> {
-  const settings = await getPrisma().platformSettings.findUnique({
-    where: { id: 1 },
-    select: { n8nBaseUrl: true, n8nApiKey: true, evolutionApiUrl: true, evolutionApiKey: true },
-  });
+  const row = await loadPlatformSettingsRow(); // já migrado; chaves decifradas abaixo
+  const settings = {
+    n8nBaseUrl: row?.n8nBaseUrl ?? null,
+    n8nApiKey: readGenericSecret(row?.n8nApiKey, "n8nApiKey"),
+    evolutionApiUrl: row?.evolutionApiUrl ?? null,
+    evolutionApiKey: readGenericSecret(row?.evolutionApiKey, "evolutionApiKey"),
+  };
   if (!settings?.n8nBaseUrl || !settings.n8nApiKey) {
     throw new DomainError("N8N_NOT_CONFIGURED", "Configure a URL e a API key do n8n em Admin > Configurações antes de sincronizar.");
   }

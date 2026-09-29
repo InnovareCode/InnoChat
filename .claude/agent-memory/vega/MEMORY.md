@@ -28,3 +28,4 @@
 - [Migration de dados que aplica preço/valor de negócio sem sobrescrever edição do admin](plan_price_data_migration_never_overwrite_edit.md) — condição "só se ainda está no estado de fábrica" dos 3 planos.
 - [Prisma: campo Json? precisa de Prisma.JsonNull, não `null` literal, pra zerar de verdade](prisma_json_null_field.md) — achado nos testes de Admin Saúde.
 - [ProviderEvent(provider="manual") reaproveitado pra auditoria de baixa manual de fatura](provider_event_reused_for_manual_audit.md) — por que não criei tabela de auditoria nova.
+- [Segredos da plataforma cifrados + par MP prod/sandbox](platform_secrets_encryption.md) — enc:v1:, migração preguiçosa, regra de leitura única, testes.

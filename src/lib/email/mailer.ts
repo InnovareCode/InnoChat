@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import { getPrisma } from "@/lib/db/prisma";
+import { loadPlatformSettingsRow, readGenericSecret } from "@/modules/platform/secrets";
 import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 
@@ -28,16 +28,20 @@ export class SmtpNotConfiguredError extends DomainError {
 }
 
 async function loadSmtpConfig() {
-  const settings = await getPrisma().platformSettings.findUnique({
-    where: { id: 1 },
-    select: { smtpHost: true, smtpPort: true, smtpSecure: true, smtpUser: true, smtpPassword: true, smtpFrom: true },
-  });
+  const settings = await loadPlatformSettingsRow(); // já migrado; senha SMTP vem cifrada
 
   if (!settings?.smtpHost || !settings.smtpPort || !settings.smtpFrom) {
     throw new SmtpNotConfiguredError();
   }
 
-  return settings;
+  return {
+    smtpHost: settings.smtpHost,
+    smtpPort: settings.smtpPort,
+    smtpSecure: settings.smtpSecure,
+    smtpUser: settings.smtpUser,
+    smtpPassword: readGenericSecret(settings.smtpPassword, "smtpPassword"),
+    smtpFrom: settings.smtpFrom,
+  };
 }
 
 /**

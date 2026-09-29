@@ -20,12 +20,13 @@ import {
   regenerateInternalApiSecretAction,
   syncN8nAction,
   testEvolutionConnectionAction,
-  testMercadoPagoConnectionAction,
   testN8nConnectionAction,
   testSmtpConnectionAction,
   updatePlatformLegalInfoAction,
   updatePlatformSettingsAction,
 } from "@/modules/platform/actions";
+import { MercadoPagoPanel } from "@/components/admin/mercado-pago-panel";
+import type { MercadoPagoConfig } from "@/components/admin/mercado-pago-types";
 import type { N8nSyncSummary } from "@/modules/platform/n8n-sync";
 import type { PlatformSettingsView } from "@/modules/platform/service";
 import type { PlatformLegalInfo } from "@/core/legal/placeholders";
@@ -158,9 +159,11 @@ function isLegalInfoComplete(info: PlatformLegalInfo): boolean {
 export function AdminConfiguracoesClient({
   initialSettings,
   initialLegal,
+  initialMercadoPago,
 }: {
   initialSettings: PlatformSettingsView;
   initialLegal: PlatformLegalInfo | null;
+  initialMercadoPago: MercadoPagoConfig | null;
 }) {
   const { notify } = useToast();
   const [settings, setSettings] = useState(initialSettings);
@@ -173,9 +176,6 @@ export function AdminConfiguracoesClient({
   const [n8nBaseUrl, setN8nBaseUrl] = useState(settings.n8nBaseUrl ?? "");
   const [n8nApiKey, setN8nApiKey] = useState("");
   const [n8nWebhookBaseUrl, setN8nWebhookBaseUrl] = useState(settings.n8nWebhookBaseUrl ?? "");
-
-  const [mercadoPagoAccessToken, setMercadoPagoAccessToken] = useState("");
-  const [mercadoPagoWebhookSecret, setMercadoPagoWebhookSecret] = useState("");
 
   const [smtpHost, setSmtpHost] = useState(settings.smtpHost ?? "");
   const [smtpPort, setSmtpPort] = useState(settings.smtpPort ? String(settings.smtpPort) : "");
@@ -192,6 +192,7 @@ export function AdminConfiguracoesClient({
   const [botActive, setBotActive] = useState<boolean | null>(null);
   const [confirmActivate, setConfirmActivate] = useState<"on" | "off" | null>(null);
 
+  const [mpConfig, setMpConfig] = useState<MercadoPagoConfig | null>(initialMercadoPago);
   const [legal, setLegal] = useState<PlatformLegalInfo>(initialLegal ?? EMPTY_LEGAL_INFO);
   const [legalForm, setLegalForm] = useState({
     companyLegalName: legal.companyLegalName ?? "",
@@ -210,7 +211,10 @@ export function AdminConfiguracoesClient({
   const evolutionReady = !!settings.evolutionApiUrl && !!settings.evolutionApiKeyMasked;
   const n8nReady = !!settings.n8nBaseUrl && !!settings.n8nApiKeyMasked;
   const smtpReady = !!settings.smtpHost;
-  const mpReady = !!settings.mercadoPagoAccessTokenMasked;
+  // Pronto = o par do ambiente ATIVO tem access token e webhook secret (mesmo critério do servidor;
+  // o painel atualiza `mpConfig` a cada ação, então o card reage sem recarregar a página).
+  const mpActive = mpConfig ? (mpConfig.environment === "PRODUCTION" ? mpConfig.production : mpConfig.sandbox) : null;
+  const mpReady = mpActive ? mpActive.accessTokenSaved && mpActive.webhookSecretSaved : settings.mercadoPagoReady;
   const legalReady = isLegalInfoComplete(legal);
 
   function handleSaveEvolution(e: React.FormEvent) {
@@ -247,25 +251,6 @@ export function AdminConfiguracoesClient({
       setSettings(result.data);
       setN8nApiKey("");
       notify({ variant: "success", title: "n8n salvo." });
-    });
-  }
-
-  function handleSaveMercadoPago(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    startTransition(async () => {
-      const result = await updatePlatformSettingsAction({
-        mercadoPagoAccessToken: mercadoPagoAccessToken || undefined,
-        mercadoPagoWebhookSecret: mercadoPagoWebhookSecret || undefined,
-      });
-      if (!result.ok) {
-        setError(result.error.message);
-        return;
-      }
-      setSettings(result.data);
-      setMercadoPagoAccessToken("");
-      setMercadoPagoWebhookSecret("");
-      notify({ variant: "success", title: "Mercado Pago salvo." });
     });
   }
 
@@ -577,65 +562,7 @@ export function AdminConfiguracoesClient({
         </CardFooter>
       </Card>
 
-      <Card className="rounded-hero">
-        <CardHeader>
-          <CardTitle>Mercado Pago</CardTitle>
-          <CardDescription>Usado para gerar o Pix das faturas e validar o webhook de pagamento.</CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSaveMercadoPago}>
-          <CardContent className="flex flex-col gap-4">
-            <Field
-              label="Access token"
-              hint={
-                settings.mercadoPagoAccessTokenMasked
-                  ? `Token atual: ${settings.mercadoPagoAccessTokenMasked}. Deixe em branco para manter.`
-                  : "Nenhum token configurado ainda — sem ele, o Pix das faturas não é gerado."
-              }
-            >
-              {(fieldProps) => (
-                <Input
-                  {...fieldProps}
-                  type="password"
-                  autoComplete="off"
-                  value={mercadoPagoAccessToken}
-                  onChange={(e) => setMercadoPagoAccessToken(e.target.value)}
-                  placeholder="••••••••"
-                />
-              )}
-            </Field>
-            <Field
-              label="Segredo do webhook"
-              hint={
-                settings.mercadoPagoWebhookSecretMasked
-                  ? `Segredo atual: ${settings.mercadoPagoWebhookSecretMasked}. Deixe em branco para manter.`
-                  : "Nenhum segredo configurado ainda — sem ele, notificações de pagamento são rejeitadas."
-              }
-            >
-              {(fieldProps) => (
-                <Input
-                  {...fieldProps}
-                  type="password"
-                  autoComplete="off"
-                  value={mercadoPagoWebhookSecret}
-                  onChange={(e) => setMercadoPagoWebhookSecret(e.target.value)}
-                  placeholder="••••••••"
-                />
-              )}
-            </Field>
-            <TestConnectionButton
-              onTest={async () => {
-                                const result = await testMercadoPagoConnectionAction({ mercadoPagoAccessToken: mercadoPagoAccessToken || undefined });
-                return result.ok ? result.data : { ok: false, detalhe: result.error.message };
-              }}
-            />
-          </CardContent>
-          <CardFooter>
-            <Button type="submit" isLoading={isPending}>
-              Salvar
-            </Button>
-          </CardFooter>
-        </form>
-      </Card>
+      <MercadoPagoPanel initial={initialMercadoPago} publicBaseUrl={settings.publicBaseUrl} onConfigChange={setMpConfig} />
 
       <Card className="rounded-hero">
         <CardHeader>

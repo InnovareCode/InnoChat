@@ -19,4 +19,7 @@ export type {
   BotTextKey,
   InvoiceStatus,
   SubscriptionStatus,
+  MercadoPagoEnvironment,
+  PlatformSettings,
+  Prisma,
 } from "@prisma/client";

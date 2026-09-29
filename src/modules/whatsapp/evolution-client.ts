@@ -1,4 +1,4 @@
-import { getPrisma } from "@/lib/db/prisma";
+import { loadPlatformSettingsRow, readGenericSecret } from "@/modules/platform/secrets";
 import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 
@@ -257,11 +257,9 @@ function wrapNetworkError(error: unknown, action: string): EvolutionApiError {
  * claro antes de criar instância sem base para funcionar).
  */
 export async function getEvolutionClient(): Promise<EvolutionClient> {
-  const settings = await getPrisma().platformSettings.findUnique({
-    where: { id: 1 },
-    select: { evolutionApiUrl: true, evolutionApiKey: true },
-  });
-  if (!settings?.evolutionApiUrl || !settings.evolutionApiKey) {
+  const row = await loadPlatformSettingsRow(); // já migrado; chave decifrada abaixo
+  const settings = { evolutionApiUrl: row?.evolutionApiUrl ?? null, evolutionApiKey: readGenericSecret(row?.evolutionApiKey, "evolutionApiKey") };
+  if (!settings.evolutionApiUrl || !settings.evolutionApiKey) {
     throw new DomainError("EVOLUTION_NOT_CONFIGURED", "Evolution API não configurada em Admin > Configurações.");
   }
   return createEvolutionClient(settings.evolutionApiUrl, settings.evolutionApiKey);

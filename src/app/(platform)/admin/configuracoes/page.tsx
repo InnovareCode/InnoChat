@@ -1,11 +1,15 @@
 import { Settings } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { getPlatformLegalInfoAction, getPlatformSettingsAction } from "@/modules/platform/actions";
+import { getMercadoPagoConfigAction, getPlatformLegalInfoAction, getPlatformSettingsAction } from "@/modules/platform/actions";
 import { AdminConfiguracoesClient } from "./admin-configuracoes-client";
 
 export default async function AdminConfiguracoesPage() {
-  const [settingsResult, legalResult] = await Promise.all([getPlatformSettingsAction(), getPlatformLegalInfoAction()]);
+  const [settingsResult, legalResult, mpResult] = await Promise.all([
+    getPlatformSettingsAction(),
+    getPlatformLegalInfoAction(),
+    getMercadoPagoConfigAction(),
+  ]);
 
   if (!settingsResult.ok) {
     return (
@@ -20,6 +24,7 @@ export default async function AdminConfiguracoesPage() {
     <AdminConfiguracoesClient
       initialSettings={settingsResult.data}
       initialLegal={legalResult.ok ? legalResult.data : null}
+      initialMercadoPago={mpResult.ok ? mpResult.data : null}
     />
   );
 }

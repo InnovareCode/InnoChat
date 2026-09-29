@@ -140,6 +140,11 @@ model Membership {
   @@map("memberships")
 }
 
+enum MercadoPagoEnvironment {
+  PRODUCTION
+  SANDBOX
+}
+
 // Singleton: sempre id = 1. A camada de aplicação faz upsert(where: { id: 1 }); nunca cria uma
 // segunda linha. Não há constraint de banco reforçando "só 1 linha" — decisão consciente para não
 // complicar a migração; se isso doer, trocar por CHECK (id = 1) é barato depois.
@@ -176,8 +181,25 @@ model PlatformSettings {
   // isso, só avisa no resumo.
   n8nWorkflowCronId   String?
 
+  // LEGADO (pré-2026-09-29): texto puro. Migração preguiçosa no código (`src/modules/platform/
+  // mercadopago-config.ts`, `migrateLegacyPlatformSecrets`): na 1ª leitura/gravação o valor vai,
+  // CIFRADO, para o par de PRODUÇÃO abaixo e estas duas colunas são zeradas. Não remover a
+  // coluna ainda (migration destrutiva só depois de confirmado em produção).
   mercadoPagoAccessToken   String?
   mercadoPagoWebhookSecret String?
+
+  // Mercado Pago no modelo do Parque das Feiras: par de PRODUÇÃO e par de TESTE (sandbox),
+  // `mpEnvironment` escolhe o par ATIVO. Public Key não é segredo (claro); Access Token e
+  // Webhook Secret são cifrados (`enc:v1:`, AES-256-GCM com chave derivada do AUTH_SECRET —
+  // `src/lib/crypto.ts`). `mpEnabled=false` bloqueia só COBRANÇA NOVA (webhook segue valendo).
+  mpEnvironment          MercadoPagoEnvironment @default(PRODUCTION)
+  mpEnabled              Boolean                @default(true)
+  mpProdPublicKey        String?
+  mpProdAccessTokenEnc   String?
+  mpProdWebhookSecretEnc String?
+  mpTestPublicKey        String?
+  mpTestAccessTokenEnc   String?
+  mpTestWebhookSecretEnc String?
 
   // E-mail transacional via SMTP próprio (decisão do dono, 2026-09-28). emailProvider/emailApiKey
   // do desenho original da Nova (§1, §5) ficam de fora — não cabem no SMTP puro; se um provedor

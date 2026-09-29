@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { getPrisma } from "@/lib/db/prisma";
+import { getActiveMercadoPagoCredentials } from "@/modules/platform/mercadopago-config";
 import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { tryGetPublicBaseUrl } from "@/lib/public-url";
@@ -285,16 +285,24 @@ export function createMercadoPagoGateway(accessToken: string): MercadoPagoGatewa
   };
 }
 
-/** Resolve o gateway real a partir do access token salvo em `PlatformSettings` (admin da plataforma). */
-export async function getMercadoPagoGateway(): Promise<MercadoPagoGateway> {
-  const settings = await getPrisma().platformSettings.findUnique({
-    where: { id: 1 },
-    select: { mercadoPagoAccessToken: true },
-  });
-  if (!settings?.mercadoPagoAccessToken) {
-    throw new DomainError("MERCADOPAGO_NOT_CONFIGURED", "Mercado Pago não configurado em PlatformSettings.");
+/**
+ * Resolve o gateway real a partir do access token do ambiente ATIVO (produção ou teste, escolhido
+ * pelo admin — `getActiveMercadoPagoCredentials`). Fail-closed: token ausente ou que não decifra
+ * lança `MERCADOPAGO_NOT_CONFIGURED`.
+ *
+ * `forNewCharge: true` (Gerar Pix, faturas do tick) também respeita "cobrança liberada"
+ * (`mpEnabled`): desligada, lança `MERCADOPAGO_DISABLED`. O webhook NÃO usa isso — consultar um
+ * pagamento já feito precisa continuar funcionando mesmo com a cobrança nova bloqueada.
+ */
+export async function getMercadoPagoGateway(options: { forNewCharge?: boolean } = {}): Promise<MercadoPagoGateway> {
+  const active = await getActiveMercadoPagoCredentials();
+  if (!active.accessToken) {
+    throw new DomainError("MERCADOPAGO_NOT_CONFIGURED", "Mercado Pago não configurado (access token do ambiente ativo ausente).");
   }
-  return createMercadoPagoGateway(settings.mercadoPagoAccessToken);
+  if (options.forNewCharge && !active.enabled) {
+    throw new DomainError("MERCADOPAGO_DISABLED", "Cobrança pelo Mercado Pago desligada pelo administrador da plataforma.");
+  }
+  return createMercadoPagoGateway(active.accessToken);
 }
 
 /**
@@ -323,7 +331,7 @@ const SIGNATURE_TOLERANCE_MS = 10 * 60 * 1000;
  * O header `x-signature` vem no formato `ts=<timestamp>,v1=<hash>`. A assinatura é
  * `HMAC-SHA256` (hex) do manifest `id:<data.id>;request-id:<x-request-id>;ts:<ts>;` (pares
  * ausentes omitidos, nesta ordem), com `data.id` sempre em minúsculas, usando
- * `PlatformSettings.mercadoPagoWebhookSecret` como chave.
+ * o webhook secret do ambiente ATIVO (`getActiveMercadoPagoCredentials`) como chave.
  */
 export function verifyMercadoPagoSignature(params: {
   xSignature: string | null;

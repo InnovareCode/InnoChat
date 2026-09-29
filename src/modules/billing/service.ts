@@ -211,7 +211,7 @@ const DOMAIN_ERROR_BY_MP_FAILURE: Readonly<Record<MercadoPagoFailureKind, { code
 /** Exportada para quem já tem a fatura criada (sem passar pelo check de idempotência de `createInvoiceForPeriodTracked`, que trataria a fatura recém-criada como "já existe" e nunca chamaria isto). */
 export async function tryAttachPix(invoiceId: string, payerEmail: string, description: string, gateway?: MercadoPagoGateway) {
   try {
-    const mp = gateway ?? (await getMercadoPagoGateway());
+    const mp = gateway ?? (await getMercadoPagoGateway({ forNewCharge: true }));
     const invoice = await getPrisma().invoice.findUniqueOrThrow({ where: { id: invoiceId } });
     const payer = await resolvePayerForInvoice(invoiceId);
 
@@ -267,7 +267,7 @@ export async function regeneratePixForInvoice(invoiceId: string, payerEmail: str
     throw new DomainError("INVALID_STATE", "Só é possível gerar Pix para uma fatura em aberto.");
   }
 
-  const mp = gateway ?? (await getMercadoPagoGateway());
+  const mp = gateway ?? (await getMercadoPagoGateway({ forNewCharge: true }));
   const payer = await resolvePayerForInvoice(invoiceId);
 
   let pix;

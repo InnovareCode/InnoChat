@@ -1,6 +1,7 @@
 import { getPrisma } from "@/lib/db/prisma";
 import { isUniqueViolation } from "@/lib/db/prisma-errors";
 import { logger } from "@/lib/logger";
+import { getActiveMercadoPagoCredentials } from "@/modules/platform/mercadopago-config";
 import { applyInvoicePayment } from "./service";
 import { getMercadoPagoGateway, verifyMercadoPagoSignature, type MercadoPagoGateway } from "./mercadopago";
 
@@ -54,11 +55,12 @@ export async function handleMercadoPagoWebhook(params: {
     throw new WebhookIgnored("Notificação sem data.id — nada a processar.");
   }
 
-  const settings = await prisma.platformSettings.findUnique({ where: { id: 1 }, select: { mercadoPagoWebhookSecret: true } });
-  if (!settings?.mercadoPagoWebhookSecret) {
-    // Sem segredo configurado ainda: não dá para validar a assinatura com segurança. Registrar
-    // e ignorar é mais seguro que aceitar sem checagem (PENDÊNCIAS no handoff — falta credencial).
-    logger.warn("billing.webhook.no_secret_configured");
+  // Segredo do ambiente ATIVO (produção ou teste). Fail-closed: ausente ou que não decifra => rejeita.
+  const { webhookSecret, environment } = await getActiveMercadoPagoCredentials();
+  if (!webhookSecret) {
+    // Sem segredo configurado (ou ilegível): não dá para validar a assinatura com segurança.
+    // Rejeitar é mais seguro que aceitar sem checagem.
+    logger.warn("billing.webhook.no_secret_configured", { environment });
     throw new WebhookAuthError("Mercado Pago não configurado.");
   }
 
@@ -66,7 +68,7 @@ export async function handleMercadoPagoWebhook(params: {
     xSignature: params.xSignature,
     xRequestId: params.xRequestId,
     dataId: params.dataId,
-    secret: settings.mercadoPagoWebhookSecret,
+    secret: webhookSecret,
   });
   if (!validSignature) {
     logger.warn("billing.webhook.invalid_signature");

@@ -72,8 +72,7 @@ caracteres) ou como booleano `configured`. Ao salvar, campo de texto/segredo vaz
     n8nBaseUrl: string | null;
     n8nApiKeyMasked: string | null;
     internalApiSecretConfigured: boolean; // nunca o hash, nunca o segredo
-    mercadoPagoAccessTokenMasked: string | null;
-    mercadoPagoWebhookSecretMasked: string | null;
+    mercadoPagoReady: boolean; // par do ambiente ATIVO com access token e webhook secret salvos (checklist)
     smtpHost: string | null; smtpPort: number | null; smtpSecure: boolean | null;
     smtpUser: string | null; smtpPasswordMasked: string | null; smtpFrom: string | null;
     termsVersion: string | null;
@@ -82,7 +81,7 @@ caracteres) ou como booleano `configured`. Ao salvar, campo de texto/segredo vaz
   ```
 - `updatePlatformSettingsAction(input): Result<PlatformSettingsView>` — `input` aceita
   `evolutionApiUrl?`, `evolutionApiKey?`, `n8nWebhookBaseUrl?`, `n8nBaseUrl?`, `n8nApiKey?`,
-  `mercadoPagoAccessToken?`, `mercadoPagoWebhookSecret?`, `smtpHost?`, `smtpPort?`,
+  `smtpHost?`, `smtpPort?`,
   `smtpSecure?`, `smtpUser?`, `smtpPassword?`, `smtpFrom?`, `termsVersion?` — todos opcionais,
   `""` = manter. Na primeira chamada, grava `publicBaseUrl` sozinho a partir da requisição (ver
   "Configuração pela plataforma"). Erros: `INVALID_PAYLOAD` (zod), `FORBIDDEN`.
@@ -90,6 +89,55 @@ caracteres) ou como booleano `configured`. Ao salvar, campo de texto/segredo vaz
   da API interna do n8n **em texto puro, uma única vez**; persiste só o hash SHA-256
   (`internalApiSecretHash`). A tela precisa mostrar isso ao dono nesta resposta e nunca mais
   poder buscá-lo de volta (`getPlatformSettingsAction` só devolve `internalApiSecretConfigured`).
+
+### Segredos cifrados em repouso (2026-09-29)
+
+`evolutionApiKey`, `n8nApiKey`, `smtpPassword` e os segredos do Mercado Pago ficam cifrados no
+banco (`enc:v1:<base64>`, AES-256-GCM, `src/lib/crypto.ts`, formato `iv | tag | ciphertext`
+idêntico ao Parque das Feiras). Chave = scrypt do `AUTH_SECRET` com salt fixo do InnoChat.
+**Trocar o `AUTH_SECRET` invalida todos os segredos salvos** (viram "ausentes" — fail-closed —
+e precisam ser recadastrados). Migração preguiçosa (`src/modules/platform/secrets.ts`,
+`loadPlatformSettingsRow`): valor legado em texto puro é aceito na leitura e cifrado na primeira
+leitura/gravação (compare-and-set, seguro sob concorrência). O par legado do MP
+(`mercadoPagoAccessToken`/`mercadoPagoWebhookSecret`, colunas mantidas mas zeradas) vai, cifrado,
+para o par de PRODUÇÃO. Toda leitura de segredo no servidor passa por
+`loadPlatformSettingsRow`/`getPlatformSecrets`/`getActiveMercadoPagoCredentials` — nunca
+`findUnique` direto pedindo colunas de segredo.
+
+### Mercado Pago — par de produção e par de teste (`src/modules/platform/mercadopago-config.ts`)
+
+Modelo do Parque das Feiras: `PlatformSettings.mpEnvironment` (`PRODUCTION` | `SANDBOX`, padrão
+`PRODUCTION`) escolhe o par ativo; `mpEnabled` (padrão `true`, "cobrança liberada") bloqueia só
+COBRANÇA NOVA (`getMercadoPagoGateway({ forNewCharge: true })` → `MERCADOPAGO_DISABLED`; webhook e
+conciliação seguem). Cada par: Public Key em claro (`mpProdPublicKey`/`mpTestPublicKey`), Access
+Token e Webhook Secret cifrados (`mp{Prod,Test}{AccessToken,WebhookSecret}Enc`).
+Fail-closed: segredo que não decifra = ausente → sem Pix (`MERCADOPAGO_NOT_CONFIGURED`), webhook
+rejeitado (401).
+
+Server Actions (todas `requirePlatformAdmin`; **nunca devolvem valor de segredo**). Todas as de
+escrita/leitura devolvem `Result<MercadoPagoConfigView>`:
+
+```ts
+type MercadoPagoEnvView = { publicKey: string | null; accessTokenSaved: boolean; webhookSecretSaved: boolean };
+type MercadoPagoConfigView = {
+  environment: "PRODUCTION" | "SANDBOX";
+  enabled: boolean;
+  production: MercadoPagoEnvView;
+  sandbox: MercadoPagoEnvView;
+};
+```
+
+- `getMercadoPagoConfigAction()`
+- `saveMercadoPagoCredentialsAction({ env, publicKey?, accessToken?, webhookSecret? })` — campo
+  vazio/ausente = manter; segredos até 500 caracteres, public key até 300.
+- `removeMercadoPagoSecretAction({ env, field: "accessToken" | "webhookSecret" })`
+- `setMercadoPagoEnvironmentAction({ environment })`
+- `setMercadoPagoEnabledAction({ enabled })`
+- `testMercadoPagoConnectionAction({ env, accessToken? })` → `Result<{ ok, detalhe }>`; token em
+  branco usa o salvo daquele ambiente (`MISSING_SECRET` se não houver).
+
+`saved` = existe E decifra. Erros: `INVALID_PAYLOAD` (zod), `MISSING_SECRET`, `FORBIDDEN`.
+`updatePlatformSettingsAction` **não** aceita mais campos do Mercado Pago.
 
 ## Tema do tenant (`src/modules/tenant/actions.ts`) — Fase 1/2
 
@@ -718,8 +766,9 @@ sem telas (a Lyra consome o contrato abaixo).
   `PLAN_LIMIT_REACHED` com `details: { rule, limit, current }`.
 - `src/modules/billing/mercadopago.ts`: interface `MercadoPagoGateway` (`createPixPayment`,
   `getPayment`) — implementação real (`createMercadoPagoGateway`, timeout 10s + retry 3x só em
-  5xx/timeout) e `getMercadoPagoGateway()` (lê `PlatformSettings.mercadoPagoAccessToken`, lança
-  `MERCADOPAGO_NOT_CONFIGURED` se faltar). `verifyMercadoPagoSignature` valida `x-signature`
+  5xx/timeout) e `getMercadoPagoGateway({ forNewCharge? })` (lê o access token do ambiente ATIVO —
+  `getActiveMercadoPagoCredentials()`; lança `MERCADOPAGO_NOT_CONFIGURED` se faltar/não decifrar e,
+  com `forNewCharge`, `MERCADOPAGO_DISABLED` se a cobrança estiver desligada). `verifyMercadoPagoSignature` valida `x-signature`
   (`ts=…,v1=…`, HMAC-SHA256 do manifest `id:<data.id>;request-id:<x-request-id>;ts:<ts>;`,
   conforme a documentação oficial do MP — ver comentário no código, PENDÊNCIAS abaixo sobre
   credenciais reais). `src/modules/billing/mercadopago.mock.ts`
@@ -754,7 +803,7 @@ sem telas (a Lyra consome o contrato abaixo).
 ### `POST /api/webhooks/mercadopago`
 
 Sem autenticação por segredo — a autenticação É a assinatura `x-signature` (`verifyMercadoPagoSignature`
-contra `PlatformSettings.mercadoPagoWebhookSecret`). Fluxo: valida assinatura → RECONSULTA o
+contra o webhook secret do ambiente ATIVO — `getActiveMercadoPagoCredentials()`). Fluxo: valida assinatura → RECONSULTA o
 pagamento na API do MP (nunca confia no corpo) → idempotência por
 `ProviderEvent(provider="mercadopago", providerEventId=data.id)` → se `approved`, `applyInvoicePayment`.
 Resposta sempre `200` para o MP (mesmo `ignored`), exceto assinatura inválida (`401`) — corpo
@@ -921,15 +970,15 @@ Todas restritas a `requirePlatformAdmin()`, timeout de 5s, resultado sempre
 
 - `testEvolutionConnectionAction({ evolutionApiUrl, evolutionApiKey })` — `GET
   /instance/fetchInstances` com header `apikey`.
-- `testMercadoPagoConnectionAction({ mercadoPagoAccessToken })` — `GET
+- `testMercadoPagoConnectionAction({ env, accessToken? })` (ver "Mercado Pago — par de produção e teste") — `GET
   https://api.mercadopago.com/users/me` com `Authorization: Bearer`.
 - `testN8nConnectionAction({ n8nBaseUrl, n8nApiKey })` — `GET /api/v1/workflows?limit=1` com
   header `X-N8N-API-KEY`.
 - `testSmtpConnectionAction({ smtpHost, smtpPort, smtpSecure?, smtpUser?, smtpPassword? })` —
   `transporter.verify()` (nodemailer).
 
-Os quatro aceitam os valores que a tela ainda não salvou (testar antes de gravar) — não leem
-`PlatformSettings`.
+Os quatro aceitam os valores que a tela ainda não salvou (testar antes de gravar); campo de
+segredo em branco usa o salvo (decifrado só no servidor).
 
 ### Sincronização do n8n (`src/modules/platform/n8n-sync.ts`, `n8n-client.ts`) — Fase 5+
 

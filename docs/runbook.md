@@ -228,8 +228,31 @@ Feito no painel (sem afetar produção):
 2. Localize o campo (ex.: `evolutionApiKey`).
 3. **Selecione tudo** e substitua pelo novo valor — **nunca** acrescente.
 4. Clique em **"Salvar"**.
-5. O valor é mascarado e guardado no banco (hash para segredo interno, plaintext para os outros, mascarados na UI).
+5. O valor é guardado **cifrado** no banco (`enc:v1:`, AES-256-GCM; hash SHA-256 para o segredo interno) e mascarado na UI. Segredos antigos em texto puro são cifrados sozinhos na primeira leitura/gravação após o deploy.
 6. Se for a chave da Evolution, reaplique para o n8n: **"Sincronizar n8n"**.
+
+### Mercado Pago: trocar de ambiente (produção ↔ teste)
+
+O Mercado Pago tem **dois pares** de credenciais (Access Token + Webhook Secret, mais a Public Key):
+produção e teste (sandbox). Em **Admin → Configurações → Mercado Pago**:
+
+1. Preencha o par do ambiente desejado (segredo em branco = mantém o já salvo) e use "Testar conexão".
+2. Troque o seletor de **ambiente ativo**. Vale já na próxima requisição: Pix novo, tick e webhook usam o token/segredo do ambiente ativo.
+3. O webhook do Mercado Pago valida a assinatura com o segredo do ambiente **ativo** — cadastre no painel do MP o webhook do modo correspondente (o de teste usa o segredo de teste).
+4. **"Cobrança liberada"** desligada bloqueia só Pix/fatura NOVOS; pagamentos já feitos continuam sendo baixados pelo webhook.
+5. "Remover credencial salva" apaga um segredo de um ambiente (irreversível: recadastre depois).
+
+Sem access token + webhook secret do ambiente ativo, o Pix não é gerado e o webhook é rejeitado (401) — o painel mostra "Mercado Pago" como não configurado.
+
+### ⚠️ Trocar o `AUTH_SECRET` apaga os segredos salvos
+
+A chave que cifra os segredos da plataforma (Mercado Pago, Evolution, n8n, SMTP) é derivada do
+`AUTH_SECRET`. Se ele for trocado (rotação, ou variável errada no Easypanel), nenhum segredo salvo
+decifra mais: eles passam a valer como **ausentes** (Pix não gera, webhook do MP é rejeitado,
+e-mail e Evolution/n8n deixam de funcionar) até serem **recadastrados** em Admin → Configurações.
+Também invalida as sessões de login (comportamento do Auth.js). Antes de trocar: anote/tenha à mão
+as credenciais de todas as integrações. Sintoma de troca acidental: logs `platform.secret.undecryptable`
+e a tela mostrando os segredos como "não salvos".
 
 ### Passo 3: Testar
 

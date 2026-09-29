@@ -18,6 +18,15 @@ import {
   type PlatformSettingsView,
 } from "./service";
 import {
+  getMercadoPagoConfig,
+  getSavedMercadoPagoAccessToken,
+  removeMercadoPagoSecret,
+  saveMercadoPagoCredentials,
+  setMercadoPagoEnabled,
+  setMercadoPagoEnvironment,
+  type MercadoPagoConfigView,
+} from "./mercadopago-config";
+import {
   testEvolutionConnection,
   testMercadoPagoConnection,
   testN8nConnection,
@@ -47,8 +56,6 @@ const updatePlatformSettingsSchema = z.object({
   n8nWebhookBaseUrl: z.union([z.literal(""), z.string().url()]).optional(),
   n8nBaseUrl: z.union([z.literal(""), z.string().url()]).optional(),
   n8nApiKey: z.string().max(500).optional(),
-  mercadoPagoAccessToken: z.string().max(500).optional(),
-  mercadoPagoWebhookSecret: z.string().max(500).optional(),
   smtpHost: z.string().max(255).optional(),
   smtpPort: z.coerce.number().int().min(1).max(65535).optional(),
   smtpSecure: z.boolean().optional(),
@@ -100,14 +107,71 @@ export async function testEvolutionConnectionAction(input: unknown): Promise<Res
   });
 }
 
-const testMercadoPagoSchema = z.object({ mercadoPagoAccessToken: z.string().optional() });
+// ---------------------------------------------------------------------------
+// Mercado Pago (docs/contratos.md, "Mercado Pago") — par de PRODUÇÃO e par de TESTE, seletor do
+// ambiente ativo. Todas devolvem `MercadoPagoConfigView`: NUNCA o valor de um segredo.
+// ---------------------------------------------------------------------------
 
+const mpEnvSchema = z.enum(["PRODUCTION", "SANDBOX"]);
+const mpSecretInput = z.string().max(500).optional();
+
+export async function getMercadoPagoConfigAction(): Promise<Result<MercadoPagoConfigView>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    return getMercadoPagoConfig();
+  });
+}
+
+const saveMercadoPagoSchema = z.object({
+  env: mpEnvSchema,
+  publicKey: z.string().max(300).optional(),
+  accessToken: mpSecretInput,
+  webhookSecret: mpSecretInput,
+});
+
+/** Campo vazio/ausente = manter o valor salvo. Segredos são cifrados antes de ir ao banco. */
+export async function saveMercadoPagoCredentialsAction(input: unknown): Promise<Result<MercadoPagoConfigView>> {
+  return runAction(async () => {
+    const admin = await requirePlatformAdmin();
+    const data = saveMercadoPagoSchema.parse(input);
+    return saveMercadoPagoCredentials(data, admin.id);
+  });
+}
+
+const removeMercadoPagoSecretSchema = z.object({ env: mpEnvSchema, field: z.enum(["accessToken", "webhookSecret"]) });
+
+export async function removeMercadoPagoSecretAction(input: unknown): Promise<Result<MercadoPagoConfigView>> {
+  return runAction(async () => {
+    const admin = await requirePlatformAdmin();
+    const data = removeMercadoPagoSecretSchema.parse(input);
+    return removeMercadoPagoSecret(data, admin.id);
+  });
+}
+
+export async function setMercadoPagoEnvironmentAction(input: unknown): Promise<Result<MercadoPagoConfigView>> {
+  return runAction(async () => {
+    const admin = await requirePlatformAdmin();
+    const data = z.object({ environment: mpEnvSchema }).parse(input);
+    return setMercadoPagoEnvironment(data.environment, admin.id);
+  });
+}
+
+export async function setMercadoPagoEnabledAction(input: unknown): Promise<Result<MercadoPagoConfigView>> {
+  return runAction(async () => {
+    const admin = await requirePlatformAdmin();
+    const data = z.object({ enabled: z.boolean() }).parse(input);
+    return setMercadoPagoEnabled(data.enabled, admin.id);
+  });
+}
+
+const testMercadoPagoSchema = z.object({ env: mpEnvSchema, accessToken: mpSecretInput });
+
+/** Access token em branco = usa o salvo DAQUELE ambiente. Devolve `{ ok, detalhe }`, nunca o token. */
 export async function testMercadoPagoConnectionAction(input: unknown): Promise<Result<ConnectionTestResult>> {
   return runAction(async () => {
     await requirePlatformAdmin();
     const data = testMercadoPagoSchema.parse(input);
-    const token =
-      data.mercadoPagoAccessToken || (await getSavedIntegrationSecrets()).mercadoPagoAccessToken || missingSecret("o access token");
+    const token = data.accessToken?.trim() || (await getSavedMercadoPagoAccessToken(data.env)) || missingSecret("o access token");
     return testMercadoPagoConnection(token);
   });
 }
