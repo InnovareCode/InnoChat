@@ -8,10 +8,10 @@ export const metadata: Metadata = {
   description: "Regras de contratação e uso do InnoChat, plataforma de agendamento pelo WhatsApp.",
 };
 
-/** Revalida a cada 60s (mesma janela do cache de integrações em `health-service.ts`) — sem isso
- * o Next otimizaria esta página para estática no build e uma edição em "Dados jurídicos" só
- * apareceria aqui no próximo deploy, não no próximo request. */
-export const revalidate = 60;
+/** Renderizada a cada requisição: lê os dados jurídicos do banco (Admin → Dados jurídicos), e o
+ * build de produção roda SEM banco (docs/deploy-easypanel.md). Com `revalidate` a página era
+ * pré-renderizada no build e o deploy quebrava ("DATABASE_URL not found"). */
+export const dynamic = "force-dynamic";
 
 export default async function TermosPage() {
   const legalInfo = await getPublicLegalInfo();

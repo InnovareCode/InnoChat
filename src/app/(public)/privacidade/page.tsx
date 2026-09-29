@@ -8,8 +8,10 @@ export const metadata: Metadata = {
   description: "Como o InnoChat trata dados pessoais, de acordo com a LGPD.",
 };
 
-/** Revalida a cada 60s — ver comentário equivalente em `../termos/page.tsx`. */
-export const revalidate = 60;
+/** Renderizada a cada requisição: lê os dados jurídicos do banco (Admin → Dados jurídicos), e o
+ * build de produção roda SEM banco (docs/deploy-easypanel.md). Com `revalidate` a página era
+ * pré-renderizada no build e o deploy quebrava ("DATABASE_URL not found"). */
+export const dynamic = "force-dynamic";
 
 export default async function PrivacidadePage() {
   const legalInfo = await getPublicLegalInfo();
