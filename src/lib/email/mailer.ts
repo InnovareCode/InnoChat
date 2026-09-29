@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { loadPlatformSettingsRow, readGenericSecret } from "@/modules/platform/secrets";
 import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
+import { toMailFrom } from "./sender";
 
 /**
  * E-mail transacional via SMTP próprio (decisão do dono, 2026-09-28) — credenciais em
@@ -65,7 +66,7 @@ export async function sendMail(input: SendMailInput): Promise<{ sent: boolean }>
 
   try {
     await transporter.sendMail({
-      from: config.smtpFrom!,
+      from: toMailFrom(config.smtpFrom!),
       to: input.to,
       subject: input.subject,
       html: input.html,

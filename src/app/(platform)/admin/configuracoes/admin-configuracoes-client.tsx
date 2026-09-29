@@ -621,9 +621,9 @@ export function AdminConfiguracoesClient({
                 />
               )}
             </Field>
-            <Field label="E-mail de remetente" hint="Aparece como remetente nos e-mails enviados.">
+            <Field label="Remetente" hint="Como aparece na caixa de entrada. Ex.: InnoChat <no-reply@seudominio.com.br>. Só o e-mail também funciona — o nome InnoChat é usado.">
               {(fieldProps) => (
-                <Input {...fieldProps} type="email" value={smtpFrom} onChange={(e) => setSmtpFrom(e.target.value)} placeholder="contato@exemplo.com" />
+                <Input {...fieldProps} type="text" inputMode="email" autoComplete="off" value={smtpFrom} onChange={(e) => setSmtpFrom(e.target.value)} placeholder="InnoChat <no-reply@seudominio.com.br>" />
               )}
             </Field>
             <TestConnectionButton
