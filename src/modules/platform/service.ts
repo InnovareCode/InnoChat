@@ -102,6 +102,23 @@ function toView(row: PlatformSettingsRow): PlatformSettingsView {
   };
 }
 
+/**
+ * Segredos salvos em claro, SÓ para uso no servidor (ex.: "Testar conexão" com o campo da chave em
+ * branco usa a chave já salva). Nunca devolver o resultado disto ao client.
+ */
+export async function getSavedIntegrationSecrets() {
+  const row = await getPrisma().platformSettings.findUnique({
+    where: { id: 1 },
+    select: { evolutionApiKey: true, n8nApiKey: true, mercadoPagoAccessToken: true, smtpPassword: true },
+  });
+  return {
+    evolutionApiKey: row?.evolutionApiKey ?? null,
+    n8nApiKey: row?.n8nApiKey ?? null,
+    mercadoPagoAccessToken: row?.mercadoPagoAccessToken ?? null,
+    smtpPassword: row?.smtpPassword ?? null,
+  };
+}
+
 export async function getMaskedPlatformSettings(): Promise<PlatformSettingsView> {
   const row = await getPrisma().platformSettings.findUnique({ where: { id: 1 } });
   return toView(row);

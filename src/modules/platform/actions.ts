@@ -9,6 +9,7 @@ import { ensurePublicBaseUrlFromCurrentRequest } from "@/lib/public-url";
 import { isValidCnpj, normalizeDocumentDigits } from "@/core/billing";
 import {
   getMaskedPlatformSettings,
+  getSavedIntegrationSecrets,
   regenerateInternalApiSecret,
   updatePlatformSettings,
   type PlatformSettingsView,
@@ -79,33 +80,43 @@ export async function regenerateInternalApiSecretAction(): Promise<Result<{ secr
 // Testar conexão (docs/contratos.md) — sempre {ok, detalhe}, nunca o segredo de volta.
 // ---------------------------------------------------------------------------
 
-const testEvolutionSchema = z.object({ evolutionApiUrl: z.string().url(), evolutionApiKey: z.string().min(1) });
+// Em todos os testes, segredo em branco = usa o que já está salvo (mesma regra do "Salvar": campo
+// vazio mantém o valor atual). O segredo salvo é lido e usado só aqui no servidor.
+function missingSecret(label: string): never {
+  throw new DomainError("MISSING_SECRET", `Informe ${label} ou salve antes de testar.`);
+}
+
+const testEvolutionSchema = z.object({ evolutionApiUrl: z.string().url(), evolutionApiKey: z.string().optional() });
 
 export async function testEvolutionConnectionAction(input: unknown): Promise<Result<ConnectionTestResult>> {
   return runAction(async () => {
     await requirePlatformAdmin();
     const data = testEvolutionSchema.parse(input);
-    return testEvolutionConnection(data.evolutionApiUrl, data.evolutionApiKey);
+    const key = data.evolutionApiKey || (await getSavedIntegrationSecrets()).evolutionApiKey || missingSecret("a chave da Evolution");
+    return testEvolutionConnection(data.evolutionApiUrl, key);
   });
 }
 
-const testMercadoPagoSchema = z.object({ mercadoPagoAccessToken: z.string().min(1) });
+const testMercadoPagoSchema = z.object({ mercadoPagoAccessToken: z.string().optional() });
 
 export async function testMercadoPagoConnectionAction(input: unknown): Promise<Result<ConnectionTestResult>> {
   return runAction(async () => {
     await requirePlatformAdmin();
     const data = testMercadoPagoSchema.parse(input);
-    return testMercadoPagoConnection(data.mercadoPagoAccessToken);
+    const token =
+      data.mercadoPagoAccessToken || (await getSavedIntegrationSecrets()).mercadoPagoAccessToken || missingSecret("o access token");
+    return testMercadoPagoConnection(token);
   });
 }
 
-const testN8nSchema = z.object({ n8nBaseUrl: z.string().url(), n8nApiKey: z.string().min(1) });
+const testN8nSchema = z.object({ n8nBaseUrl: z.string().url(), n8nApiKey: z.string().optional() });
 
 export async function testN8nConnectionAction(input: unknown): Promise<Result<ConnectionTestResult>> {
   return runAction(async () => {
     await requirePlatformAdmin();
     const data = testN8nSchema.parse(input);
-    return testN8nConnection(data.n8nBaseUrl, data.n8nApiKey);
+    const key = data.n8nApiKey || (await getSavedIntegrationSecrets()).n8nApiKey || missingSecret("a chave de API do n8n");
+    return testN8nConnection(data.n8nBaseUrl, key);
   });
 }
 
@@ -126,7 +137,7 @@ export async function testSmtpConnectionAction(input: unknown): Promise<Result<C
       port: data.smtpPort,
       secure: !!data.smtpSecure,
       user: data.smtpUser,
-      password: data.smtpPassword,
+      password: data.smtpPassword || (await getSavedIntegrationSecrets()).smtpPassword || undefined,
     });
   });
 }

@@ -458,10 +458,10 @@ export function AdminConfiguracoesClient({
             </Field>
             <TestConnectionButton
               onTest={async () => {
-                if (!evolutionApiUrl || !evolutionApiKey) {
-                  return { ok: false, detalhe: "Informe URL e chave (mesmo que ainda não tenha salvo) para testar." };
+                if (!evolutionApiUrl) {
+                  return { ok: false, detalhe: "Informe a URL da Evolution para testar." };
                 }
-                const result = await testEvolutionConnectionAction({ evolutionApiUrl, evolutionApiKey });
+                const result = await testEvolutionConnectionAction({ evolutionApiUrl, evolutionApiKey: evolutionApiKey || undefined });
                 return result.ok ? result.data : { ok: false, detalhe: result.error.message };
               }}
             />
@@ -524,10 +524,10 @@ export function AdminConfiguracoesClient({
             </Field>
             <TestConnectionButton
               onTest={async () => {
-                if (!n8nBaseUrl || !n8nApiKey) {
-                  return { ok: false, detalhe: "Informe URL e chave (mesmo que ainda não tenha salvo) para testar." };
+                if (!n8nBaseUrl) {
+                  return { ok: false, detalhe: "Informe a URL do n8n para testar." };
                 }
-                const result = await testN8nConnectionAction({ n8nBaseUrl, n8nApiKey });
+                const result = await testN8nConnectionAction({ n8nBaseUrl, n8nApiKey: n8nApiKey || undefined });
                 return result.ok ? result.data : { ok: false, detalhe: result.error.message };
               }}
             />
@@ -624,10 +624,7 @@ export function AdminConfiguracoesClient({
             </Field>
             <TestConnectionButton
               onTest={async () => {
-                if (!mercadoPagoAccessToken) {
-                  return { ok: false, detalhe: "Informe o access token (mesmo que ainda não tenha salvo) para testar." };
-                }
-                const result = await testMercadoPagoConnectionAction({ mercadoPagoAccessToken });
+                                const result = await testMercadoPagoConnectionAction({ mercadoPagoAccessToken: mercadoPagoAccessToken || undefined });
                 return result.ok ? result.data : { ok: false, detalhe: result.error.message };
               }}
             />
