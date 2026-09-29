@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { hasPlatformAdmin } from "@/modules/platform/install";
-import { PublicSplitLayout } from "@/components/public/public-split-layout";
+import { AuthShell } from "@/components/public/auth-shell";
 import { InstalacaoForm } from "./instalacao-form";
 
 export const metadata: Metadata = { title: "Instalação — InnoChat" };
@@ -24,8 +24,8 @@ export default async function InstalacaoPage() {
   }
 
   return (
-    <PublicSplitLayout formMaxWidth="max-w-md">
+    <AuthShell formMaxWidth="max-w-md">
       <InstalacaoForm />
-    </PublicSplitLayout>
+    </AuthShell>
   );
 }

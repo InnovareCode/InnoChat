@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PublicSplitLayout } from "@/components/public/public-split-layout";
+import { AuthShell } from "@/components/public/auth-shell";
 import { RedefinirSenhaForm } from "./redefinir-senha-form";
 
 export const metadata: Metadata = { title: "Redefinir senha — InnoChat" };
@@ -11,8 +11,8 @@ export default async function RedefinirSenhaPage({
 }) {
   const { token } = await searchParams;
   return (
-    <PublicSplitLayout>
+    <AuthShell>
       <RedefinirSenhaForm token={token ?? null} />
-    </PublicSplitLayout>
+    </AuthShell>
   );
 }

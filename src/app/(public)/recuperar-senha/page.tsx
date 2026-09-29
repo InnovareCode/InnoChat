@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { PublicSplitLayout } from "@/components/public/public-split-layout";
+import { AuthShell } from "@/components/public/auth-shell";
 import { RecuperarSenhaForm } from "./recuperar-senha-form";
 
 export const metadata: Metadata = { title: "Recuperar senha — InnoChat" };
 
 export default function RecuperarSenhaPage() {
   return (
-    <PublicSplitLayout>
+    <AuthShell>
       <RecuperarSenhaForm />
-    </PublicSplitLayout>
+    </AuthShell>
   );
 }

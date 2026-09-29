@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { PublicSplitLayout } from "@/components/public/public-split-layout";
+import { AuthShell } from "@/components/public/auth-shell";
 import { CadastroForm } from "./cadastro-form";
 
 export const metadata: Metadata = { title: "Criar conta — InnoChat" };
 
 export default function CadastroPage() {
   return (
-    <PublicSplitLayout formMaxWidth="max-w-md">
+    <AuthShell formMaxWidth="max-w-md">
       <CadastroForm />
       <p className="mt-4 text-center text-sm text-text-secondary">
         Já tem conta?{" "}
@@ -15,6 +15,6 @@ export default function CadastroPage() {
           Entrar
         </Link>
       </p>
-    </PublicSplitLayout>
+    </AuthShell>
   );
 }

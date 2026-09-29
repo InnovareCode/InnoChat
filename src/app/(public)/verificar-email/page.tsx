@@ -3,7 +3,7 @@ import Link from "next/link";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PublicSplitLayout } from "@/components/public/public-split-layout";
+import { AuthShell } from "@/components/public/auth-shell";
 import { verifyEmailAction } from "@/modules/signup/actions";
 
 export const metadata: Metadata = { title: "Confirmar e-mail — InnoChat" };
@@ -17,7 +17,7 @@ export default async function VerificarEmailPage({
 
   if (!token) {
     return (
-      <PublicSplitLayout>
+      <AuthShell>
         <Card className="rounded-hero">
           <CardHeader>
             <CardTitle>Link incompleto</CardTitle>
@@ -29,14 +29,14 @@ export default async function VerificarEmailPage({
             </Button>
           </CardContent>
         </Card>
-      </PublicSplitLayout>
+      </AuthShell>
     );
   }
 
   const result = await verifyEmailAction({ token });
 
   return (
-    <PublicSplitLayout>
+    <AuthShell>
       <Card className="rounded-hero">
         <CardHeader>
           <div
@@ -65,6 +65,6 @@ export default async function VerificarEmailPage({
           </Button>
         </CardContent>
       </Card>
-    </PublicSplitLayout>
+    </AuthShell>
   );
 }

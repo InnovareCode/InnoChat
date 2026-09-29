@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
-import { PublicSplitLayout } from "@/components/public/public-split-layout";
+import { AuthShell } from "@/components/public/auth-shell";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = { title: "Entrar — InnoChat" };
@@ -15,7 +15,7 @@ export default async function LoginPage({
   const { erro, redefinida, instalado } = await searchParams;
 
   return (
-    <PublicSplitLayout>
+    <AuthShell>
       <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>Entrar</CardTitle>
@@ -51,6 +51,6 @@ export default async function LoginPage({
           </p>
         </CardContent>
       </Card>
-    </PublicSplitLayout>
+    </AuthShell>
   );
 }
