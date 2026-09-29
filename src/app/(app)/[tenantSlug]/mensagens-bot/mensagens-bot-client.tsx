@@ -83,6 +83,7 @@ const KEY_DESCRIPTION: Record<BotTextKeyLiteral, string> = {
   ONLY_TEXT: "Quando o cliente envia algo que não é texto (áudio, imagem, figurinha...).",
   SESSION_EXPIRED: "Quando a conversa ficou parada por um tempo e o bot recomeça o menu.",
   GOODBYE: "Mensagem de despedida ao final da conversa.",
+  REMINDER: "Lembrete enviado ao cliente antes do horário agendado.",
   LABEL_CONFIRM: "Botão/opção \"Confirmar\" na tela de confirmar agendamento.",
   LABEL_OTHER_TIME: "Botão/opção \"Escolher outro horário\" na tela de confirmar agendamento.",
   LABEL_CANCEL_YES: "Botão/opção \"Sim, cancelar\" na confirmação de cancelamento.",

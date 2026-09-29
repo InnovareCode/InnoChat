@@ -47,6 +47,7 @@ export const TENANT_SCOPED_MODELS = [
   "WhatsappInstance",
   "BotText",
   "Subscription",
+  "ChatMessage",
 ] as const;
 
 export type TenantScopedModel = (typeof TENANT_SCOPED_MODELS)[number];

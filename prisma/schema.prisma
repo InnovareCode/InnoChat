@@ -24,9 +24,14 @@ model User {
   // Onboarding (tour guiado do Inno): por USUÁRIO — funcionário novo também vê o tour.
   // null = ainda não concluiu/pulou.
   onboardingTourCompletedAt DateTime?
+  // Nome de exibição (até 80 caracteres — limite na validação, não no banco). null = sem nome.
+  name              String?
+  // Notificações da plataforma (admin): "marcar todas como lidas" = tudo com data <= este instante.
+  platformNotificationsReadAllAt DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
+  platformNotificationReads PlatformNotificationRead[]
   memberships       Membership[]
   authTokens        AuthToken[]
   platformSettingsUpdates PlatformSettings[] @relation("PlatformSettingsUpdatedBy")
@@ -107,6 +112,9 @@ model Tenant {
   maxProfessionalsOverride   Int?
   // Onboarding: o checklist "Primeiros passos" é por EMPRESA; null = visível.
   onboardingChecklistDismissedAt DateTime?
+  // Lembrete de véspera ao cliente por WhatsApp.
+  reminderEnabled     Boolean @default(true)
+  reminderHoursBefore Int     @default(24)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -121,6 +129,7 @@ model Tenant {
   botTexts           BotText[]
   subscription       Subscription?
   trialClaims        TrialClaim[]
+  chatMessages       ChatMessage[]
 
   @@map("tenants")
 }
@@ -396,6 +405,7 @@ model Contact {
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   appointments Appointment[]
   chatSessions ChatSession[]
+  chatMessages ChatMessage[]
 
   @@unique([tenantId, waJid])
   @@index([tenantId])
@@ -432,6 +442,8 @@ model Appointment {
   status            AppointmentStatus @default(SCHEDULED)
   source            AppointmentSource @default(WHATSAPP)
   idempotencyKey    String?
+  // Lembrete de véspera já enviado (null = pendente). Zerar ao remarcar.
+  reminderSentAt    DateTime? @db.Timestamptz
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
@@ -447,6 +459,8 @@ model Appointment {
   // - agendamentos por tenant e período
   @@index([professionalId, startsAt])
   @@index([tenantId, startsAt])
+  // Job de lembrete: status = SCHEDULED AND reminderSentAt IS NULL AND startsAt entre X e Y.
+  @@index([status, reminderSentAt, startsAt])
   @@unique([tenantId, idempotencyKey])
   @@map("appointments")
 }
@@ -524,6 +538,7 @@ model WhatsappInstance {
   chatSessions ChatSession[]
   inboundEvents InboundEvent[]
   appointments Appointment[]
+  chatMessages ChatMessage[]
 
   @@index([tenantId])
   @@map("whatsapp_instances")
@@ -623,6 +638,7 @@ enum BotTextKey {
   ONLY_TEXT
   SESSION_EXPIRED
   GOODBYE
+  REMINDER
   LABEL_CONFIRM
   LABEL_OTHER_TIME
   LABEL_CANCEL_YES
@@ -853,4 +869,45 @@ model TrialClaim {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("trial_claims")
+}
+
+// ---------------------------------------------------------------------------
+// Fase 2 — Histórico de conversas e notificações da plataforma
+// ---------------------------------------------------------------------------
+
+enum ChatDirection {
+  INBOUND
+  OUTBOUND
+}
+
+model ChatMessage {
+  id                 String        @id @default(cuid())
+  tenantId           String
+  contactId          String
+  whatsappInstanceId String?
+  direction          ChatDirection
+  body               String
+  // Id da mensagem no provedor (Evolution) — dedup de webhook repetido. Nulo permite vários.
+  providerMessageId  String?
+  createdAt          DateTime      @default(now())
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact          Contact           @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  whatsappInstance WhatsappInstance? @relation(fields: [whatsappInstanceId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, providerMessageId])
+  @@index([tenantId, contactId, createdAt])
+  @@map("chat_messages")
+}
+
+model PlatformNotificationRead {
+  id              String   @id @default(cuid())
+  userId          String
+  notificationKey String
+  readAt          DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, notificationKey])
+  @@map("platform_notification_reads")
 }
