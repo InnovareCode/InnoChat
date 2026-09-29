@@ -6,6 +6,10 @@ import { getPrisma } from "@/lib/db/prisma";
 import { auth } from "@/lib/auth";
 import { ConfiguracoesGrid, type ConfigSection } from "./configuracoes-grid";
 import { EmpresaDocumentForm } from "./empresa-document-form";
+import { LembreteCard } from "./lembrete-card";
+import { Alert } from "@/components/ui/alert";
+import { isTenantWriteBlocked } from "../_lib/write-blocked";
+import { getReminderSettingsAction } from "@/modules/reminders/actions";
 
 const SECTIONS: ConfigSection[] = [
   {
@@ -68,6 +72,11 @@ export default async function ConfiguracoesPage({
       })
     : null;
 
+  const [reminder, writeBlocked] = await Promise.all([
+    getReminderSettingsAction({ tenantSlug }),
+    isTenantWriteBlocked(tenant.id),
+  ]);
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader icon={navIconFor("configuracoes")} title="Configurações" description="Empresa, regras de agenda e do bot, equipe." />
@@ -77,6 +86,19 @@ export default async function ConfiguracoesPage({
         currentDocument={tenant.document}
         isOwner={membership?.role === "OWNER"}
       />
+
+      {reminder.ok ? (
+        <LembreteCard
+          tenantSlug={tenantSlug}
+          initial={reminder.data}
+          isOwner={membership?.role === "OWNER"}
+          writeBlocked={writeBlocked}
+        />
+      ) : (
+        <Alert variant="danger" title="Não deu para carregar o lembrete automático">
+          {reminder.error.message} Recarregue a página para tentar de novo.
+        </Alert>
+      )}
 
       <ConfiguracoesGrid tenantSlug={tenantSlug} sections={SECTIONS} />
     </div>

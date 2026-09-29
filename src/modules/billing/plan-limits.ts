@@ -64,3 +64,15 @@ export async function assertCanAddWhatsappNumber(tenantId: string): Promise<void
     );
   }
 }
+
+/**
+ * Limite e uso de números de WhatsApp para a tela "WhatsApp" (mesma regra de
+ * `assertCanAddWhatsappNumber`: override da empresa > limite do plano; `null` = ilimitado; conta só
+ * instâncias não removidas).
+ */
+export async function getWhatsappNumberUsage(tenantId: string): Promise<{ maxNumbers: number | null; usedNumbers: number }> {
+  const tenant = await loadTenantAndPlanLimits(tenantId);
+  const maxNumbers = tenant.maxWhatsappNumbersOverride ?? tenant.subscription?.plan.maxWhatsappNumbers ?? null;
+  const usedNumbers = await forTenant(tenantId).whatsappInstance.count({ where: { deletedAt: null } });
+  return { maxNumbers, usedNumbers };
+}

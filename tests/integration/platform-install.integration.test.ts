@@ -71,6 +71,7 @@ describe("bootstrapInstallCodeIfNeeded + installPlatformAdmin — instalação �
 
     const user = await prisma.user.findUnique({ where: { id: result.userId } });
     expect(user?.isPlatformAdmin).toBe(true);
+    expect(user?.name).toBe("Admin de Teste"); // nome (opcional) agora é persistido
     expect(user?.emailVerifiedAt).not.toBeNull();
 
     expect(await hasPlatformAdmin()).toBe(true);

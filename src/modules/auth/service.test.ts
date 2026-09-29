@@ -77,9 +77,9 @@ describe("verifyCredentials — não bloqueado, comportamento normal preservado"
   });
 
   it("dentro do teto, senha correta devolve o usuário", async () => {
-    findUniqueMock.mockResolvedValue({ id: "u1", email: "ok@example.com", passwordHash: "hash" });
+    findUniqueMock.mockResolvedValue({ id: "u1", email: "ok@example.com", name: "Ok User", passwordHash: "hash" });
     compareMock.mockResolvedValue(true);
     const result = await verifyCredentials({ email: "ok@example.com", password: "correta", ip: "203.0.113.2" });
-    expect(result).toEqual({ id: "u1", email: "ok@example.com", name: null });
+    expect(result).toEqual({ id: "u1", email: "ok@example.com", name: "Ok User" });
   });
 });

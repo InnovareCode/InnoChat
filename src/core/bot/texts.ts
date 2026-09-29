@@ -46,7 +46,7 @@ export const BOT_TEXT_KEYS = [
 export type BotTextKeyLiteral = (typeof BOT_TEXT_KEYS)[number];
 
 /** Variáveis conhecidas de template (docs/arquitetura.md §6.7) — a tela de edição só aceita estas. */
-export const BOT_TEXT_VARIABLES = ["nome", "empresa", "servico", "profissional", "data", "hora", "preco"] as const;
+export const BOT_TEXT_VARIABLES = ["nome", "empresa", "servico", "profissional", "data", "hora", "preco", "quando"] as const;
 
 export const DEFAULT_BOT_TEXTS: Record<BotTextKeyLiteral, string> = {
   GREETING: "Olá, {nome}! Bem-vindo(a) à {empresa}. 😊",
@@ -74,7 +74,8 @@ export const DEFAULT_BOT_TEXTS: Record<BotTextKeyLiteral, string> = {
   ONLY_TEXT: "Por enquanto só entendo mensagens de texto.",
   SESSION_EXPIRED: "Faz um tempo que não conversamos, então recomecei o menu por aqui. ",
   GOODBYE: "Até logo! 👋",
-  REMINDER: "Olá, {nome}! Lembrete: você tem {servico} com {profissional} amanhã, {data} às {hora}. Se precisar remarcar ou cancelar, é só responder por aqui. 😊",
+  REMINDER:
+    "Olá, {nome}! Lembrete: você tem {servico} com {profissional} {quando} às {hora}.\nPara remarcar ou cancelar, responda *menu*.",
   LABEL_CONFIRM: "Confirmar",
   LABEL_OTHER_TIME: "Escolher outro horário",
   LABEL_CANCEL_YES: "Sim, cancelar",

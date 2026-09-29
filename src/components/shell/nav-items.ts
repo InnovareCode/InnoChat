@@ -4,6 +4,7 @@ import {
   Bot,
   Building2,
   Calendar,
+  CircleUser,
   ClipboardList,
   CreditCard,
   LayoutDashboard,
@@ -146,6 +147,9 @@ export const adminNavItems: NavItem[] = ADMIN_GROUPS_DEF.flatMap((g) => g.items)
  */
 const ICON_BY_KEY: Record<string, LucideIcon> = {
   onboarding: Rocket,
+  // Fora do menu: abre pelo bloco do usuário na sidebar.
+  "minha-conta": CircleUser,
+  "admin/minha-conta": CircleUser,
   ...Object.fromEntries(TENANT_GROUPS_DEF.flatMap((g) => g.items.map((i) => [i.path, i.icon] as const))),
   ...Object.fromEntries(ADMIN_GROUPS_DEF.flatMap((g) => g.items.map((i) => [i.href.replace(/^\//, ""), i.icon] as const))),
 };

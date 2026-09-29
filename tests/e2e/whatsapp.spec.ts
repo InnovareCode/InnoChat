@@ -193,7 +193,7 @@ test.describe.serial("WhatsApp: conexão por QR com Evolution fake", () => {
     await prisma.tenant.update({ where: { id: tenantId }, data: { maxWhatsappNumbersOverride: null } });
   });
 
-  test("limite do plano (Essencial: 1 número): PLAN_LIMIT_REACHED com a mensagem certa", async ({ page, context }) => {
+  test("limite do plano (Essencial: 1 número): a tela troca 'Adicionar número' pelo card de upgrade", async ({ page, context }) => {
     // Volta ao limite apertado — a instância do teste 1 (conectada) já ocupa a única vaga; a
     // "Segunda linha" do teste anterior ainda existe (override tinha subido para 10), então
     // remove ela antes para o cenário ficar limpo (exatamente 1 número, no limite).
@@ -203,13 +203,14 @@ test.describe.serial("WhatsApp: conexão por QR com Evolution fake", () => {
     });
 
     await loginOwner(page, context);
-    await page.getByRole("button", { name: "Conectar número" }).click();
-    await page.getByLabel("Rótulo *", { exact: true }).fill("Terceira linha");
-    await page.getByRole("button", { name: "Gerar QR code" }).click();
-
-    await expect(page.getByText("Limite do plano atingido").first()).toBeVisible();
-    await expect(page.getByText(/permite até 1 número\(s\) de WhatsApp e você já tem 1/).first()).toBeVisible();
-    await expect(page.getByRole("link", { name: "Ver assinatura" })).toBeVisible();
+    // Fase 2: a UI não oferece mais o caminho que o servidor recusaria (a recusa em si,
+    // PLAN_LIMIT_REACHED, segue coberta em tests/integration/whatsapp.integration.test.ts).
+    const limitCard = page.getByTestId("plan-limit-card");
+    await expect(limitCard).toBeVisible();
+    await expect(limitCard.getByText("Limite do plano atingido (1 de 1)")).toBeVisible();
+    await expect(limitCard.getByRole("link", { name: "Fazer upgrade" })).toHaveAttribute("href", /\/assinatura$/);
+    await expect(page.getByRole("button", { name: "Conectar número" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Adicionar número" })).toHaveCount(0);
   });
 
   test("TRIAL_PHONE_ALREADY_USED: número já usado em outro teste grátis mostra mensagem específica", async ({ page, context }) => {

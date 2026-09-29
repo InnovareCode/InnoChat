@@ -6,12 +6,14 @@ import { badgeVariants, type BadgeVariants } from "@/components/ui/badge.variant
 import { navIconFor } from "@/components/shell/nav-items";
 import { cn } from "@/components/lib/cn";
 import { formatDateTimeShortLabel, formatLongDateLabel, formatTimeLabel } from "@/components/lib/format-date";
-import { firstNameFromEmail, greetingAt } from "@/components/lib/greeting";
+import { firstNameFromEmail, firstNameOf, greetingAt } from "@/components/lib/greeting";
 
 export type InicioHeaderProps = {
   tenantSlug: string;
   timezone: string;
   userEmail: string | null;
+  /** `User.name`; quando existe manda na saudação, senão vale o e-mail. */
+  userName?: string | null;
   appointmentsToday: number;
   nextAppointment: { startsAt: string; contactName: string | null; serviceName: string } | null;
   connectedWhatsappCount: number;
@@ -75,6 +77,7 @@ export function InicioHeader({
   tenantSlug,
   timezone,
   userEmail,
+  userName = null,
   appointmentsToday,
   nextAppointment,
   connectedWhatsappCount,
@@ -83,7 +86,7 @@ export function InicioHeader({
   now = new Date(),
 }: InicioHeaderProps) {
   const greeting = greetingAt(now, timezone);
-  const name = firstNameFromEmail(userEmail);
+  const name = firstNameOf(userName) ?? firstNameFromEmail(userEmail);
   const todayISO = formatInTimeZone(now, timezone, "yyyy-MM-dd");
 
   let nextLabel: string | null = null;

@@ -6,9 +6,12 @@ import { AdminSectionLabel } from "./section-label";
 import { BackgroundGlow } from "./background-glow";
 import { CommandPalette } from "./command-palette";
 import { PageTransition } from "./page-transition";
+import { NotificationBell } from "@/components/notifications/notification-bell";
+import { PlatformNotificationCenterProvider } from "@/components/notifications/notification-center-provider";
 
 type AdminShellProps = {
   userEmail: string;
+  userName?: string | null;
   children: React.ReactNode;
 };
 
@@ -26,8 +29,9 @@ function AdminBrand() {
 }
 
 /** Shell do admin da plataforma — mesmo padrão premium do painel do tenant, tema fixo Índigo Clínico. */
-export function AdminShell({ userEmail, children }: AdminShellProps) {
+export function AdminShell({ userEmail, userName = null, children }: AdminShellProps) {
   return (
+    <PlatformNotificationCenterProvider>
     <div className="relative flex min-h-screen">
       <BackgroundGlow />
       <aside className="relative z-10 hidden w-64 shrink-0 flex-col panel-sidebar-surface px-4 py-6 lg:flex">
@@ -38,7 +42,7 @@ export function AdminShell({ userEmail, children }: AdminShellProps) {
           <AdminSidebarNav />
         </div>
         <div className="mt-4 border-t border-white/10 pt-4">
-          <UserBlock userEmail={userEmail} />
+          <UserBlock userEmail={userEmail} userName={userName} accountHref="/admin/minha-conta" />
         </div>
       </aside>
 
@@ -48,7 +52,7 @@ export function AdminShell({ userEmail, children }: AdminShellProps) {
             <MobileNav
               variant="admin"
               brand={<AdminBrand />}
-              footer={<UserBlock userEmail={userEmail} />}
+              footer={<UserBlock userEmail={userEmail} userName={userName} accountHref="/admin/minha-conta" />}
             />
             <span className="truncate font-display text-sm font-bold text-text lg:hidden">Plataforma</span>
             <AdminSectionLabel />
@@ -56,6 +60,10 @@ export function AdminShell({ userEmail, children }: AdminShellProps) {
 
           <div className="flex shrink-0 items-center gap-3">
             <CommandPalette variant="admin" />
+            <NotificationBell
+              timezone="America/Sao_Paulo"
+              emptyHint="Novos cadastros, pagamentos e alertas da plataforma aparecem aqui."
+            />
           </div>
         </header>
 
@@ -65,5 +73,6 @@ export function AdminShell({ userEmail, children }: AdminShellProps) {
       </div>
       <InnovareCodeBadge />
     </div>
+    </PlatformNotificationCenterProvider>
   );
 }

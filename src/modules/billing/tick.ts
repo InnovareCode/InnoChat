@@ -16,6 +16,7 @@ import { formatCentsBRL, formatDateBR } from "./format";
 import { getMercadoPagoGateway, type MercadoPagoGateway } from "./mercadopago";
 import { reconcileInvoicePayment } from "./reconcile";
 import { recordBillingTickRun } from "@/modules/platform/health-service";
+import { runReminderTick } from "@/modules/reminders/tick";
 
 /**
  * `POST /api/internal/v1/billing/tick` (docs/contratos.md — Fase 7). Roda periodicamente
@@ -50,6 +51,8 @@ export type BillingTickSummary = {
   invoicesVoided: number;
   /** Faturas `OPEN` com Pix conciliadas ativamente contra o Mercado Pago e baixadas (webhook perdido/atrasado). */
   invoicesReconciledPaid: number;
+  /** Lembretes de véspera enviados por WhatsApp aos clientes finais (`src/modules/reminders/tick.ts`). */
+  remindersToClientsSent: number;
 };
 
 export async function runBillingTick(now: Date = new Date(), gateway?: MercadoPagoGateway): Promise<BillingTickSummary> {
@@ -62,6 +65,7 @@ export async function runBillingTick(now: Date = new Date(), gateway?: MercadoPa
     suspensionEmailsSent: 0,
     invoicesVoided: 0,
     invoicesReconciledPaid: 0,
+    remindersToClientsSent: 0,
   };
 
   // Resolve o gateway do MP uma vez só (evita reler PlatformSettings a cada fatura/Pix). Se não
@@ -82,6 +86,14 @@ export async function runBillingTick(now: Date = new Date(), gateway?: MercadoPa
   await regenerateExpiredPix(prisma, now, resolvedGateway, summary);
   await sendDueReminders(prisma, now, summary);
   await reconcileStatuses(prisma, now, summary);
+
+  // Lembrete de véspera aos clientes finais: falha isolada — nunca derruba a cobrança acima.
+  try {
+    const reminders = await runReminderTick(now);
+    summary.remindersToClientsSent = reminders.remindersToClientsSent;
+  } catch (error) {
+    logger.error("billing.tick.reminders_failed", { errorMessage: error instanceof Error ? error.message : String(error) });
+  }
 
   logger.info("billing.tick.completed", { ...summary });
 

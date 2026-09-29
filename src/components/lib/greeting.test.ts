@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstNameFromEmail, greetingAt, greetingForHour } from "./greeting";
+import { firstNameFromEmail, firstNameOf, greetingAt, greetingForHour } from "./greeting";
 
 describe("greetingForHour", () => {
   it.each([
@@ -36,5 +36,18 @@ describe("firstNameFromEmail", () => {
     expect(firstNameFromEmail("123456@x.com")).toBeNull();
     expect(firstNameFromEmail("")).toBeNull();
     expect(firstNameFromEmail(null)).toBeNull();
+  });
+});
+
+describe("firstNameOf", () => {
+  it("pega a primeira palavra do nome", () => {
+    expect(firstNameOf("Maria da Silva")).toBe("Maria");
+    expect(firstNameOf("  joão  ")).toBe("joão");
+  });
+  it("vazio ou ausente vira null (cai no e-mail)", () => {
+    expect(firstNameOf("")).toBeNull();
+    expect(firstNameOf("   ")).toBeNull();
+    expect(firstNameOf(null)).toBeNull();
+    expect(firstNameOf(undefined)).toBeNull();
   });
 });

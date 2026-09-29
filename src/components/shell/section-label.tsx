@@ -1,7 +1,11 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { CircleUser } from "lucide-react";
 import { adminNavItems, tenantNavItems, type NavItem } from "./nav-items";
+
+/** Página fora do menu (abre pelo bloco do usuário) — mesmo assim a topbar diz onde a pessoa está. */
+const account = (href: string): NavItem => ({ label: "Minha conta", href, icon: CircleUser });
 
 /**
  * Nome da seção atual na topbar (desktop) — antes a topbar em telas ≥1024px
@@ -19,14 +23,14 @@ function activeLabel(items: NavItem[], pathname: string | null): string | null {
 
 export function TenantSectionLabel({ tenantSlug }: { tenantSlug: string }) {
   const pathname = usePathname();
-  const label = activeLabel(tenantNavItems(tenantSlug, { includeOnboarding: true }), pathname);
+  const label = activeLabel([...tenantNavItems(tenantSlug, { includeOnboarding: true }), account(`/${tenantSlug}/minha-conta`)], pathname);
   if (!label) return null;
   return <p className="hidden font-display text-sm font-bold text-text lg:block">{label}</p>;
 }
 
 export function AdminSectionLabel() {
   const pathname = usePathname();
-  const label = activeLabel(adminNavItems, pathname);
+  const label = activeLabel([...adminNavItems, account("/admin/minha-conta")], pathname);
   if (!label) return null;
   return <p className="hidden font-display text-sm font-bold text-text lg:block">{label}</p>;
 }

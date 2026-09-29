@@ -11,7 +11,7 @@ import { NotificationItem } from "./notification-item";
 import { NotificationToasts } from "./notification-toasts";
 import { badgeText, groupNotifications, unreadAriaLabel } from "./notification-utils";
 import { useNotificationCenterContext } from "./notification-center-provider";
-import type { AppNotification } from "./types";
+import type { BellNotification } from "./types";
 
 type Filter = "all" | "unread";
 
@@ -22,7 +22,14 @@ const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1
  * mesmo DOM, a diferença é só CSS), toasts de novas e polling. Foco: ao abrir vai para o painel,
  * Tab circula dentro dele, Esc / clique fora / item escolhido fecham e devolvem o foco ao sino.
  */
-export function NotificationBell({ timezone }: { timezone: string }) {
+export function NotificationBell({
+  timezone,
+  emptyHint = "Novos agendamentos, remarcações e avisos importantes aparecem aqui.",
+}: {
+  timezone: string;
+  /** Texto do estado vazio "Todas" — o admin da plataforma tem outros tipos de aviso. */
+  emptyHint?: string;
+}) {
   const { notify } = useToast();
   const center = useNotificationCenterContext();
   const { items, unreadCount, nextCursor, status, loadingMore, toasts, ringing, markRead, dismissToast, setPanelOpen } = center;
@@ -100,7 +107,7 @@ export function NotificationBell({ timezone }: { timezone: string }) {
   }
 
   const activate = useCallback(
-    async (notification: AppNotification) => {
+    async (notification: BellNotification) => {
       changeOpen(false, { restoreFocus: false });
       dismissToast(notification.id);
       if (!notification.read) {
@@ -223,7 +230,7 @@ export function NotificationBell({ timezone }: { timezone: string }) {
                       </button>
                     </div>
                   ) : visible.length === 0 ? (
-                    <EmptyNotifications filter={filter} />
+                    <EmptyNotifications filter={filter} hint={emptyHint} />
                   ) : (
                     <>
                       {groups.map((group) => (
@@ -263,7 +270,7 @@ export function NotificationBell({ timezone }: { timezone: string }) {
   );
 }
 
-function EmptyNotifications({ filter }: { filter: Filter }) {
+function EmptyNotifications({ filter, hint }: { filter: Filter; hint: string }) {
   return (
     <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
       <Image src="/mascote/inno-avatar.webp" alt="" width={72} height={72} className="h-[72px] w-[72px] rounded-full" />
@@ -272,7 +279,7 @@ function EmptyNotifications({ filter }: { filter: Filter }) {
         <p className="mt-1 text-sm text-text-secondary">
           {filter === "unread"
             ? "Você não tem notificações não lidas."
-            : "Novos agendamentos, remarcações e avisos importantes aparecem aqui."}
+            : hint}
         </p>
       </div>
     </div>

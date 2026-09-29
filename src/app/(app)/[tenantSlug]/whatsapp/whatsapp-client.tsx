@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { ConnectWhatsappDialog } from "@/components/whatsapp/connect-whatsapp-dialog";
 import { AddNumberCard } from "@/components/whatsapp/add-number-card";
+import { PlanLimitCard } from "@/components/whatsapp/plan-limit-card";
 import { WhatsappInstanceCard } from "@/components/whatsapp/whatsapp-instance-card";
 import {
   disconnectWhatsappAction,
@@ -25,18 +26,26 @@ import {
 
 const WRITE_BLOCKED_HINT = "Assinatura suspensa — ação bloqueada até o pagamento.";
 
+export type WhatsappPageExtras = {
+  maxNumbers: number | null;
+  usedNumbers: number;
+  welcomePreview: { greeting: string; menu: string };
+};
+
 export function WhatsappClient({
   tenantSlug,
   timezone,
   initialInstances,
   isOwner,
   writeBlocked = false,
+  extras = null,
 }: {
   tenantSlug: string;
   timezone: string;
   initialInstances: WhatsappInstanceView[];
   isOwner: boolean;
   writeBlocked?: boolean;
+  extras?: WhatsappPageExtras | null;
 }) {
   const { notify } = useToast();
   const [instances, setInstances] = useState<WhatsappInstanceView[]>(initialInstances);
@@ -120,13 +129,16 @@ export function WhatsappClient({
     );
   }
   const hasInstances = instances.length > 0;
+  // O servidor contou `usedNumbers` na carga da página; conexões/remoções feitas aqui mexem na lista local.
+  const usedNumbers = extras ? Math.max(0, extras.usedNumbers + (instances.length - initialInstances.length)) : instances.length;
+  const limitReached = extras?.maxNumbers != null && usedNumbers >= extras.maxNumbers;
 
   return (
     <div>
       <PageHeader icon={navIconFor("whatsapp")}
         title="WhatsApp"
         description="Números conectados, QR code e status da conexão."
-        action={isOwner && hasInstances ? renderConnectTrigger() : undefined}
+        action={isOwner && hasInstances && !limitReached ? renderConnectTrigger() : undefined}
       />
 
       {writeBlocked ? (
@@ -162,9 +174,12 @@ export function WhatsappClient({
               onRefresh={() => handleRefresh(instance)}
               onDisconnect={() => setConfirmDisconnect(instance)}
               onRemove={() => setConfirmRemove(instance)}
+              welcomePreview={extras?.welcomePreview ?? null}
             />
           ))}
-          {isOwner ? (
+          {isOwner && limitReached && extras?.maxNumbers != null ? (
+            <PlanLimitCard tenantSlug={tenantSlug} used={usedNumbers} max={extras.maxNumbers} />
+          ) : isOwner ? (
             <AddNumberCard
               onClick={() => setConnectOpen(true)}
               disabled={writeBlocked}

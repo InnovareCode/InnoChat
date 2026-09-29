@@ -16,7 +16,22 @@ import { resetBotTextAction, upsertBotTextAction } from "@/modules/bot-texts/bot
 
 export type BotTextRow = { key: BotTextKeyLiteral; text: string; isDefault: boolean };
 
-type GroupDef = { label: string; keys: BotTextKeyLiteral[] };
+type BotVariable = (typeof BOT_TEXT_VARIABLES)[number];
+
+type GroupDef = {
+  label: string;
+  keys: BotTextKeyLiteral[];
+  /** Âncora (`#id`) para link direto vindo de outras telas (ex.: Configurações → Lembrete). */
+  id?: string;
+  /** Variáveis que valem para as mensagens do grupo, mostradas no cabeçalho do cartão. */
+  variables?: BotVariable[];
+};
+
+/** Variáveis que o backend realmente preenche em cada mensagem — o editor só oferece estas
+ * (quando a chave não está aqui, vale a lista completa). */
+const KEY_VARIABLES: Partial<Record<BotTextKeyLiteral, BotVariable[]>> = {
+  REMINDER: ["nome", "servico", "profissional", "data", "hora", "quando"],
+};
 
 const GROUPS: GroupDef[] = [
   { label: "Saudação e menu", keys: ["GREETING", "MAIN_MENU"] },
@@ -38,6 +53,12 @@ const GROUPS: GroupDef[] = [
   {
     label: "Meus agendamentos",
     keys: ["MY_APPOINTMENTS", "NO_APPOINTMENTS", "APPOINTMENT_ACTIONS", "CONFIRM_CANCEL", "CANCELED", "RESCHEDULED", "TOO_LATE"],
+  },
+  {
+    label: "Lembretes",
+    id: "lembretes",
+    keys: ["REMINDER"],
+    variables: KEY_VARIABLES.REMINDER,
   },
   { label: "Atendimento humano", keys: ["HUMAN_HANDOFF"] },
   { label: "Erros e sessão", keys: ["INVALID_OPTION", "TOO_MANY_INVALID", "ONLY_TEXT", "SESSION_EXPIRED"] },
@@ -102,6 +123,7 @@ const PREVIEW_SAMPLE_VARS: Record<(typeof BOT_TEXT_VARIABLES)[number], string> =
   data: "Ter 30/09",
   hora: "14:30",
   preco: "R$ 80,00",
+  quando: "amanhã",
 };
 
 /** Prévia caprichada em balão de WhatsApp (docs/design/screens/premium/onda2): fundo com o
@@ -183,6 +205,8 @@ export function MensagensBotClient({ tenantSlug, initialTexts }: { tenantSlug: s
         {GROUPS.map((group, groupIndex) => (
           <motion.div
             key={group.label}
+            id={group.id}
+            className="scroll-mt-24"
             initial={reduceMotion ? undefined : { opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25, delay: groupIndex * STAGGER_DELAY_S, ease: [0.16, 1, 0.3, 1] }}
@@ -190,6 +214,16 @@ export function MensagensBotClient({ tenantSlug, initialTexts }: { tenantSlug: s
             <Card className="rounded-hero transition-[border-color,box-shadow] duration-200 hover:border-primary/20 hover:shadow-card-hover">
               <CardHeader>
                 <CardTitle>{group.label}</CardTitle>
+                {group.variables ? (
+                  <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-text-secondary">
+                    Variáveis:
+                    {group.variables.map((variable) => (
+                      <code key={variable} className="rounded-full border border-border bg-bg px-2 py-0.5 text-xs font-medium text-text">
+                        {`{${variable}}`}
+                      </code>
+                    ))}
+                  </p>
+                ) : null}
               </CardHeader>
               <CardContent className="flex flex-col divide-y divide-border p-0">
                 {group.keys.map((key) => {
@@ -306,7 +340,7 @@ function EditDialogController({
           <div>
             <p className="mb-1.5 text-sm font-medium text-text">Variáveis disponíveis</p>
             <div className="flex flex-wrap gap-1.5">
-              {BOT_TEXT_VARIABLES.map((variable) => (
+              {(KEY_VARIABLES[row.key] ?? BOT_TEXT_VARIABLES).map((variable) => (
                 <button
                   key={variable}
                   type="button"

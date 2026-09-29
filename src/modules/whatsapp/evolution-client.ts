@@ -55,6 +55,13 @@ export interface EvolutionClient {
   logout(instanceName: string): Promise<void>;
   /** `DELETE /instance/delete/{instance}` — remove a instância de vez da Evolution. */
   deleteInstance(instanceName: string): Promise<void>;
+  /**
+   * `POST /message/sendText/{instance}` com `{ number, text }` (mesmo formato do nó "Enviar pela
+   * Evolution" do workflow do n8n). UMA tentativa só (sem retry): reenviar mensagem após timeout
+   * pode duplicar no WhatsApp do cliente — quem chama decide se tenta de novo. Devolve o id da
+   * mensagem no provedor quando a resposta traz (`key.id`), senão `null`.
+   */
+  sendText(instanceName: string, number: string, text: string): Promise<{ messageId: string | null }>;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -70,14 +77,14 @@ function toDataUrl(base64OrDataUrl: string): string {
  * `fetch` com timeout e retry — SÓ em falha de rede/timeout e 5xx (nunca em 4xx: erro do nosso
  * lado, repetir não ajuda). Mesma política do resto do sistema (§6.1, `mercadopago.ts`).
  */
-async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithRetry(url: string, init: RequestInit, maxAttempts: number = EVOLUTION_MAX_ATTEMPTS): Promise<Response> {
   let lastError: unknown;
-  for (let attempt = 1; attempt <= EVOLUTION_MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), EVOLUTION_TIMEOUT_MS);
     try {
       const response = await fetch(url, { ...init, signal: controller.signal });
-      if (response.status >= 500 && attempt < EVOLUTION_MAX_ATTEMPTS) {
+      if (response.status >= 500 && attempt < maxAttempts) {
         lastError = new Error(`Evolution respondeu ${response.status}`);
         await sleep(EVOLUTION_RETRY_DELAY_MS);
         continue;
@@ -85,7 +92,7 @@ async function fetchWithRetry(url: string, init: RequestInit): Promise<Response>
       return response;
     } catch (error) {
       lastError = error;
-      if (attempt >= EVOLUTION_MAX_ATTEMPTS) break;
+      if (attempt >= maxAttempts) break;
       await sleep(EVOLUTION_RETRY_DELAY_MS);
     } finally {
       clearTimeout(timeout);
@@ -99,16 +106,26 @@ async function fetchWithRetry(url: string, init: RequestInit): Promise<Response>
  * InnoAtendente, replicado aqui de propósito): pode ecoar dado pessoal do payload da
  * requisição. Só status + path + um id de correlação.
  */
-async function evolutionRequest(baseUrl: string, apiKey: string, path: string, init?: RequestInit): Promise<unknown> {
+async function evolutionRequest(
+  baseUrl: string,
+  apiKey: string,
+  path: string,
+  init?: RequestInit,
+  maxAttempts?: number,
+): Promise<unknown> {
   const url = `${baseUrl}${path}`;
-  const response = await fetchWithRetry(url, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      apikey: apiKey,
-      ...(init?.headers ?? {}),
+  const response = await fetchWithRetry(
+    url,
+    {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        apikey: apiKey,
+        ...(init?.headers ?? {}),
+      },
     },
-  });
+    maxAttempts,
+  );
 
   if (!response.ok) {
     await response.text().catch(() => "");
@@ -232,6 +249,22 @@ export function createEvolutionClient(baseUrl: string, apiKey: string): Evolutio
         await evolutionRequest(base, apiKey, `/instance/logout/${instanceName}`, { method: "DELETE" });
       } catch (error) {
         throw wrapNetworkError(error, `desconectar ${instanceName}`);
+      }
+    },
+
+    // SUPOSIÇÃO: resposta com `key.id` (Baileys). Ausência do id nunca falha o envio.
+    async sendText(instanceName, number, text) {
+      try {
+        const response = (await evolutionRequest(
+          base,
+          apiKey,
+          `/message/sendText/${encodeURIComponent(instanceName)}`,
+          { method: "POST", body: JSON.stringify({ number, text }) },
+          1,
+        )) as { key?: { id?: string } } | null;
+        return { messageId: response?.key?.id ?? null };
+      } catch (error) {
+        throw wrapNetworkError(error, `enviar mensagem por ${instanceName}`);
       }
     },
 

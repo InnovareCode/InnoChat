@@ -28,7 +28,8 @@ export function InstalacaoForm() {
   function validateClientSide(): boolean {
     const errors: Record<string, string> = {};
     if (form.code.trim().length < 10) errors.code = "Informe o código de instalação impresso no log do servidor.";
-    if (form.name.trim().length < 2) errors.name = "Informe seu nome.";
+    if (form.name.trim().length > 0 && form.name.trim().length < 2) errors.name = "O nome precisa ter pelo menos 2 letras.";
+    else if (form.name.trim().length > 80) errors.name = "O nome pode ter no máximo 80 caracteres.";
     if (!form.email.includes("@")) errors.email = "Informe um e-mail válido.";
     if (form.password.length < 8) errors.password = "A senha precisa ter pelo menos 8 caracteres.";
     if (form.password !== form.confirmPassword) errors.confirmPassword = "As senhas não são iguais.";
@@ -44,7 +45,7 @@ export function InstalacaoForm() {
     startTransition(async () => {
       const result = await installPlatformAdminAction({
         code: form.code.trim(),
-        name: form.name.trim(),
+        name: form.name.trim() || undefined,
         email: form.email.trim(),
         password: form.password,
       });
@@ -93,7 +94,7 @@ export function InstalacaoForm() {
             )}
           </Field>
 
-          <Field label="Seu nome" htmlFor="name" required error={fieldErrors.name}>
+          <Field label="Seu nome (opcional)" htmlFor="name" error={fieldErrors.name}>
             {(fieldProps) => (
               <AuthInput
                 {...fieldProps}
@@ -102,7 +103,7 @@ export function InstalacaoForm() {
                 autoComplete="name"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                maxLength={120}
+                maxLength={80}
                 invalid={!!fieldErrors.name}
               />
             )}

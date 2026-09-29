@@ -104,7 +104,8 @@ export function CadastroForm() {
     if (form.companyName.trim().length < 2) errors.companyName = "Informe o nome da empresa.";
     if (slugValidation) errors.slug = SLUG_ERROR_MESSAGE[slugValidation];
     if (!form.slug) errors.slug = "Escolha um endereço para a empresa.";
-    if (form.ownerName.trim().length < 2) errors.ownerName = "Informe seu nome.";
+    if (form.ownerName.trim().length < 2) errors.ownerName = "Informe seu nome (pelo menos 2 letras).";
+    else if (form.ownerName.trim().length > 80) errors.ownerName = "O nome pode ter no máximo 80 caracteres.";
     if (!validateCpfCnpj(form.document).valid) errors.document = "Informe um CPF ou CNPJ válido.";
     if (!form.email.includes("@")) errors.email = "Informe um e-mail válido.";
     if (form.password.length < 8) errors.password = "A senha precisa ter pelo menos 8 caracteres.";
@@ -261,7 +262,7 @@ export function CadastroForm() {
                 autoComplete="name"
                 value={form.ownerName}
                 onChange={(e) => setForm((f) => ({ ...f, ownerName: e.target.value }))}
-                maxLength={120}
+                maxLength={80}
                 invalid={!!fieldErrors.ownerName}
               />
             )}

@@ -13,6 +13,7 @@ export default function Loading() {
     >
       <div className="flex flex-col gap-6">
         <SectionCardSkeleton bodyHeight="h-20" withFooter />
+        <SectionCardSkeleton bodyHeight="h-40" withFooter />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 5 }).map((_, i) => (
             <Card key={i} className="flex items-start gap-3.5 rounded-hero p-5">

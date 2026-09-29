@@ -341,7 +341,8 @@ export async function rescheduleAppointment(
     const updated = await getPrisma().$transaction(async (tx) => {
       const result = await tx.appointment.update({
         where: { id: appointmentId },
-        data: { startsAt: plan.startsAt, endsAt: plan.endsAt, blockEndsAt: plan.blockEndsAt },
+        // `reminderSentAt: null`: o horário mudou, o lembrete de véspera precisa ser reenviado para o novo horário.
+        data: { startsAt: plan.startsAt, endsAt: plan.endsAt, blockEndsAt: plan.blockEndsAt, reminderSentAt: null },
       });
       await tx.appointmentEvent.create({
         data: { appointmentId, action: "RESCHEDULED", authorType, authorId: actorId },

@@ -148,6 +148,24 @@ describe("createEvolutionClient", () => {
     expect(init.method).toBe("DELETE");
   });
 
+  it("sendText chama POST /message/sendText/{instance} com {number, text}, devolve key.id e NÃO retenta em 5xx", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ key: { id: "3EB0ABC" } }));
+    const client = createEvolutionClient(BASE_URL, API_KEY);
+
+    const result = await client.sendText("innochat-studio-x7k2", "5511999990000", "Oi");
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe(`${BASE_URL}/message/sendText/innochat-studio-x7k2`);
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({ number: "5511999990000", text: "Oi" });
+    expect(result).toEqual({ messageId: "3EB0ABC" });
+
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(new Response("boom", { status: 503 }));
+    await expect(client.sendText("innochat-studio-x7k2", "5511999990000", "Oi")).rejects.toBeInstanceOf(EvolutionApiError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("lança EvolutionApiError em 4xx SEM retentar (erro do nosso lado)", async () => {
     fetchMock.mockResolvedValueOnce(new Response("bad request", { status: 400 }));
     const client = createEvolutionClient(BASE_URL, API_KEY);

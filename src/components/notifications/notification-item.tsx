@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { cn } from "@/components/lib/cn";
 import { formatRelativeTime } from "./notification-utils";
-import { KIND_ICON, SEVERITY_TONE, SOURCE_VISUAL } from "./notification-visuals";
-import type { AppNotification } from "./types";
+import { FALLBACK_ICON, ICON_BY_KIND, SEVERITY_TONE, SOURCE_VISUAL } from "./notification-visuals";
+import { Building2 } from "lucide-react";
+import type { BellNotification } from "./types";
 
 /**
  * Uma linha da lista. Com `href` é um link de verdade (abre em nova aba, tem URL no hover);
@@ -16,13 +17,19 @@ export function NotificationItem({
   now,
   onActivate,
 }: {
-  notification: AppNotification;
+  notification: BellNotification;
   now: Date;
-  onActivate: (notification: AppNotification) => void;
+  onActivate: (notification: BellNotification) => void;
 }) {
-  const Icon = KIND_ICON[notification.kind];
-  const source = SOURCE_VISUAL[notification.source];
-  const SourceIcon = source.icon;
+  const Icon = ICON_BY_KIND[notification.kind] ?? FALLBACK_ICON;
+  // Tenant: origem (WhatsApp/Painel/Sistema). Admin: a empresa a que o aviso se refere.
+  const origin =
+    "source" in notification
+      ? SOURCE_VISUAL[notification.source]
+      : notification.tenant
+        ? { icon: Building2, label: notification.tenant.name }
+        : null;
+  const SourceIcon = origin?.icon;
 
   const className = cn(
     "flex min-h-[44px] w-full items-start gap-3 px-4 py-3 text-left transition-colors duration-150 motion-reduce:transition-none",
@@ -52,11 +59,15 @@ export function NotificationItem({
         ) : null}
         <span className="mt-1 flex items-center gap-2 text-xs text-text-secondary">
           <span className="tabular-nums">{formatRelativeTime(notification.createdAt, now)}</span>
-          <span aria-hidden="true">·</span>
-          <span className="inline-flex items-center gap-1">
-            <SourceIcon className="h-3 w-3" aria-hidden="true" />
-            {source.label}
-          </span>
+          {origin && SourceIcon ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className="inline-flex min-w-0 items-center gap-1">
+                <SourceIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">{origin.label}</span>
+              </span>
+            </>
+          ) : null}
         </span>
       </span>
     </>

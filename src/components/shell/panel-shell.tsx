@@ -22,6 +22,8 @@ type PanelShellProps = {
   /** Fuso da empresa — agrupa notificações por dia (Hoje/Ontem) no horário certo. */
   timezone?: string;
   userEmail: string;
+  /** Nome de exibição (`User.name`); null = ainda sem nome (o bloco mostra o e-mail). */
+  userName?: string | null;
   subscriptionStatus?: SubscriptionStatus;
   trialHoursLeft?: number | null;
   onboardingIncomplete?: boolean;
@@ -145,6 +147,7 @@ export function PanelShell({
   tenantSlug,
   timezone = "America/Sao_Paulo",
   userEmail,
+  userName = null,
   subscriptionStatus = null,
   trialHoursLeft = null,
   onboardingIncomplete = false,
@@ -171,7 +174,7 @@ export function PanelShell({
           />
         </div>
         <div className="mt-4 border-t border-white/10 pt-4">
-          <UserBlock userEmail={userEmail} />
+          <UserBlock userEmail={userEmail} userName={userName} accountHref={`/${tenantSlug}/minha-conta`} />
           <TourReplayButton />
         </div>
       </aside>
@@ -187,7 +190,7 @@ export function PanelShell({
               brand={<Brand tenantName={tenantName} />}
               footer={
                 <>
-                  <UserBlock userEmail={userEmail} />
+                  <UserBlock userEmail={userEmail} userName={userName} accountHref={`/${tenantSlug}/minha-conta`} />
                   <TourReplayButton />
                 </>
               }

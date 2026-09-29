@@ -52,7 +52,7 @@ export async function bootstrapInstallCodeIfNeeded(): Promise<void> {
 
 export type InstallPlatformAdminInput = {
   code: string;
-  name: string;
+  name?: string;
   email: string;
   password: string;
 };
@@ -94,6 +94,7 @@ export async function installPlatformAdmin(input: InstallPlatformAdminInput): Pr
       data: {
         email,
         passwordHash,
+        name: input.name?.trim() || null,
         isPlatformAdmin: true,
         emailVerifiedAt: now,
       },

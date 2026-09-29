@@ -24,7 +24,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const user = await getPrisma().user.findUnique({
     where: { id: session.user.id },
-    select: { isPlatformAdmin: true, email: true },
+    select: { isPlatformAdmin: true, email: true, name: true },
   });
 
   if (!user?.isPlatformAdmin) {
@@ -36,7 +36,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <body>
         <NavigationProgress />
         <ToastProvider>
-          <AdminShell userEmail={user.email}>{children}</AdminShell>
+          <AdminShell userEmail={user.email} userName={user.name}>{children}</AdminShell>
         </ToastProvider>
       </body>
     </html>

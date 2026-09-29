@@ -83,7 +83,15 @@ export function MobileNav(props: MobileNavProps) {
                     <AdminSidebarNav onNavigate={() => setOpen(false)} />
                   )}
                 </div>
-                <div className="mt-4 border-t border-white/10 pt-4">{props.footer}</div>
+                {/* Clique em link do rodapé (ex.: "Minha conta" no bloco do usuário) fecha a gaveta. */}
+                <div
+                  className="mt-4 border-t border-white/10 pt-4"
+                  onClick={(event) => {
+                    if ((event.target as HTMLElement).closest("a")) setOpen(false);
+                  }}
+                >
+                  {props.footer}
+                </div>
               </motion.div>
             </RadixDialog.Content>
           </RadixDialog.Portal>

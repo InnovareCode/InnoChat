@@ -491,10 +491,11 @@ export async function getAppointmentTimeline(ctx: TenantContext, appointmentId: 
     ? await getPrisma().user.findMany({
         // Só usuários que são membros DESTA empresa (nunca vaza e-mail de outra).
         where: { id: { in: userIds }, memberships: { some: { tenantId: ctx.tenant.id } } },
-        select: { id: true, email: true },
+        select: { id: true, name: true, email: true },
       })
     : [];
-  const userLabel = new Map(users.map((u) => [u.id, u.email.split("@")[0]]));
+  // Prefere o nome de exibição; sem nome, cai na parte local do e-mail (como antes).
+  const userLabel = new Map(users.map((u) => [u.id, u.name?.trim() || u.email.split("@")[0]]));
 
   return {
     items: events.map((e) => ({

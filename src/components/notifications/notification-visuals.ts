@@ -5,7 +5,13 @@ import {
   CalendarPlus,
   CalendarX,
   CheckCircle2,
+  Building2,
   Hourglass,
+  Timer,
+  ShieldAlert,
+  Ban,
+  CreditCard,
+  UserPlus,
   LayoutDashboard,
   MessageCircle,
   Settings2,
@@ -13,7 +19,7 @@ import {
   WifiOff,
   type LucideIcon,
 } from "lucide-react";
-import type { NotificationKind, NotificationSeverity, NotificationSource } from "./types";
+import type { AdminNotificationKind, NotificationKind, NotificationSeverity, NotificationSource } from "./types";
 
 /** Ícone por tipo de notificação. */
 export const KIND_ICON: Record<NotificationKind, LucideIcon> = {
@@ -27,6 +33,26 @@ export const KIND_ICON: Record<NotificationKind, LucideIcon> = {
   TRIAL_ENDING: Hourglass,
   PAYMENT_CONFIRMED: BadgeCheck,
 };
+
+/** Ícones das notificações do admin da plataforma. */
+export const ADMIN_KIND_ICON: Record<AdminNotificationKind, LucideIcon> = {
+  TENANT_SIGNED_UP: UserPlus,
+  PAYMENT_RECEIVED: CreditCard,
+  TENANT_SUSPENDED: Ban,
+  TENANT_CANCELED: Building2,
+  TRIAL_ENDING: Hourglass,
+  WHATSAPP_DISCONNECTED: WifiOff,
+  MP_WEBHOOK_REJECTED: ShieldAlert,
+  TICK_LATE: Timer,
+};
+
+/**
+ * Ícone de qualquer notificação do sino (tenant ou admin), por `kind`. Lookup estático (e não uma
+ * função que devolve componente): o lint proíbe criar componente durante o render. `kind`
+ * desconhecido cai em `FALLBACK_ICON` (`?? FALLBACK_ICON` no ponto de uso).
+ */
+export const ICON_BY_KIND: Record<string, LucideIcon> = { ...ADMIN_KIND_ICON, ...KIND_ICON };
+export const FALLBACK_ICON: LucideIcon = BellRing;
 
 /** Cor do "chip" do ícone por severidade — só tokens, valem nos 3 temas. */
 export const SEVERITY_TONE: Record<NotificationSeverity, string> = {

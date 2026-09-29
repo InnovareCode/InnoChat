@@ -1,5 +1,5 @@
 import { formatInTimeZone } from "date-fns-tz";
-import type { AppNotification } from "./types";
+import type { BellNotification } from "./types";
 
 /** Intervalo normal do polling (pedido do dono: 30 s). */
 export const POLL_INTERVAL_MS = 30_000;
@@ -57,7 +57,11 @@ export function titleWithCount(title: string, count: number): string {
   return count > 0 ? `(${count}) ${base}` : base;
 }
 
-export type NotificationGroup = { key: "today" | "yesterday" | "earlier"; label: string; items: AppNotification[] };
+export type NotificationGroup<T extends BellNotification = BellNotification> = {
+  key: "today" | "yesterday" | "earlier";
+  label: string;
+  items: T[];
+};
 
 const GROUP_LABEL: Record<NotificationGroup["key"], string> = {
   today: "Hoje",
@@ -66,11 +70,11 @@ const GROUP_LABEL: Record<NotificationGroup["key"], string> = {
 };
 
 /** Agrupa (já em ordem decrescente) por dia civil no fuso da empresa; grupos vazios não saem. */
-export function groupNotifications(items: AppNotification[], timezone: string, now: Date = new Date()): NotificationGroup[] {
+export function groupNotifications<T extends BellNotification>(items: T[], timezone: string, now: Date = new Date()): NotificationGroup<T>[] {
   const dayKey = (d: Date) => formatInTimeZone(d, timezone, "yyyy-MM-dd");
   const today = dayKey(now);
   const yesterday = dayKey(new Date(now.getTime() - 24 * 60 * 60 * 1000));
-  const buckets: Record<NotificationGroup["key"], AppNotification[]> = { today: [], yesterday: [], earlier: [] };
+  const buckets: Record<NotificationGroup["key"], T[]> = { today: [], yesterday: [], earlier: [] };
   for (const item of items) {
     const key = dayKey(new Date(item.createdAt));
     buckets[key === today ? "today" : key === yesterday ? "yesterday" : "earlier"].push(item);
@@ -81,15 +85,15 @@ export function groupNotifications(items: AppNotification[], timezone: string, n
 }
 
 /** Junta sem duplicar (por `id`; o mais novo vence) e mantém a ordem decrescente por data. */
-export function mergeNotifications(current: AppNotification[], incoming: AppNotification[]): AppNotification[] {
-  const byId = new Map<string, AppNotification>();
+export function mergeNotifications<T extends BellNotification>(current: T[], incoming: T[]): T[] {
+  const byId = new Map<string, T>();
   for (const item of current) byId.set(item.id, item);
   for (const item of incoming) byId.set(item.id, item);
   return [...byId.values()].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
 }
 
 /** Maior `createdAt` do lote (âncora do próximo `since`); `fallback` se o lote for vazio. */
-export function latestCreatedAt(items: AppNotification[], fallback: string): string {
+export function latestCreatedAt(items: BellNotification[], fallback: string): string {
   return items.reduce((max, item) => (item.createdAt > max ? item.createdAt : max), fallback);
 }
 
@@ -98,10 +102,10 @@ export function latestCreatedAt(items: AppNotification[], fallback: string): str
  * (`byMe`) não geram toast (quem clicou já sabe — vão só para o sino); cabem no máximo
  * `max - visibleCount` (as mais recentes primeiro). O que sobra fica no sino.
  */
-export function pickToasts(fresh: AppNotification[], visibleCount: number, max = MAX_VISIBLE_TOASTS): AppNotification[] {
+export function pickToasts<T extends BellNotification>(fresh: T[], visibleCount: number, max = MAX_VISIBLE_TOASTS): T[] {
   const room = Math.max(0, max - visibleCount);
   return fresh
-    .filter((n) => !n.read && !n.byMe)
+    .filter((n) => !n.read && !("byMe" in n && n.byMe))
     .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
     .slice(0, room);
 }

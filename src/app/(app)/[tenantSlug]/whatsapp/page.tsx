@@ -4,7 +4,7 @@ import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getPrisma } from "@/lib/db/prisma";
 import { auth } from "@/lib/auth";
-import { listWhatsappInstancesAction } from "@/modules/whatsapp/actions";
+import { getWhatsappPageExtrasAction, listWhatsappInstancesAction } from "@/modules/whatsapp/actions";
 import { isTenantWriteBlocked } from "../_lib/write-blocked";
 import { WhatsappClient } from "./whatsapp-client";
 
@@ -15,7 +15,10 @@ export default async function WhatsappPage({
 }) {
   const { tenantSlug } = await params;
 
-  const result = await listWhatsappInstancesAction(tenantSlug);
+  const [result, extrasResult] = await Promise.all([
+    listWhatsappInstancesAction(tenantSlug),
+    getWhatsappPageExtrasAction({ tenantSlug }),
+  ]);
 
   if (!result.ok) {
     return (
@@ -48,6 +51,8 @@ export default async function WhatsappPage({
       initialInstances={result.data}
       isOwner={membership?.role === "OWNER"}
       writeBlocked={writeBlocked}
+      // Extras são "melhor esforço": se falharem, a tela segue sem prévia real e sem card de limite.
+      extras={extrasResult.ok ? extrasResult.data : null}
     />
   );
 }

@@ -5,8 +5,8 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/components/lib/cn";
-import { KIND_ICON, SEVERITY_TONE } from "./notification-visuals";
-import type { AppNotification } from "./types";
+import { FALLBACK_ICON, ICON_BY_KIND, SEVERITY_TONE } from "./notification-visuals";
+import type { BellNotification } from "./types";
 
 const TOAST_DURATION_MS = 8000;
 
@@ -15,12 +15,12 @@ function NotificationToast({
   onDismiss,
   onView,
 }: {
-  notification: AppNotification;
+  notification: BellNotification;
   onDismiss: (id: string) => void;
-  onView: (notification: AppNotification) => void;
+  onView: (notification: BellNotification) => void;
 }) {
   const [paused, setPaused] = useState(false);
-  const Icon = KIND_ICON[notification.kind];
+  const Icon = ICON_BY_KIND[notification.kind] ?? FALLBACK_ICON;
 
   useEffect(() => {
     if (paused) return;
@@ -76,9 +76,9 @@ export function NotificationToasts({
   onDismiss,
   onView,
 }: {
-  toasts: AppNotification[];
+  toasts: BellNotification[];
   onDismiss: (id: string) => void;
-  onView: (notification: AppNotification) => void;
+  onView: (notification: BellNotification) => void;
 }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {

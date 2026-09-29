@@ -10,7 +10,7 @@ import { cn } from "@/components/lib/cn";
  * Cores: o verde/bege do WhatsApp são tokens LOCAIS deste componente (`--wa-*`), valem só
  * DENTRO da tela do aparelho. Moldura e sombra são neutras/derivadas do tema da empresa.
  */
-const WA_TOKENS = {
+export const WA_TOKENS = {
   "--wa-header": "#008069",
   "--wa-bg": "#EFEAE2",
   "--wa-doodle": "#D6CDBE",
@@ -106,7 +106,7 @@ export function PhoneFrame({
 }
 
 /** Doodle do fundo de conversa: ícones minúsculos repetidos num `<pattern>` SVG inline. */
-function ChatDoodle() {
+export function ChatDoodle() {
   return (
     <svg aria-hidden="true" className="absolute inset-0 h-full w-full" focusable="false">
       <defs>
@@ -195,7 +195,18 @@ function Bubble({
  * vem de `data-name` + `::after` de propósito: não duplica o rótulo como nó de texto na página
  * (o rótulo real fica só no painel ao lado), o que também evita leitor de tela ler duas vezes.
  */
-export function ChatScreen({ label, phoneDisplay }: { label: string; phoneDisplay: string | null }) {
+export type WelcomePreview = { greeting: string; menu: string };
+
+export function ChatScreen({
+  label,
+  phoneDisplay,
+  preview = null,
+}: {
+  label: string;
+  phoneDisplay: string | null;
+  /** Textos REAIS da empresa (saudação e menu já renderizados pelo servidor). Sem isso, cai no exemplo genérico. */
+  preview?: WelcomePreview | null;
+}) {
   return (
     <div aria-hidden="true" className="flex h-full flex-col bg-[var(--wa-bg)]">
       <div className="bg-[var(--wa-header)]">
@@ -227,22 +238,35 @@ export function ChatScreen({ label, phoneDisplay }: { label: string; phoneDispla
           <Bubble side="in" delay={60}>
             Oi
           </Bubble>
-          <Bubble side="out" delay={200}>
-            <span className="block">Olá! Eu sou o assistente virtual. Como posso ajudar?</span>
-            <span className="mt-1 block text-[var(--wa-ink-2)]">
-              1 · Agendar horário
-              <br />
-              2 · Ver serviços e preços
-              <br />
-              3 · Falar com a equipe
-            </span>
-          </Bubble>
-          <Bubble side="in" delay={340}>
-            1
-          </Bubble>
-          <Bubble side="out" delay={480}>
-            Ótimo! Para qual dia você quer o horário?
-          </Bubble>
+          {preview ? (
+            <>
+              <Bubble side="out" delay={200}>
+                <span className="block whitespace-pre-line break-words">{preview.greeting}</span>
+              </Bubble>
+              <Bubble side="out" delay={340}>
+                <span className="block whitespace-pre-line break-words">{preview.menu}</span>
+              </Bubble>
+            </>
+          ) : (
+            <>
+              <Bubble side="out" delay={200}>
+                <span className="block">Olá! Eu sou o assistente virtual. Como posso ajudar?</span>
+                <span className="mt-1 block text-[var(--wa-ink-2)]">
+                  1 · Agendar horário
+                  <br />
+                  2 · Ver serviços e preços
+                  <br />
+                  3 · Falar com a equipe
+                </span>
+              </Bubble>
+              <Bubble side="in" delay={340}>
+                1
+              </Bubble>
+              <Bubble side="out" delay={480}>
+                Ótimo! Para qual dia você quer o horário?
+              </Bubble>
+            </>
+          )}
         </div>
       </div>
 

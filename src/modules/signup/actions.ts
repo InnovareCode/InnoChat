@@ -6,6 +6,7 @@ import { runAction, type Result } from "@/lib/result";
 import { DomainError } from "@/lib/errors";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/http/client-ip";
+import { userNameSchema } from "@/lib/validation/user-name";
 import { assertCurrentTermsVersion, TERMS_VERSION } from "@/lib/legal";
 import { acceptInvite, inviteTeamMember, requestPasswordReset, resendVerificationEmail, resetPassword, signUp, verifyEmail } from "./service";
 
@@ -24,11 +25,21 @@ function assertRateLimit(scope: string, ip: string, limit: number, windowMs: num
   }
 }
 
-const signUpSchema = z.object({
+// Nome do usuário: campo `name` (2 a 80). `ownerName` (nome antigo do campo) continua aceito como
+// alias para não quebrar um formulário em cache durante a transição.
+const signUpSchema = z.preprocess(
+  (raw) => {
+    if (raw && typeof raw === "object" && !("name" in raw) && "ownerName" in raw) {
+      const { ownerName, ...rest } = raw as Record<string, unknown>;
+      return { ...rest, name: ownerName };
+    }
+    return raw;
+  },
+  z.object({
   companyName: z.string().trim().min(2).max(120),
   slug: z.string().trim().min(3).max(60),
   segment: z.string().trim().max(80).optional(),
-  ownerName: z.string().trim().min(2).max(120),
+  name: userNameSchema,
   email: z.string().trim().email().max(255),
   password: z.string().min(8).max(200),
   // CPF/CNPJ da empresa, formatado ou só dígitos (decisão do dono, 2026-09-29 — ver
@@ -37,7 +48,8 @@ const signUpSchema = z.object({
   document: z.string().trim().min(1, "Informe o CPF ou CNPJ da empresa."),
   termsVersion: z.string().min(1).max(50),
   acceptedTerms: z.boolean().refine((v) => v === true, { message: "É preciso aceitar os termos." }),
-});
+  }),
+);
 
 const SIGNUP_LIMIT = 5;
 const SIGNUP_WINDOW_MS = 60 * 60 * 1000; // 5 cadastros/hora por IP
@@ -64,7 +76,7 @@ export async function signUpAction(input: unknown): Promise<Result<{ tenantSlug:
       companyName: data.companyName,
       slug: data.slug,
       segment: data.segment ?? null,
-      ownerName: data.ownerName,
+      ownerName: data.name,
       email: data.email,
       password: data.password,
       document: data.document,
@@ -135,12 +147,12 @@ export async function inviteTeamMemberAction(tenantSlug: string, input: unknown)
   });
 }
 
-const acceptInviteSchema = z.object({ token: z.string().min(1), password: z.string().min(8).max(200) });
+const acceptInviteSchema = z.object({ token: z.string().min(1), password: z.string().min(8).max(200), name: userNameSchema });
 
 export async function acceptInviteAction(input: unknown): Promise<Result<{ tenantSlug: string | null }>> {
   return runAction(async () => {
     const data = acceptInviteSchema.parse(input);
-    return acceptInvite(data.token, data.password);
+    return acceptInvite(data.token, data.password, data.name);
   });
 }
 

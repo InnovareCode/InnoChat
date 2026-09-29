@@ -155,6 +155,7 @@ export async function signUp(input: SignUpInput, gateway?: MercadoPagoGateway): 
       data: {
         email,
         passwordHash,
+        name: input.ownerName.trim(),
         termsAcceptedAt: now,
         termsVersion: input.termsVersion,
       },
@@ -318,10 +319,10 @@ export async function inviteTeamMember(params: { tenantId: string; tenantName: s
   });
 }
 
-export async function acceptInvite(rawToken: string, password: string): Promise<{ tenantSlug: string | null }> {
+export async function acceptInvite(rawToken: string, password: string, name: string): Promise<{ tenantSlug: string | null }> {
   const { userId } = await consumeAuthToken(rawToken, "INVITE");
   const passwordHash = await hashPassword(password);
-  await getPrisma().user.update({ where: { id: userId }, data: { passwordHash, emailVerifiedAt: new Date() } });
+  await getPrisma().user.update({ where: { id: userId }, data: { passwordHash, name: name.trim(), emailVerifiedAt: new Date() } });
 
   const membership = await getPrisma().membership.findFirst({
     where: { userId },

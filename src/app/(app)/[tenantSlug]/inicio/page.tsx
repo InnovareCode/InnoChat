@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DomainError } from "@/lib/errors";
 import { effectiveStatus } from "@/core/billing";
 import { auth } from "@/lib/auth";
+import { getPrisma } from "@/lib/db/prisma";
 import { requireTenantMember } from "@/lib/auth/guards";
 import { getSubscriptionSnapshot } from "@/modules/billing/service";
 import { getDashboardView } from "@/modules/dashboard/queries";
@@ -65,6 +66,10 @@ async function InicioHeaderLoader({ tenantSlug }: { tenantSlug: string }) {
       requireTenantMember(tenantSlug),
     ]);
     const now = new Date();
+    // Nome de exibição (Minha conta); falhar aqui só faz a saudação cair no e-mail.
+    const userName = session?.user?.id
+      ? ((await getPrisma().user.findUnique({ where: { id: session.user.id }, select: { name: true } }))?.name ?? null)
+      : null;
     // Fim do teste: só quando a assinatura EFETIVA (pura, `effectiveStatus`) ainda é TRIALING.
     let trialEndsAt: string | null = null;
     try {
@@ -80,6 +85,7 @@ async function InicioHeaderLoader({ tenantSlug }: { tenantSlug: string }) {
       tenantSlug,
       timezone: view.timezone,
       userEmail: session?.user?.email ?? null,
+      userName,
       appointmentsToday: view.appointmentsToday,
       nextAppointment: next ? { startsAt: next.startsAt, contactName: next.contactName, serviceName: next.serviceName } : null,
       connectedWhatsappCount: view.connectedWhatsappCount,

@@ -9,7 +9,7 @@ import { cn } from "@/components/lib/cn";
 import { formatDateTimeLabel } from "@/components/lib/format-date";
 import { formatPhoneDisplay } from "@/components/lib/format-phone";
 import type { QrCodeView, WhatsappInstanceView } from "@/modules/whatsapp/actions";
-import { ChatScreen, OffScreen, PhoneFrame, PhoneScale, QrScreen } from "./phone-mockup";
+import { ChatScreen, OffScreen, PhoneFrame, PhoneScale, QrScreen, type WelcomePreview } from "./phone-mockup";
 import { useInstanceQr } from "./use-instance-qr";
 
 const STATUS_LABEL: Record<WhatsappInstanceView["status"], string> = {
@@ -96,6 +96,7 @@ export function WhatsappInstanceCard({
   onDisconnect,
   onRemove,
   onStatusChange,
+  welcomePreview = null,
 }: {
   tenantSlug: string;
   instance: WhatsappInstanceView;
@@ -109,6 +110,8 @@ export function WhatsappInstanceCard({
   onRemove: () => void;
   /** QR ao vivo detectou mudança (conectou / virou "aguardando QR"): o pai atualiza a lista. */
   onStatusChange: (next: WhatsappInstanceView) => void;
+  /** Saudação e menu reais da empresa para a conversa ilustrativa do celular. */
+  welcomePreview?: WelcomePreview | null;
 }) {
   // "Reconectar" a partir da tela apagada: reaproveita o mesmo fluxo de QR ao vivo, sem criar
   // outra instância (uma desconectada continua ocupando a vaga do plano).
@@ -140,7 +143,7 @@ export function WhatsappInstanceCard({
   let screen: React.ReactNode;
   let altText = "";
   if (status === "CONNECTED") {
-    screen = <ChatScreen label={instance.label} phoneDisplay={phoneDisplay} />;
+    screen = <ChatScreen label={instance.label} phoneDisplay={phoneDisplay} preview={welcomePreview} />;
     altText = `Ilustração de um celular com a conversa de exemplo do bot no número ${instance.label}.`;
   } else if (qrActive) {
     const message =

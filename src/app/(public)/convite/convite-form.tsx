@@ -7,12 +7,14 @@ import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { acceptInviteAction } from "@/modules/signup/actions";
-import { Lock, LogIn } from "lucide-react";
+import { Lock, LogIn, User } from "lucide-react";
 import { AuthInput } from "@/components/public/auth-input";
 import { AUTH_SUBMIT_CLASS, AuthPanel } from "@/components/public/auth-panel";
 
 export function ConviteForm({ token }: { token: string | null }) {
   const router = useRouter();
+  const [name, setName] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +33,12 @@ export function ConviteForm({ token }: { token: string | null }) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNameError(null);
+    const trimmedName = name.trim();
+    if (trimmedName.length < 2 || trimmedName.length > 80) {
+      setNameError(trimmedName.length > 80 ? "O nome pode ter no máximo 80 caracteres." : "Informe seu nome (pelo menos 2 letras).");
+      return;
+    }
     if (password.length < 8) {
       setError("A senha precisa ter pelo menos 8 caracteres.");
       return;
@@ -40,7 +48,7 @@ export function ConviteForm({ token }: { token: string | null }) {
       return;
     }
     startTransition(async () => {
-      const result = await acceptInviteAction({ token, password });
+      const result = await acceptInviteAction({ token, name: trimmedName, password });
       if (!result.ok) {
         setError(
           result.error.code === "TOKEN_INVALID"
@@ -54,9 +62,23 @@ export function ConviteForm({ token }: { token: string | null }) {
   }
 
   return (
-    <AuthPanel title="Aceitar convite" description="Defina sua senha para entrar no painel da empresa que te convidou.">
+    <AuthPanel title="Aceitar convite" description="Diga como quer ser chamado e defina sua senha para entrar no painel da empresa que te convidou.">
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           {error ? <Alert variant="danger">{error}</Alert> : null}
+          <Field label="Seu nome" htmlFor="name" required error={nameError}>
+            {(fieldProps) => (
+              <AuthInput
+                {...fieldProps}
+                icon={User}
+                name="name"
+                autoComplete="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={80}
+                invalid={!!nameError}
+              />
+            )}
+          </Field>
           <Field label="Senha" htmlFor="password" required>
             {(fieldProps) => (
               <AuthInput

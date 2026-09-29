@@ -10,10 +10,11 @@ import {
   pollBaseInterval,
   type RefreshCoordinator,
 } from "./live-refresh";
-import { useNotificationCenter } from "./use-notification-center";
-import type { AppNotification } from "./types";
+import { useNotificationCenter, usePlatformNotificationCenter, type useNotificationFeed } from "./use-notification-center";
+import type { AppNotification, BellNotification } from "./types";
 
-type CenterValue = ReturnType<typeof useNotificationCenter>;
+/** Valor que o sino consome — igual para o tenant e para o admin da plataforma. */
+type CenterValue = ReturnType<typeof useNotificationFeed<BellNotification>>;
 
 type LiveAppointmentsValue = {
   /** Sobe a cada refresh ao vivo — as telas que buscam dados no client refazem a leitura. */
@@ -123,6 +124,15 @@ export function NotificationCenterProvider({
       </LiveContext.Provider>
     </CenterContext.Provider>
   );
+}
+
+/**
+ * Central do admin da plataforma: mesmo sino, mesmos toasts, mesmo polling (30 s). Não faz
+ * live-refresh das páginas do admin (decisão da fase 2) — por isso não há `LiveContext` aqui.
+ */
+export function PlatformNotificationCenterProvider({ children }: { children: React.ReactNode }) {
+  const center = usePlatformNotificationCenter();
+  return <CenterContext.Provider value={center}>{children}</CenterContext.Provider>;
 }
 
 export function useNotificationCenterContext(): CenterValue {

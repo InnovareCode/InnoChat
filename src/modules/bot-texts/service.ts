@@ -67,6 +67,7 @@ const PREVIEW_SAMPLE_VARS = {
   data: "Ter 30/09",
   hora: "14:30",
   preco: "R$ 80,00",
+  quando: "amanhã",
 };
 
 /** Pré-visualização com valores de exemplo (docs/arquitetura.md §6.7, tela de edição). */

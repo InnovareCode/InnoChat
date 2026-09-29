@@ -35,9 +35,7 @@ export async function hashPassword(password: string): Promise<string> {
 export type AuthorizedUser = {
   id: string;
   email: string;
-  // O model User (prisma/schema.prisma) não tem campo de nome — é global e
-  // não tenant-scoped (docs/arquitetura.md §5). O nome de exibição vive por
-  // Membership/Tenant quando essa tela existir.
+  // `User.name` (nome de exibição, global — não é por empresa).
   name: string | null;
 };
 
@@ -83,5 +81,5 @@ export async function verifyCredentials(input: {
     return null;
   }
 
-  return { id: user.id, email: user.email, name: null };
+  return { id: user.id, email: user.email, name: user.name ?? null };
 }

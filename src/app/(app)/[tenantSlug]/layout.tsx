@@ -89,7 +89,7 @@ export default async function TenantLayout({
       // `emailVerifiedAt` nunca vem da sessão (não é lido no `session.user`) — relido aqui, direto
       // do banco, para o banner discreto de "confirme seu e-mail" (mesma regra de
       // `requireVerifiedEmail`, src/lib/auth/guards.ts).
-      getPrisma().user.findUnique({ where: { id: session.user.id }, select: { emailVerifiedAt: true } }),
+      getPrisma().user.findUnique({ where: { id: session.user.id }, select: { emailVerifiedAt: true, name: true } }),
       // Tour guiado do Inno: abre sozinho só no 1º acesso deste usuário (`tourCompletedAt` nulo).
       // Falha ao ler o estado NÃO abre o tour (melhor não mostrar do que repetir a cada página).
       getOnboardingStateAction(tenantSlug),
@@ -114,6 +114,7 @@ export default async function TenantLayout({
             tenantSlug={tenantSlug}
             timezone={membership.tenant.timezone}
             userEmail={session.user.email ?? ""}
+            userName={sessionUserRecord?.name ?? null}
             subscriptionStatus={status}
             trialHoursLeft={trialHoursLeft}
             onboardingIncomplete={onboardingIncomplete}

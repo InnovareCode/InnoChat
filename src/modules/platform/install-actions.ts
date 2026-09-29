@@ -5,6 +5,7 @@ import { runAction, type Result } from "@/lib/result";
 import { DomainError } from "@/lib/errors";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/http/client-ip";
+import { userNameSchema } from "@/lib/validation/user-name";
 import { hasPlatformAdmin, installPlatformAdmin } from "./install";
 
 /**
@@ -19,10 +20,8 @@ const INSTALL_WINDOW_MS = 15 * 60 * 1000;
 
 const installSchema = z.object({
   code: z.string().trim().min(10).max(200),
-  // Coletado por simetria com o cadastro público (`ownerName` em src/modules/signup) — `User`
-  // não tem campo de nome na v1 (mesma lacuna já existente lá); guardado só para confirmação
-  // na tela, não persistido.
-  name: z.string().trim().min(2).max(120),
+  // Opcional: vazio vira "sem nome" (o admin pode preencher depois em Meu perfil).
+  name: z.preprocess((v) => (typeof v === "string" && v.trim() === "" ? undefined : v), userNameSchema.optional()),
   email: z.string().trim().email().max(255),
   password: z.string().min(8).max(200),
 });

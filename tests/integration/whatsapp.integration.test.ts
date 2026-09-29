@@ -24,6 +24,7 @@ function createFakeEvolutionClient(overrides: Partial<EvolutionClient> = {}): Ev
     fetchOwnerJid: vi.fn(async () => null),
     logout: vi.fn(async () => {}),
     deleteInstance: vi.fn(async () => {}),
+    sendText: vi.fn(async () => ({ messageId: null })),
     ...overrides,
   };
 }

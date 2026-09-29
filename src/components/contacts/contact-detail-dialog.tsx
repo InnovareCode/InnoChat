@@ -2,7 +2,7 @@
 
 import { navIconFor } from "@/components/shell/nav-items";
 import { useEffect, useState, useTransition } from "react";
-import { CalendarPlus, Pause, Pencil, Play, Trash2, X } from "lucide-react";
+import { CalendarPlus, ClipboardList, MessageCircle, Pause, Pencil, Play, Trash2, X } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,16 @@ import {
   deleteContactAction,
 } from "@/modules/contacts/actions";
 import { ContactFormDialog, type ContactFormTarget } from "./contact-form-dialog";
+import { ContactConversation } from "./contact-conversation";
+import { cn } from "@/components/lib/cn";
 import { NovoAgendamentoDialog, type AgendaProfessional, type AgendaService } from "@/components/agenda/novo-agendamento-dialog";
+type DetailTab = "resumo" | "conversa";
+
+const TABS: { id: DetailTab; label: string; icon: typeof MessageCircle }[] = [
+  { id: "resumo", label: "Resumo", icon: ClipboardList },
+  { id: "conversa", label: "Conversa", icon: MessageCircle },
+];
+
 export type ContactSource = "WHATSAPP" | "PANEL";
 
 export type ContactAppointmentRow = {
@@ -100,6 +109,7 @@ export function ContactDetailDialog({
   const [editOpen, setEditOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [tab, setTab] = useState<DetailTab>("resumo");
   const [isPausePending, startPauseTransition] = useTransition();
   const [isDeletePending, startDeleteTransition] = useTransition();
 
@@ -126,6 +136,7 @@ export function ContactDetailDialog({
       const timeoutId = setTimeout(() => {
         setDetail(null);
         setError(null);
+        setTab("resumo");
       }, 0);
       return () => clearTimeout(timeoutId);
     }
@@ -133,6 +144,16 @@ export function ContactDetailDialog({
     return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId]);
+
+  function onTabKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    const index = TABS.findIndex((t) => t.id === tab);
+    const next =
+      event.key === "Home" ? 0 : event.key === "End" ? TABS.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + TABS.length) % TABS.length;
+    setTab(TABS[next]!.id);
+    document.getElementById(`contact-tab-${TABS[next]!.id}`)?.focus();
+  }
 
   function close() {
     setConfirmDelete(false);
@@ -182,7 +203,7 @@ export function ContactDetailDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={(next) => !next && close()}>
-        <DialogContent className="w-[min(38rem,calc(100vw-2rem))]">
+        <DialogContent className="max-h-[calc(100dvh-2rem)] w-[min(38rem,calc(100vw-2rem))] overflow-y-auto">
           <DialogHeader icon={navIconFor("clientes")}>
             <DialogTitle>Cliente</DialogTitle>
             <DialogDescription>Dados, histórico de agendamentos e controle do bot.</DialogDescription>
@@ -200,6 +221,40 @@ export function ContactDetailDialog({
             </Alert>
           ) : detail ? (
             <div className="mt-4 flex flex-col gap-5">
+              <div role="tablist" aria-label="Seções da ficha do cliente" className="flex gap-1 border-b border-border" onKeyDown={onTabKeyDown}>
+                {TABS.map(({ id, label, icon: TabIcon }) => (
+                  <button
+                    key={id}
+                    id={`contact-tab-${id}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === id}
+                    aria-controls={`contact-panel-${id}`}
+                    tabIndex={tab === id ? 0 : -1}
+                    onClick={() => setTab(id)}
+                    className={cn(
+                      "-mb-px inline-flex min-h-11 items-center gap-2 border-b-2 px-4 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none",
+                      "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary",
+                      tab === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-text",
+                    )}
+                  >
+                    <TabIcon className="h-4 w-4" aria-hidden="true" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {tab === "conversa" ? (
+                <div role="tabpanel" id="contact-panel-conversa" aria-labelledby="contact-tab-conversa">
+                  <ContactConversation
+                    tenantSlug={tenantSlug}
+                    contactId={detail.id}
+                    contactName={detail.displayName}
+                    timezone={timezone}
+                  />
+                </div>
+              ) : (
+              <div role="tabpanel" id="contact-panel-resumo" aria-labelledby="contact-tab-resumo" className="flex flex-col gap-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
                   <Avatar id={detail.id} name={detail.displayName} />
@@ -347,6 +402,8 @@ export function ContactDetailDialog({
                   </div>
                 )}
               </div>
+              </div>
+              )}
             </div>
           ) : null}
 

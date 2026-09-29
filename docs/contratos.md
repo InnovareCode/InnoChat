@@ -1829,3 +1829,35 @@ Model `ChatMessage` (`direction` INBOUND/OUTBOUND, `body`, `providerMessageId?`,
 | `TICK_LATE` | warning | billing > 2h / maintenance > 26h (regra da Saúde); fora da janela de 30 dias (vale enquanto atrasado); nunca rodou ancora na empresa mais antiga · `tick:<job>:<lastRunMs\|never>` | `/admin/saude` |
 
 Poll barato: 1 leitura do usuário + 1 consulta pequena por fonte (cap 100, filtrada por `max(janela, min(since, readAllAt))`) + 1 leitura de reads; sem N+1. Testes: `tests/integration/platform-notifications.integration.test.ts`, `tests/integration/conversations.integration.test.ts`.
+
+
+## Lembrete de véspera ao cliente final (WhatsApp) — 2026-09-29
+
+**Job** `runReminderTick(now)` (`src/modules/reminders/tick.ts`), chamado no FIM de `runBillingTick` (mesma rota `POST /api/internal/v1/billing/tick`, n8n horário; nada muda no n8n). Falha do lembrete é isolada (`try/catch`): nunca derruba a cobrança. O summary do tick ganhou `remindersToClientsSent: number`.
+
+- **Seleção:** `Appointment` `SCHEDULED`, `reminderSentAt` nulo, `now+2h < startsAt <= now+reminderHoursBefore`; empresa com `reminderEnabled`, assinatura efetiva não SUSPENDED/CANCELED, com instância `CONNECTED` e `sandbox=false` (a do agendamento; se caiu, a primeira conectada da empresa); contato com `waJid @s.whatsapp.net` (ou `phoneE164`) e bot NÃO pausado (`Contact.botPausedUntil` vencido/nulo e nenhuma `ChatSession.humanUntil` no futuro). Lote de 100 por rodada, mais próximos primeiro.
+- **Silêncio:** só envia com a hora local da empresa em [08:00, 21:00). Fora disso espera o tick seguinte dentro da janela (a condição "> 2h" é reavaliada).
+- **Idempotência:** reserva com `updateMany` condicional (`reminderSentAt` nulo -> `now`, reconferindo status/horário) ANTES de enviar. Falha no envio: rollback para nulo (só se ainda for a nossa reserva). Tentativas contadas EM MEMÓRIA (2 por agendamento por processo; sem coluna no schema) — teto natural: some da seleção quando faltar < 2h.
+- **Remarcar zera `reminderSentAt`:** `rescheduleAppointment` (`src/modules/agenda/appointments.ts`) e é a função única usada por painel, arrastar e bot/API interna.
+- **Envio:** `EvolutionClient.sendText(instanceName, number, text)` -> `POST /message/sendText/{instance}` `{ number, text }` (UMA tentativa, sem retry — reenviar após timeout duplicaria a mensagem). O eco `fromMe` do lembrete é registrado em `ChatSession.recentOutbound` ANTES do envio (senão o `claim` o trataria como "humano assumiu" e pausaria o bot do cliente, quebrando o "responda *menu*"). Grava `ChatMessage` OUTBOUND (com `providerMessageId` quando a Evolution devolve). Nenhum `AppointmentEvent` (não há action equivalente).
+- **Texto:** `BotText REMINDER` da empresa ou o padrão. Variáveis: `{nome}` (primeiro nome, "cliente" se vazio) `{empresa}` `{servico}` `{profissional}` `{data}` (ex. "Sex 02/10", como o resto do bot) `{hora}` e NOVA `{quando}` ("hoje", "amanhã" ou "sábado, 03/10"). `quando` entrou em `BOT_TEXT_VARIABLES` (tela "Mensagens do bot" aceita). Padrão: `Olá, {nome}! Lembrete: você tem {servico} com {profissional} {quando} às {hora}.
+Para remarcar ou cancelar, responda *menu*.` — "menu" foi conferido no workflow (`n8n/innochat-bot.json`, nó de roteamento: `t === '0' || t === 'menu'` volta ao menu principal; sessão expirada/inexistente também abre o menu).
+
+### Actions (`src/modules/reminders/actions.ts`) — objeto único de entrada, retorno `Result<T>`
+- `getReminderSettingsAction({ tenantSlug })` -> `{ enabled: boolean, hoursBefore: number }`. Qualquer membro.
+- `updateReminderSettingsAction({ tenantSlug, enabled, hoursBefore })` -> mesma forma. **OWNER** (STAFF: `FORBIDDEN`); `assertTenantCanWrite` (suspensa: `TENANT_SUSPENDED`). `hoursBefore` inteiro 2..48, `enabled` booleano; senão `INVALID_PAYLOAD`.
+
+## Nome do usuário (`User.name`) — 2026-09-29
+
+- `signUpAction`: campo **`name`** obrigatório (trim, 2 a 80), grava `User.name`. O antigo `ownerName` continua aceito como alias (transição). Inválido: `INVALID_PAYLOAD`, nada é criado.
+- `acceptInviteAction({ token, password, name })`: `name` obrigatório (2-80); sem nome válido o convite NÃO é consumido.
+- `installPlatformAdminAction`: `name` OPCIONAL (vazio = sem nome; senão 2-80), agora persistido.
+- `getMyAccountAction()` -> `{ name: string | null, email: string }`; `updateMyAccountAction({ name })` -> mesma forma (`src/modules/auth/account-actions.ts`). Qualquer usuário logado; o id vem da sessão (só o próprio). Sem sessão: `UNAUTHENTICATED`.
+- `verifyCredentials` devolve `name` (fica no `user` do Auth.js; a sessão JWT NÃO é atualizada ao editar o perfil — telas leem o nome do banco).
+- **Onde o nome já é preferido ao e-mail (backend):** `authorLabel`/`label` da timeline (`getAppointmentTimeline`): `name` -> parte local do e-mail -> "Equipe". As notificações do painel não exibem autor (só `byMe`). Saudação/sidebar: dado fornecido pelo layout/loaders; o visual é da Lyra.
+
+## Extras da tela WhatsApp — 2026-09-29
+
+`getWhatsappPageExtrasAction({ tenantSlug })` (`src/modules/whatsapp/actions.ts`, qualquer membro) -> `{ maxNumbers: number | null, usedNumbers: number, welcomePreview: { greeting: string, menu: string } }`.
+- `maxNumbers`: override da empresa > limite do plano; `null` = ilimitado (na prática, só empresa sem assinatura). `usedNumbers`: instâncias com `deletedAt` nulo.
+- `welcomePreview`: `GREETING` e `MAIN_MENU` da empresa (ou padrão) com `{nome}` = "Maria" e `{empresa}` = nome da empresa.

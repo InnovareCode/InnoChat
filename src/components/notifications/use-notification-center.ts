@@ -1,11 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   listNotificationsAction,
   markNotificationsReadAction,
   pollNotificationsAction,
 } from "@/modules/notifications/actions";
+import {
+  listPlatformNotificationsAction,
+  markPlatformNotificationsReadAction,
+  pollPlatformNotificationsAction,
+} from "@/modules/platform-notifications/actions";
+import type { Result } from "@/lib/result";
 import {
   latestCreatedAt,
   mergeNotifications,
@@ -14,7 +20,7 @@ import {
   stripTitleCount,
   titleWithCount,
 } from "./notification-utils";
-import type { AppNotification } from "./types";
+import type { AdminNotification, AppNotification, BellNotification } from "./types";
 
 export type NotificationListStatus = "loading" | "ready" | "error";
 
@@ -24,20 +30,57 @@ export type NotificationListStatus = "loading" | "ready" | "error";
  *  - depois `pollNotificationsAction` a cada 30 s, SÓ com a aba visível, com backoff se falhar;
  *  - novas não lidas viram toast (no máximo 3 na tela), animam o sino e vão para o `document.title`.
  */
-export type NotificationCenterOptions = {
+export type NotificationCenterOptions<T extends BellNotification = AppNotification> = {
   /** Chamado a cada lote `fresh` do poll (o provider decide sobre refresh da tela). */
-  onFresh?: (fresh: AppNotification[]) => void;
+  onFresh?: (fresh: T[]) => void;
   /** Intervalo-base do polling neste momento (15 s em agenda/agendamentos, 30 s no resto). */
   getBaseIntervalMs?: () => number;
 };
 
+/**
+ * As 3 operações que o sino precisa. O tenant e o admin da plataforma têm Server Actions
+ * diferentes, mas o mesmo formato de resposta — o hook não sabe de qual lado está.
+ * O adapter precisa ser estável (useMemo/constante de módulo): ele entra nas dependências do polling.
+ */
+export type NotificationFeedAdapter<T extends BellNotification> = {
+  list: (cursor?: string) => Promise<Result<{ items: T[]; unreadCount: number; nextCursor: string | null }>>;
+  poll: (since: string) => Promise<Result<{ unreadCount: number; fresh: T[] }>>;
+  markRead: (input: { ids: string[] } | { all: true }) => Promise<Result<{ unreadCount: number }>>;
+};
+
 export function useNotificationCenter(tenantSlug: string, options: NotificationCenterOptions = {}) {
-  const [items, setItems] = useState<AppNotification[]>([]);
+  const adapter = useMemo<NotificationFeedAdapter<AppNotification>>(
+    () => ({
+      list: (cursor) => listNotificationsAction({ tenantSlug, cursor }),
+      poll: (since) => pollNotificationsAction({ tenantSlug, since }),
+      markRead: (input) => markNotificationsReadAction({ tenantSlug, ...input }),
+    }),
+    [tenantSlug],
+  );
+  return useNotificationFeed(adapter, options);
+}
+
+const PLATFORM_ADAPTER: NotificationFeedAdapter<AdminNotification> = {
+  list: (cursor) => listPlatformNotificationsAction({ cursor }),
+  poll: (since) => pollPlatformNotificationsAction({ since }),
+  markRead: (input) => markPlatformNotificationsReadAction(input),
+};
+
+/** Sino do admin da plataforma: mesmo hook, outras Server Actions. */
+export function usePlatformNotificationCenter(options: NotificationCenterOptions<AdminNotification> = {}) {
+  return useNotificationFeed(PLATFORM_ADAPTER, options);
+}
+
+export function useNotificationFeed<T extends BellNotification>(
+  adapter: NotificationFeedAdapter<T>,
+  options: NotificationCenterOptions<T> = {},
+) {
+  const [items, setItems] = useState<T[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [status, setStatus] = useState<NotificationListStatus>("loading");
   const [loadingMore, setLoadingMore] = useState(false);
-  const [toasts, setToasts] = useState<AppNotification[]>([]);
+  const [toasts, setToasts] = useState<T[]>([]);
   const [ringing, setRinging] = useState(false);
   const onFreshRef = useRef(options.onFresh);
   const baseIntervalRef = useRef(options.getBaseIntervalMs);
@@ -69,7 +112,7 @@ export function useNotificationCenter(tenantSlug: string, options: NotificationC
     async (options: { silent: boolean }): Promise<boolean> => {
       if (!options.silent) setStatus("loading");
       try {
-        const result = await listNotificationsAction({ tenantSlug });
+        const result = await adapter.list();
         if (!result.ok) {
           if (!options.silent) setStatus("error");
           return false;
@@ -86,7 +129,7 @@ export function useNotificationCenter(tenantSlug: string, options: NotificationC
         return false;
       }
     },
-    [tenantSlug],
+    [adapter],
   );
 
   const ring = useCallback(() => {
@@ -114,7 +157,7 @@ export function useNotificationCenter(tenantSlug: string, options: NotificationC
         return;
       }
       try {
-        const result = await pollNotificationsAction({ tenantSlug, since: sinceRef.current });
+        const result = await adapter.poll(sinceRef.current);
         if (cancelled) return;
         if (!result.ok) throw new Error(result.error.message);
         failures = 0;
@@ -158,7 +201,7 @@ export function useNotificationCenter(tenantSlug: string, options: NotificationC
       document.removeEventListener("visibilitychange", onVisibility);
       if (ringTimerRef.current) clearTimeout(ringTimerRef.current);
     };
-  }, [tenantSlug, loadFirstPage, ring]);
+  }, [adapter, loadFirstPage, ring]);
 
   // "(3)" no título da aba. O Next troca o <title> a cada navegação — o observer reaplica o prefixo.
   useEffect(() => {
@@ -191,7 +234,7 @@ export function useNotificationCenter(tenantSlug: string, options: NotificationC
     if (!cursorRef.current) return;
     setLoadingMore(true);
     try {
-      const result = await listNotificationsAction({ tenantSlug, cursor: cursorRef.current });
+      const result = await adapter.list(cursorRef.current);
       if (result.ok) {
         setItems((current) => mergeNotifications(current, result.data.items));
         setNextCursor(result.data.nextCursor);
@@ -200,7 +243,7 @@ export function useNotificationCenter(tenantSlug: string, options: NotificationC
     } finally {
       setLoadingMore(false);
     }
-  }, [tenantSlug]);
+  }, [adapter]);
 
   /** Marca como lida com efeito imediato na tela; se o servidor recusar, desfaz. Devolve `false` se falhou. */
   const markRead = useCallback(
@@ -213,7 +256,7 @@ export function useNotificationCenter(tenantSlug: string, options: NotificationC
       setUnreadCount(ids ? Math.max(0, prevUnread - newlyRead) : 0);
       setToasts((current) => (ids ? current.filter((n) => !ids.has(n.id)) : []));
       try {
-        const result = await markNotificationsReadAction({ tenantSlug, ...input });
+        const result = await adapter.markRead(input);
         if (!result.ok) throw new Error(result.error.message);
         setUnreadCount(result.data.unreadCount);
         return true;
@@ -223,7 +266,7 @@ export function useNotificationCenter(tenantSlug: string, options: NotificationC
         return false;
       }
     },
-    [tenantSlug],
+    [adapter],
   );
 
   const dismissToast = useCallback((id: string) => {

@@ -4,6 +4,9 @@ import { z } from "zod";
 import { requireTenantMember, requireVerifiedEmail } from "@/lib/auth/guards";
 import { runAction, type Result } from "@/lib/result";
 import { assertTenantCanWrite } from "@/modules/billing/service";
+import { getWhatsappNumberUsage } from "@/modules/billing/plan-limits";
+import { getMergedBotTexts } from "@/modules/bot-texts/service";
+import { renderTemplate } from "@/core/bot/texts";
 import {
   createWhatsappInstance,
   disconnectWhatsapp,
@@ -93,5 +96,31 @@ export async function setSandboxAction(tenantSlug: string, instanceId: string, i
     await assertTenantCanWrite(tenant.id);
     const { sandbox } = sandboxSchema.parse(input);
     return setSandbox(tenant.id, instanceId, sandbox);
+  });
+}
+
+export type WhatsappPageExtras = {
+  /** Limite de números do plano (com override da empresa); `null` = ilimitado. */
+  maxNumbers: number | null;
+  /** Números não removidos (contam contra o limite). */
+  usedNumbers: number;
+  /** Textos de boas-vindas da empresa com as variáveis resolvidas para um exemplo. */
+  welcomePreview: { greeting: string; menu: string };
+};
+
+/** Nome fictício usado na pré-visualização da saudação. */
+const WELCOME_PREVIEW_SAMPLE_NAME = "Maria";
+
+/** Dados extras da tela WhatsApp (limite do plano + prévia das boas-vindas). Leitura: qualquer membro. */
+export async function getWhatsappPageExtrasAction(input: unknown): Promise<Result<WhatsappPageExtras>> {
+  return runAction(async () => {
+    const { tenantSlug } = z.object({ tenantSlug: z.string().min(1).max(100) }).parse(input);
+    const { tenant } = await requireTenantMember(tenantSlug);
+    const [usage, texts] = await Promise.all([getWhatsappNumberUsage(tenant.id), getMergedBotTexts(tenant.id)]);
+    const vars = { nome: WELCOME_PREVIEW_SAMPLE_NAME, empresa: tenant.name };
+    return {
+      ...usage,
+      welcomePreview: { greeting: renderTemplate(texts.GREETING, vars), menu: renderTemplate(texts.MAIN_MENU, vars) },
+    };
   });
 }
