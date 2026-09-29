@@ -1,45 +1,59 @@
 # InnoChat — Progresso
 
-Chatbot de agendamento via WhatsApp (n8n + Evolution API) com painel web
-multiempresa para clínicas, salões e qualquer negócio de serviços com horário marcado.
+Chatbot de agendamento via WhatsApp (n8n + Evolution API) com painel web multiempresa
+para clínicas, salões e qualquer negócio de serviços com horário marcado.
+Repositório: https://github.com/InnovareCode/InnoChat (branch `main`).
+Decisões do dono: memória `decisoes-iniciais-innochat` e `docs/arquitetura.md` §15.
 
-## Estado atual
-- 2026-09-28 — Arquitetura aprovada e revisada (`docs/arquitetura.md`: fases na §13, decisões na §15).
-  Em andamento, em paralelo: Vega (esqueleto), Cronos (schema + EXCLUDE), Lyra (3 direções visuais para o dono escolher).
-- Segunda rodada de decisões: menu nos nós do n8n; cadastro público + cobrança (Mercado Pago Pix); lembrete pós-v1; sem histórico de conversa na v1.
+## Estado atual (2026-09-28)
 
-## Decisões fechadas (2026-09-28)
-- Produto **separado** do InnoAtendente (reaproveita lições e padrão visual, não código/banco).
-- **Multiempresa (SaaS)**: cada empresa com login, agenda, serviços e WhatsApp próprios; um único conjunto de workflows no n8n para todas.
-- Conversa por **menu guiado** (sem IA).
-- Infra: **VPS atual com Easypanel** + Evolution API já existente. n8n conectado via MCP (vazio no início).
-
-- 2026-09-28 (tarde): esqueleto (Vega) e schema com EXCLUDE provado (Cronos) entregues e commitados.
-  Em andamento: Lyra (temas por empresa, kit UI, shell, login, admin shell) ∥ Vega (admin da plataforma, core/agenda, Server Actions, contratos).
-
-- 2026-09-28 (noite): Fases 2 (telas + polimento), 4 (API do bot) e 7 (cobrança backend) commitadas; bot bloqueado por assinatura ligado.
-  Em andamento: workflow n8n (Fase 5), exceções na Agenda (Lyra). Próximo: Íris (QA E2E com Playwright), Órion (revisão), Fase 3 (QR) e deploy dependem das credenciais do dono.
-  Pendências técnicas: validar assinatura do webhook MP contra a doc oficial/sandbox real; fixtures da Evolution ainda não capturadas do servidor real.
-
-- 2026-09-28 (madrugada): no GitHub (InnovareCode/InnoChat, main). Prontos: painel completo (catálogo, agenda, agendamentos, temas,
-  cadastro/cobrança Pix, mensagens do bot, admin com testar conexão + sync n8n, instalação única), API do bot, workflow n8n (remarcar incluso),
-  E2E 25 + integração 81. Em andamento: Fase 3 WhatsApp/QR (Vega), QA telas novas (Íris), deploy/guia Easypanel (Vulcano).
-  Falta: tela WhatsApp com QR (Lyra, após Vega), revisão Órion, publicar no Easypanel (dono), prova ponta a ponta com Evolution real.
-  Decisão pendente do dono: texto "Confirma a remarcação?" próprio?
+Produto funcional localmente, **ainda não publicado**. Em andamento: protótipo premium
+(4 pacotes de melhoria + responsividade, Lyra) e alinhamento do Mercado Pago ao
+adaptador validado do Parque das Feiras (Vega).
 
 ## Concluído
-- Repositório git iniciado; projeto registrado no Painel de Tarefas (PM-AVAN, slug `innochat`).
 
-## Próximos passos
-- Nova: arquitetura, stack, contrato painel↔n8n↔Evolution e plano faseado.
+- **Painel da empresa:**
+  - Início com indicadores e gráfico;
+  - Agenda dia/semana, com folgas e bloqueios;
+  - Agendamentos, Serviços, Profissionais (expediente e folgas);
+  - **Clientes** (ficha, pausar o bot, LGPD, CSV);
+  - **WhatsApp por QR**;
+  - Mensagens do bot;
+  - Configurações (3 temas, bloqueios da empresa, equipe);
+  - Assinatura (Pix, troca de plano);
+  - onboarding.
+- **Contas:** cadastro público, confirmação de e-mail com reenvio, esqueci a senha, convite de equipe, instalação única do admin.
+- **Admin da plataforma:**
+  - Configurações: Evolution, n8n, SMTP, Mercado Pago, testar conexão, sincronizar n8n, ativar bot;
+  - Planos (R$ 59,90 / 109,90 / 189,90, editáveis);
+  - Empresas.
+- **Backend:** API interna do bot, cobrança Pix + `billing/tick`, LGPD `maintenance/tick`, adaptador Evolution, segurança (rate limit, headers/CSP, SSRF, assinatura do MP).
+- **n8n (inativos até publicar):** `innochat-bot` (agendar, meus agendamentos, cancelar, remarcar), `innochat-erros`, `innochat-cron`.
+- **Qualidade:** 171 unitários, 118 de integração, ~60 E2E, revisão de segurança, CI, Dockerfile + `/api/health`, guia `docs/deploy-easypanel.md`.
 
-## Decisões em aberto
-Pendentes com o dono (§15 da arquitetura):
-1. 🔑 Evolution (versão, URL, chave global), URL do n8n (mesma rede do Easypanel?), domínio do painel.
-2. Preços dos planos (adiado pelo dono; limites JÁ aprovados: Essencial 1 número/3 profissionais, Profissional 2/10, Clínica 3/ilimitado). Preço fica editável no admin de Planos, sem valor fixo no código.
-3. Credenciais do Mercado Pago (produção + sandbox).
-4. Dados do SMTP próprio (host, porta, usuário, senha, remetente).
-5. Termos de uso e política de privacidade.
-6. Direção visual (Lyra vai apresentar 3).
+## Falta antes de publicar
 
-Fechadas em 2026-09-28: Mercado Pago (Pix) confirmado; e-mail por SMTP próprio; trial de 1 dia; carência de 1 dia; sem nota fiscal.
+1. Protótipo premium (4 pacotes + responsivo) → aprovação do dono → estender a todas as telas.
+2. Mercado Pago alinhado ao Parque das Feiras (pode exigir CPF/CNPJ do pagador).
+3. Telas admin **Cobrança** e **Saúde** (hoje "Em breve").
+4. QA das telas novas + responsivo em 5 larguras + **2 rodadas E2E completas seguidas verdes**.
+5. Órion: revisão dos pontos novos (Clientes/CSV, SQL cru, drag-and-drop).
+6. Termos de uso e privacidade (texto do dono).
+
+## Publicação (seguindo `docs/deploy-easypanel.md`)
+
+1. Easypanel: Postgres + App do GitHub + `DATABASE_URL`/`AUTH_SECRET` + domínio + `migrate deploy`.
+2. `/instalacao` → Admin → Configurações (Evolution, n8n, SMTP, Mercado Pago + URL do webhook no MP).
+3. Sincronizar n8n → Ativar bot.
+4. Prova ponta a ponta real: QR → "oi" → agendar/cancelar/remarcar → Pix → e-mails; capturar os payloads reais da Evolution.
+
+## Pós-v1
+
+Lembrete de véspera · histórico de conversas · origem do cliente (painel vs WhatsApp) · cifragem dos segredos · rate limit distribuído.
+
+## Decisões em aberto (dono)
+
+- Texto próprio "Confirma a remarcação?"?
+- Teste grátis de 1 dia (mercado usa 7 a 14)?
+- Termos de uso e política de privacidade.
