@@ -109,7 +109,7 @@ EXPOSE 3000
 # `wget` vem do busybox da imagem alpine (sem instalar nada extra); start-period dá tempo do
 # Next.js standalone terminar de subir antes da primeira checagem contar como falha.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget --quiet --spider --tries=1 http://127.0.0.1:3000/api/health || exit 1
+  CMD wget --quiet --spider --tries=1 "http://127.0.0.1:${PORT:-3000}/api/health" || exit 1
 
 # server.js é o entrypoint gerado pelo Next standalone. Sem `npm run start`:
 # evita o processo intermediário do npm e deixa o Node receber SIGTERM direto
