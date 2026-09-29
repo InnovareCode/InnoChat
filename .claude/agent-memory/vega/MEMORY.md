@@ -26,3 +26,5 @@
 - [Contact.source é derivado da forma do waJid, não um campo próprio](contact_source_derived_from_wajid.md) — por que cliente cadastrado manualmente pode aparecer como "WhatsApp" e ter telefone bloqueado.
 - [Raw SQL ($queryRaw/Prisma.sql) só é permitido dentro de src/lib/db/](raw_sql_only_in_lib_db.md) — padrão usado para agregação de Contact×Appointment numa consulta só.
 - [Migration de dados que aplica preço/valor de negócio sem sobrescrever edição do admin](plan_price_data_migration_never_overwrite_edit.md) — condição "só se ainda está no estado de fábrica" dos 3 planos.
+- [Prisma: campo Json? precisa de Prisma.JsonNull, não `null` literal, pra zerar de verdade](prisma_json_null_field.md) — achado nos testes de Admin Saúde.
+- [ProviderEvent(provider="manual") reaproveitado pra auditoria de baixa manual de fatura](provider_event_reused_for_manual_audit.md) — por que não criei tabela de auditoria nova.

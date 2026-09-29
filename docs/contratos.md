@@ -1367,3 +1367,225 @@ genérico.
 `src/modules/platform/service.ts`/`actions.ts`): duplicava `TERMS_VERSION` e nenhuma tela de
 admin o editava. A coluna continua no schema (`prisma/schema.prisma`, marcada como órfã) — sem
 migration destrutiva agora; proposta para o Cronos decidir quando vale remover.
+
+## Cadastro público: CPF/CNPJ obrigatório (decisão do dono, 2026-09-29)
+
+Como a primeira fatura (com Pix) já nasce no cadastro (§7.3), `document` passou de "não
+coletado" para **obrigatório** em `signUpAction`.
+
+- `SignUpInput.document: string` (`src/modules/signup/service.ts`) — aceita formatado ou só
+  dígitos (`validateCpfCnpj` normaliza, mesma função de `updateTenantDocumentAction`). `signUp`
+  valida o dígito verificador ANTES de abrir a transação e grava `Tenant.document` já dentro da
+  `tx` de criação (mesma transação de `User`/`Tenant`/`Membership`/`Subscription`/`Invoice`).
+- Erro: `INVALID_DOCUMENT` (`"CPF ou CNPJ inválido — confira os dígitos."`), mesmo código que
+  `updateTenantDocumentAction` já usava — a Lyra trata os dois no mesmo lugar do formulário.
+- `signUpSchema` (`src/modules/signup/actions.ts`) ganhou o campo `document: z.string().trim().min(1, ...)`
+  — só confere presença; o dígito verificador é responsabilidade do `signUp` (a mensagem de erro
+  específica sai de lá, não do zod).
+- Efeito prático: toda empresa criada a partir de agora já nasce com `Tenant.document`
+  preenchido, e o Pix da primeira fatura sai de fato no cadastro (antes, a fatura nascia sempre
+  `OPEN` sem Pix, porque nada coletava o documento). `updateTenantDocumentAction` continua
+  existindo — corrige o documento de uma empresa antiga (criada antes desta mudança, com
+  `document = null`) ou troca um documento errado depois.
+- Testes atualizados: `tests/integration/billing-signup.integration.test.ts` — o caso "cadastro
+  com documento válido gera Pix" é agora o cenário PADRÃO (era "sem Pix" antes); adicionado o
+  caso "CPF/CNPJ com dígito verificador inválido → `INVALID_DOCUMENT`".
+- **Contrato confirmado com a Lyra** (onda 2, commit `6d8a4b3`): o formulário de `/cadastro` já
+  manda `document` normalizado (só dígitos, `normalizeDocumentDigits`) e valida no client antes
+  de enviar (`validateCpfCnpj`) — o backend sempre revalida (nunca confia no client).
+
+## "Gerar Pix agora" pela própria empresa (`regenerateMyInvoicePixAction`, decisão do dono/Lyra, 2026-09-29)
+
+Antes, `regeneratePixForInvoice` só rodava em segundo plano pelo `billing/tick` (de hora em
+hora) — a tela de Assinatura não tinha como reagir na hora a `MERCADOPAGO_MISSING_DOCUMENT`
+(documento acabou de ser cadastrado) ou `MERCADOPAGO_UNAVAILABLE` (tentar de novo).
+
+- `regenerateMyInvoicePixAction(tenantSlug, invoiceId): Result<{ invoiceId, pixCopyPaste:
+  string | null }>` (`src/modules/billing/actions.ts`). Restrito a `OWNER` (mesma régua de
+  `changePlanAction`).
+- **Escopo por tenant**: `findOwnInvoiceOrThrow(tenantId, invoiceId)` (`src/modules/billing/
+  service.ts`) confirma que a fatura pertence à `Subscription` DESTE tenant antes de tocar em
+  qualquer coisa — `NOT_FOUND` (nunca revela se o id existe em outra empresa) se não pertencer
+  ou não existir. Sem isto, um OWNER autenticado poderia adivinhar/tentar um `invoiceId` de
+  outra empresa e regerar Pix nela.
+- **Rate limit**: 5 tentativas / 10 min por `tenantId` (`checkRateLimit`, chave
+  `regenerate-pix:<tenantId>`) — é uma chamada de rede de verdade ao Mercado Pago, não um clique
+  de UI barato. Erro: `RATE_LIMITED` (`details.retryAfterMs`), mesmo formato do rate limit de
+  cadastro.
+- Erros herdados de `regeneratePixForInvoice` (docs/contratos.md, "Cobrança — alinhamento com o
+  Parque das Feiras"): `MERCADOPAGO_MISSING_DOCUMENT`, `MERCADOPAGO_MISCONFIGURED`,
+  `MERCADOPAGO_UNAVAILABLE`, `INVALID_STATE` (fatura não está `OPEN`), `NOT_FOUND`.
+- **Contrato para a Lyra**: a tela de Assinatura, ao ver `MERCADOPAGO_MISSING_DOCUMENT`/
+  `MISCONFIGURED`/`UNAVAILABLE` numa fatura aberta, oferece um botão "Gerar Pix agora"/"Tentar
+  de novo" chamando esta action com o `invoiceId` da fatura corrente — sem precisar de página
+  nova nem de reload.
+
+## Dados jurídicos da empresa operadora (docs/arquitetura.md — LGPD/Termos, decisão do dono, 2026-09-29)
+
+Nada disso pelo chat/código — tudo cadastrável pelo admin da plataforma, numa tela nova ("Dados
+jurídicos"). `PlatformSettings` ganhou 9 campos opcionais (migration
+`20260929010000_platform_settings_legal_health`): `companyLegalName`, `companyCnpj`,
+`companyAddress`, `contactEmail`, `dpoName`, `dpoEmail`, `forumCity` (comarca), `hostingRegion`,
+`backupRetentionDays` (Int). **Nenhum destes é segredo** — diferente das credenciais de
+integração (`service.ts`, sempre mascaradas), a leitura devolve tudo em claro.
+
+### `src/modules/platform/legal-service.ts` — I/O
+
+- `getPlatformLegalInfo(): Promise<PlatformLegalInfo>` — leitura para a tela de admin.
+- `updatePlatformLegalInfo(input, updatedByUserId): Promise<PlatformLegalInfo>` — diferente de
+  `updatePlatformSettings` (credenciais, "string vazia mantém o valor atual"), AQUI string vazia
+  ou `null` **LIMPA** o campo; `undefined` (campo não mandado no `input`) mantém o valor atual.
+- `getPublicLegalInfo(): Promise<PlatformLegalInfo>` — `cache()` do React (memoiza dentro do
+  MESMO ciclo de render de uma requisição; fora de um render de RSC, degrada para uma leitura
+  direta sem memoização — nunca lança). Leitura **pública**, sem `requirePlatformAdmin` — para
+  as páginas `/termos` e `/privacidade` chamarem direto.
+
+### Server Actions (`src/modules/platform/actions.ts`)
+
+- `getPlatformLegalInfoAction(): Result<PlatformLegalInfo>` — `requirePlatformAdmin()`.
+- `updatePlatformLegalInfoAction(input): Result<PlatformLegalInfo>` — `input` parcial de
+  `{ companyLegalName, companyCnpj, companyAddress, contactEmail, dpoName, dpoEmail, forumCity,
+  hostingRegion, backupRetentionDays }`, todos opcionais/anuláveis. `companyCnpj` é validado
+  pelo dígito verificador (`isValidCnpj`, `@/core/billing`) quando não vazio — erro
+  `INVALID_CNPJ`. `contactEmail`/`dpoEmail` validam formato de e-mail (ou string vazia, para
+  limpar).
+
+### `src/core/legal/placeholders.ts` — domínio puro (sem I/O)
+
+- `PlatformLegalInfo` — o mesmo shape usado por `legal-service.ts` (import cruzado de tipo, sem
+  I/O real neste arquivo).
+- `formatCnpjDisplay(digitsOrRaw): string` — `"11444777000161"` → `"11.444.777/0001-61"`;
+  devolve o valor original se não tiver 14 dígitos (defensivo, nunca lança).
+- `fillLegalPlaceholders(text, info): string` — substitui cada marcador conhecido do texto
+  público pelo valor cadastrado, ou por `"a definir"` quando vazio. Marcadores DESCONHECIDOS
+  (fora do mapa abaixo) são deixados intactos — nunca mascarados silenciosamente; é assim que a
+  sintaxe de link Markdown `[Política de Privacidade](/privacidade)` (usada dentro do próprio
+  texto dos Termos) atravessa ilesa, mesmo casando com o mesmo regex `/\[[^\]]+\]/g`.
+- Mapa de marcadores → campo (conferido contra o texto-fonte em 2026-09-29):
+  `[CNPJ]` → `companyCnpj` (formatado), `[ENDEREÇO]` → `companyAddress`, `[E-MAIL DE CONTATO]` →
+  `contactEmail`, `[E-MAIL DO ENCARREGADO/DPO]` → `dpoEmail`, `[NOME DO ENCARREGADO]` →
+  `dpoName`, `[COMARCA]` → `forumCity`, `[PAÍS/REGIÃO DO PROVEDOR DE HOSPEDAGEM]` →
+  `hostingRegion`, `[PRAZO DE RETENÇÃO DOS BACKUPS]` → `backupRetentionDays` (formatado
+  `"<N> dias"`).
+- Testes: `src/core/legal/__tests__/placeholders.test.ts` (substituição completa, "a definir"
+  por campo vazio, marcador desconhecido intacto, texto sem marcador inalterado).
+
+**Contrato para a Lyra:**
+1. Tela de admin nova ("Dados jurídicos", sugestão: `/admin/configuracoes` ou aba própria)
+   chamando `getPlatformLegalInfoAction`/`updatePlatformLegalInfoAction` — os 9 campos, todos
+   opcionais, sem máscara (podem aparecer em claro no formulário).
+2. `/termos` e `/privacidade` (`src/app/(public)/termos/page.tsx`,
+   `.../privacidade/page.tsx` — hoje renderizam `TERMOS_SECTIONS`/`PRIVACIDADE_SECTIONS` direto)
+   passam a chamar `getPublicLegalInfo()` e rodar `fillLegalPlaceholders` em cada bloco de texto
+   (`string`) das seções ANTES de passar para `<LegalDocument>` — os marcadores `[CNPJ]` etc.
+   viram os dados reais (ou `"a definir"`), sem editar `termos-content.ts`/
+   `privacidade-content.ts` (que continuam com os marcadores literais, fonte única do texto).
+
+## Admin → Cobrança (docs/contratos.md, decisão do dono, 2026-09-29)
+
+Tudo em `src/modules/billing/admin-service.ts`/`admin-actions.ts` (mesmo arquivo dos planos e
+empresas, §9) — guardado por `requirePlatformAdmin()`.
+
+- `listInvoicesAdminAction({ status?, tenantId?, fromDate?, toDate?, cursor?, limit? }):
+  Result<{ items: AdminInvoiceListItem[]; nextCursor: string | null }>` — faturas de TODAS as
+  empresas, paginadas por cursor (`limit` máx. 100, padrão 30; nunca "todas de uma vez").
+  `fromDate`/`toDate` filtram por `dueAt` (vencimento), não por criação. Um único `findMany`
+  com `include` (join) resolve `tenantName`/`tenantSlug` — sem N+1. Cada item:
+  `{ id, tenantId, tenantName, tenantSlug, amountCents, status, periodStart, periodEnd, dueAt,
+  paidAt, hasPix: boolean, createdAt }` (`hasPix` = tem `pixCopyPaste`; nunca devolve o Pix em
+  si nesta listagem).
+- `billingMonthlyTotalsAction(): Result<{ receivedCents, openCents, overdueCents, mrrCents }>` —
+  `receivedCents` (faturas `PAID` com `paidAt` no mês de hoje), `openCents` (faturas `OPEN` com
+  `dueAt >= agora`, estado atual — não escopado ao mês), `overdueCents` (faturas `OPEN` com
+  `dueAt < agora`, sempre em tempo real, direto da tabela — não espera o próximo `billing/tick`
+  marcar `PAST_DUE`), `mrrCents` (soma de `Plan.priceCents` de toda `Subscription` com
+  `status = ACTIVE` persistido). 4 agregações (`aggregate`/`groupBy`), nenhum loop somando em
+  memória.
+- `listDelinquentCompaniesAction(): Result<DelinquentCompany[]>` — empresas `PAST_DUE`/
+  `SUSPENDED` (status persistido — a reconciliação com o efetivo acontece no próximo
+  `billing/tick`, até 1h de atraso), com `daysOverdue` contado a partir de
+  `Subscription.currentPeriodEnd`.
+- `regeneratePixForInvoiceAdminAction(invoiceId): Result<{ invoiceId, hasPix: boolean }>` —
+  "Regerar Pix" da tela: resolve o e-mail do OWNER da empresa sozinho (não pede ao admin) e
+  reaproveita `regeneratePixForInvoice` (mesmos erros `MERCADOPAGO_*` de sempre).
+- `markInvoicePaidManuallyAction(invoiceId, { reason }): Result<{ alreadyProcessed: boolean }>`
+  — "Marcar como paga manualmente": motivo OBRIGATÓRIO (`reason`, 3-500 caracteres, erro
+  `INVALID_PAYLOAD` se faltar), mesmo efeito de `applyInvoicePayment` (marca `PAID`, avança o
+  ciclo, reativa a assinatura). **Auditoria**: reaproveita `ProviderEvent`
+  (`provider = "manual"`, `providerEventId = invoiceId`, `payload = { invoiceId, adminId,
+  reason, markedAt }`) em vez de criar uma tabela nova — a constraint
+  `@@unique([provider, providerEventId])` garante UM registro por fatura. **Idempotente**: se a
+  fatura já está `PAID` (por este caminho ou por webhook/tick), a segunda chamada devolve
+  `{ alreadyProcessed: true }` sem duplicar auditoria nem avançar o ciclo duas vezes — inclusive
+  sob concorrência (duas chamadas simultâneas: a segunda sempre perde a corrida dentro da
+  transação de `applyInvoicePayment`).
+
+**O que a Íris deve testar:** `tests/integration/billing-admin.integration.test.ts` — filtros/
+paginação de `listInvoicesAdmin`, totais do mês, lista de inadimplentes, `regeneratePixForInvoiceAdmin`
+(sucesso + `NOT_FOUND`), `markInvoicePaidManually` (efeito completo, idempotência, `NOT_FOUND`),
+e `findOwnInvoiceOrThrow` (escopo cross-tenant, ver seção "Gerar Pix agora" acima).
+
+**Contrato para a Lyra:** tela `/admin/cobranca` (hoje placeholder "Em breve",
+`src/app/(platform)/admin/cobranca/page.tsx`) consome as 5 actions acima. Sugestão de layout:
+cards de totais no topo (`billingMonthlyTotalsAction`), tabela paginada de faturas com filtros
+(`listInvoicesAdminAction`) e ação "Regerar Pix"/"Marcar como paga" por linha, seção separada de
+empresas inadimplentes (`listDelinquentCompaniesAction`).
+
+## Admin → Saúde (docs/contratos.md, decisão do dono, 2026-09-29)
+
+`src/modules/platform/health-service.ts` — guardado por `requirePlatformAdmin()` via
+`getPlatformHealthAction()` (`src/modules/platform/actions.ts`).
+
+- `getPlatformHealthAction(): Result<PlatformHealth>` —
+  ```
+  {
+    integrations: { evolution, n8n, smtp, mercadoPago: { ok, detalhe, configured }, checkedAt },
+    billingTick: { lastRunAt: string | null, lastResult: unknown, stale: boolean },
+    maintenanceTick: { lastRunAt: string | null, lastResult: unknown, stale: boolean },
+    whatsappInstancesByStatus: { QRCODE, CONNECTED, DISCONNECTED },
+    companiesBySubscriptionStatus: { TRIALING, ACTIVE, PAST_DUE, SUSPENDED, CANCELED },
+    inboundEventsLast24h: number,
+    alerts: string[],
+  }
+  ```
+- **Integrações**: reaproveita `testEvolutionConnection`/`testN8nConnection`/
+  `testSmtpConnection`/`testMercadoPagoConnection` (`connection-tests.ts`, Fase 1) — não duplica
+  lógica de teste. `configured: false` (sem tentar rede) quando os campos de
+  `PlatformSettings` necessários estão vazios. **Cache de ~60s** (`getIntegrationsHealth`, cache
+  em memória do processo, `resetIntegrationsHealthCache()` só para teste) — a tela pode ser
+  recarregada com frequência; sem cache, cada visita martelaria os 4 serviços externos.
+- **Jobs periódicos**: `recordBillingTickRun(result, at?)`/`recordMaintenanceTickRun(result,
+  at?)` são chamados pelo PRÓPRIO `runBillingTick`/`runMaintenanceTick`
+  (`src/modules/billing/tick.ts`, `src/modules/maintenance/tick.ts`) ao final de cada execução —
+  persistem em `PlatformSettings.lastBillingTickAt/Result` e
+  `lastMaintenanceTickAt/Result` (migration `20260929010000_platform_settings_legal_health`).
+  Nunca falham o tick em si (só logam `warn` se a persistência falhar — o resumo já foi
+  calculado e já foi logado antes). `stale`: billing > 2h sem rodar, maintenance > 26h.
+- **Contagens**: `whatsappInstancesByStatus` (todas as empresas, `deletedAt: null`),
+  `companiesBySubscriptionStatus` (status persistido de `Subscription`, `groupBy`),
+  `inboundEventsLast24h` (`InboundEvent.count` com `createdAt >= agora - 24h`) — 4 queries
+  agregadas (`groupBy`/`count`), nenhum loop.
+- **Alertas** (`alerts: string[]`): tick de billing/maintenance parado, Evolution ou Mercado
+  Pago fora do ar — frases prontas para a tela mostrar direto, sem repetir a lógica de threshold
+  no frontend.
+
+**O que a Íris deve testar:** `tests/integration/platform-legal-health.integration.test.ts` —
+integrações "não configurado" sem tentar rede, cache de 60s, `stale` com/sem execução
+registrada, alertas disparando, contagens de WhatsApp/assinatura.
+
+**Contrato para a Lyra:** tela `/admin/saude` (hoje placeholder "Em breve",
+`src/app/(platform)/admin/saude/page.tsx`) consome `getPlatformHealthAction()`. Sugestão:
+badges de status por integração (verde/vermelho + `detalhe`), cards de "última execução" dos
+dois ticks (com `stale` destacado em atenção), contagens de WhatsApp/empresas por status, banner
+de alertas no topo quando `alerts.length > 0`.
+
+**PENDÊNCIAS (Dados jurídicos / Admin Cobrança / Admin Saúde):**
+- Nenhuma tela de admin ainda consome estas actions (`/admin/cobranca`/`/admin/saude` continuam
+  "Em breve" — placeholders da Lyra, ver acima); as páginas `/termos`/`/privacidade` ainda não
+  chamam `getPublicLegalInfo()`/`fillLegalPlaceholders` (continuam mostrando os marcadores
+  literais `[CNPJ]` etc. até a Lyra plugar).
+- `Órion` deve revisar: `findOwnInvoiceOrThrow` (escopo cross-tenant de
+  `regenerateMyInvoicePixAction`), a idempotência/concorrência de `markInvoicePaidManually`, e
+  se `getPublicLegalInfo` sem `requirePlatformAdmin` está mesmo seguro expor publicamente (são
+  os MESMOS dados que já apareceriam em claro em `/termos`/`/privacidade`, mas vale o segundo
+  olhar).

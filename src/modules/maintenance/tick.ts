@@ -1,5 +1,6 @@
 import { getPrisma } from "@/lib/db/prisma";
 import { logger } from "@/lib/logger";
+import { recordMaintenanceTickRun } from "@/modules/platform/health-service";
 
 /**
  * `POST /api/internal/v1/maintenance/tick` (docs/contratos.md — "Segurança"). Aplica a
@@ -72,5 +73,12 @@ export async function runMaintenanceTick(now: Date = new Date()): Promise<Mainte
     contactsAnonymized,
   };
   logger.info("maintenance.tick.completed", { ...summary });
+
+  // Admin → Saúde (docs/contratos.md) — mesmo padrão do `billing/tick`: nunca falha o job por
+  // isto, só loga se a persistência falhar.
+  await recordMaintenanceTickRun(summary, now).catch((error) => {
+    logger.warn("maintenance.tick.record_run_failed", { errorMessage: error instanceof Error ? error.message : String(error) });
+  });
+
   return summary;
 }

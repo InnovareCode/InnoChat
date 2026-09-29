@@ -1,7 +1,11 @@
 import { addMonths } from "date-fns";
 import { getPrisma } from "@/lib/db/prisma";
 import { DomainError } from "@/lib/errors";
+import { logger } from "@/lib/logger";
 import { effectiveStatus, GRACE_DAYS } from "@/core/billing";
+import { applyInvoicePayment, findBillingRecipientEmail, regeneratePixForInvoice as regeneratePixForInvoiceService } from "./service";
+import type { MercadoPagoGateway } from "./mercadopago";
+import type { InvoiceStatus } from "@/lib/db/types";
 
 /**
  * Admin de planos e empresas (docs/arquitetura.md §9, Fase 7). Guardado por
@@ -144,4 +148,232 @@ export async function extendTrialManually(tenantId: string, extraDays: number): 
     where: { subscriptionId: subscription.id, periodStart: { lte: subscription.trialEndsAt }, status: "OPEN" },
     data: { dueAt: newTrialEndsAt, periodEnd: newTrialEndsAt },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Admin → Cobrança (docs/contratos.md, "Admin Cobrança") — lista de faturas de TODAS as
+// empresas, totais do mês, empresas inadimplentes, e as duas ações "Regerar Pix"/"Marcar como
+// paga manualmente". Tudo guardado por `requirePlatformAdmin()` em `admin-actions.ts` — este
+// arquivo continua só I/O.
+// ---------------------------------------------------------------------------
+
+export type AdminInvoiceListItem = {
+  id: string;
+  tenantId: string;
+  tenantName: string;
+  tenantSlug: string;
+  amountCents: number;
+  status: InvoiceStatus;
+  periodStart: Date;
+  periodEnd: Date;
+  dueAt: Date;
+  paidAt: Date | null;
+  hasPix: boolean;
+  createdAt: Date;
+};
+
+export type ListInvoicesAdminParams = {
+  status?: InvoiceStatus;
+  tenantId?: string;
+  /** Filtra por `dueAt` dentro de `[fromDate, toDate)` — período de vencimento, não de criação. */
+  fromDate?: Date;
+  toDate?: Date;
+  cursor?: string;
+  limit?: number;
+};
+
+const INVOICES_PAGE_MAX = 100;
+const INVOICES_PAGE_DEFAULT = 30;
+
+/**
+ * Faturas de TODAS as empresas, paginadas por cursor (nunca "todas de uma vez" — a base pode
+ * crescer sem limite com o tempo). Um único `findMany` com `include` (join no Prisma) resolve
+ * `tenantName`/`tenantSlug` — sem N+1 (nunca um `findUnique` de tenant por fatura dentro de um
+ * loop).
+ */
+export async function listInvoicesAdmin(params: ListInvoicesAdminParams): Promise<{ items: AdminInvoiceListItem[]; nextCursor: string | null }> {
+  const limit = Math.min(params.limit ?? INVOICES_PAGE_DEFAULT, INVOICES_PAGE_MAX);
+
+  const where = {
+    ...(params.status ? { status: params.status } : {}),
+    ...(params.tenantId ? { subscription: { tenantId: params.tenantId } } : {}),
+    ...(params.fromDate || params.toDate
+      ? {
+          dueAt: {
+            ...(params.fromDate ? { gte: params.fromDate } : {}),
+            ...(params.toDate ? { lt: params.toDate } : {}),
+          },
+        }
+      : {}),
+  };
+
+  const invoices = await getPrisma().invoice.findMany({
+    where,
+    take: limit + 1,
+    ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
+    orderBy: { id: "desc" },
+    include: { subscription: { include: { tenant: { select: { id: true, name: true, slug: true } } } } },
+  });
+
+  const hasMore = invoices.length > limit;
+  const page = hasMore ? invoices.slice(0, limit) : invoices;
+
+  return {
+    items: page.map((invoice) => ({
+      id: invoice.id,
+      tenantId: invoice.subscription.tenant.id,
+      tenantName: invoice.subscription.tenant.name,
+      tenantSlug: invoice.subscription.tenant.slug,
+      amountCents: invoice.amountCents,
+      status: invoice.status,
+      periodStart: invoice.periodStart,
+      periodEnd: invoice.periodEnd,
+      dueAt: invoice.dueAt,
+      paidAt: invoice.paidAt,
+      hasPix: !!invoice.pixCopyPaste,
+      createdAt: invoice.createdAt,
+    })),
+    nextCursor: hasMore ? page[page.length - 1]!.id : null,
+  };
+}
+
+export type BillingMonthlyTotals = {
+  receivedCents: number;
+  openCents: number;
+  overdueCents: number;
+  mrrCents: number;
+};
+
+/**
+ * Totais para o painel do mês de `now` (docs/contratos.md, "Admin Cobrança"):
+ * - `receivedCents`: soma de faturas `PAID` com `paidAt` dentro do mês de `now`.
+ * - `openCents`: faturas `OPEN` ainda não vencidas (`dueAt >= now`) — não soma por mês, é o
+ *   estado ATUAL do que está para vencer (uma fatura `OPEN` de qualquer mês entra aqui).
+ * - `overdueCents`: faturas `OPEN` já vencidas (`dueAt < now`) — o que a persistência ainda não
+ *   marcou `PAST_DUE`/`SUSPENDED` pode demorar até 1h (próximo `billing/tick`); esta soma é
+ *   sempre em tempo real, direto da tabela.
+ * - `mrrCents`: soma de `Plan.priceCents` de toda `Subscription` com `status = ACTIVE`
+ *   (persistido, não efetivo — é a assinatura que JÁ está sendo cobrada mensalmente).
+ *
+ * 4 agregações (`aggregate`/`groupBy` seriam uma query cada; aqui são 3 `aggregate` de Invoice +
+ * 1 de Subscription — nenhum loop carregando linha por linha para somar em memória).
+ */
+export async function billingMonthlyTotals(now: Date = new Date()): Promise<BillingMonthlyTotals> {
+  const prisma = getPrisma();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+  const [received, open, overdue, activeSubscriptions] = await Promise.all([
+    prisma.invoice.aggregate({
+      _sum: { amountCents: true },
+      where: { status: "PAID", paidAt: { gte: monthStart, lt: monthEnd } },
+    }),
+    prisma.invoice.aggregate({
+      _sum: { amountCents: true },
+      where: { status: "OPEN", dueAt: { gte: now } },
+    }),
+    prisma.invoice.aggregate({
+      _sum: { amountCents: true },
+      where: { status: "OPEN", dueAt: { lt: now } },
+    }),
+    prisma.subscription.findMany({ where: { status: "ACTIVE" }, include: { plan: true } }),
+  ]);
+
+  return {
+    receivedCents: received._sum.amountCents ?? 0,
+    openCents: open._sum.amountCents ?? 0,
+    overdueCents: overdue._sum.amountCents ?? 0,
+    mrrCents: activeSubscriptions.reduce((sum, s) => sum + s.plan.priceCents, 0),
+  };
+}
+
+export type DelinquentCompany = {
+  tenantId: string;
+  slug: string;
+  name: string;
+  status: "PAST_DUE" | "SUSPENDED";
+  daysOverdue: number;
+};
+
+/**
+ * Empresas com assinatura `PAST_DUE`/`SUSPENDED` (status PERSISTIDO — a reconciliação com o
+ * status efetivo acontece no próximo `billing/tick`, no máximo 1h de atraso). `daysOverdue`
+ * conta a partir de `currentPeriodEnd` (o vencimento do ciclo que não foi pago) — mesmo campo
+ * que `effectiveStatus` usa para decidir a transição de status.
+ */
+export async function listDelinquentCompanies(now: Date = new Date()): Promise<DelinquentCompany[]> {
+  const subscriptions = await getPrisma().subscription.findMany({
+    where: { status: { in: ["PAST_DUE", "SUSPENDED"] } },
+    include: { tenant: { select: { id: true, slug: true, name: true } } },
+    orderBy: { currentPeriodEnd: "asc" },
+  });
+
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  return subscriptions.map((s) => ({
+    tenantId: s.tenant.id,
+    slug: s.tenant.slug,
+    name: s.tenant.name,
+    status: s.status as "PAST_DUE" | "SUSPENDED",
+    daysOverdue: Math.max(0, Math.floor((now.getTime() - s.currentPeriodEnd.getTime()) / MS_PER_DAY)),
+  }));
+}
+
+/** "Regerar Pix" (tela Admin Cobrança) — resolve o e-mail do OWNER e reaproveita `regeneratePixForInvoice` (mesma lógica/erros da tela de Assinatura da própria empresa). */
+export async function regeneratePixForInvoiceAdmin(invoiceId: string, gateway?: MercadoPagoGateway) {
+  const invoice = await getPrisma().invoice.findUnique({ where: { id: invoiceId }, include: { subscription: true } });
+  if (!invoice) throw new DomainError("NOT_FOUND", "Fatura não encontrada.");
+
+  const payerEmail = await findBillingRecipientEmail(invoice.subscription.tenantId);
+  if (!payerEmail) throw new DomainError("NOT_FOUND", "Nenhum e-mail de cobrança encontrado para esta empresa.");
+
+  return regeneratePixForInvoiceService(invoiceId, payerEmail, gateway);
+}
+
+/**
+ * "Marcar como paga manualmente" (tela Admin Cobrança) — mesmo efeito de `applyInvoicePayment`
+ * (marca `PAID`, avança o ciclo, reativa a assinatura), mas disparada por um humano em vez do
+ * webhook do Mercado Pago, com motivo obrigatório e registro de auditoria.
+ *
+ * Auditoria: `ProviderEvent(provider = "manual", providerEventId = invoiceId)` — reaproveita o
+ * model de idempotência de webhook (docs/arquitetura.md) já existente em vez de criar uma
+ * tabela nova só para isto. `payload` guarda quem/quando/por quê (`adminId`, `reason`,
+ * `markedAt`); a constraint `@@unique([provider, providerEventId])` garante UM registro de
+ * auditoria por fatura — a segunda chamada (dupla submissão do botão, ou fatura que já estava
+ * `PAID` por outro caminho) só é detectada e devolvida como `alreadyProcessed: true`, nunca cria
+ * um segundo registro nem soma um segundo mês.
+ */
+export async function markInvoicePaidManually(
+  invoiceId: string,
+  adminId: string,
+  reason: string,
+  now: Date = new Date(),
+): Promise<{ alreadyProcessed: boolean }> {
+  const prisma = getPrisma();
+
+  const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+  if (!invoice) throw new DomainError("NOT_FOUND", "Fatura não encontrada.");
+
+  const existingAudit = await prisma.providerEvent.findUnique({
+    where: { provider_providerEventId: { provider: "manual", providerEventId: invoiceId } },
+  });
+  if (invoice.status === "PAID" || existingAudit) {
+    return { alreadyProcessed: true };
+  }
+
+  const result = await applyInvoicePayment(invoiceId, now);
+  if (result.alreadyProcessed) {
+    return result;
+  }
+
+  await prisma.providerEvent.create({
+    data: {
+      provider: "manual",
+      providerEventId: invoiceId,
+      payload: { invoiceId, adminId, reason, markedAt: now.toISOString() },
+      processedAt: now,
+    },
+  });
+
+  logger.info("billing.admin.invoice_marked_paid_manually", { invoiceId, adminId });
+  return { alreadyProcessed: false };
 }

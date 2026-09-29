@@ -13,6 +13,7 @@ import {
 } from "./service";
 import { formatCentsBRL, formatDateBR } from "./format";
 import { getMercadoPagoGateway, type MercadoPagoGateway } from "./mercadopago";
+import { recordBillingTickRun } from "@/modules/platform/health-service";
 
 /**
  * `POST /api/internal/v1/billing/tick` (docs/contratos.md — Fase 7). Roda periodicamente
@@ -73,6 +74,14 @@ export async function runBillingTick(now: Date = new Date(), gateway?: MercadoPa
   await reconcileStatuses(prisma, now, summary);
 
   logger.info("billing.tick.completed", { ...summary });
+
+  // Admin → Saúde (docs/contratos.md) lê isto para mostrar "quando rodou/resultado" e alertar se
+  // parar de rodar — nunca falha o tick em si (o resumo já foi calculado; se a persistência
+  // falhar, o próximo tick tenta de novo, e o log acima já registrou o resultado real).
+  await recordBillingTickRun(summary, now).catch((error) => {
+    logger.warn("billing.tick.record_run_failed", { errorMessage: error instanceof Error ? error.message : String(error) });
+  });
+
   return summary;
 }
 

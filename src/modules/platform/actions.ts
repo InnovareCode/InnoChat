@@ -3,7 +3,9 @@
 import { z } from "zod";
 import { requirePlatformAdmin } from "@/lib/auth/guards";
 import { runAction, type Result } from "@/lib/result";
+import { DomainError } from "@/lib/errors";
 import { ensurePublicBaseUrlFromCurrentRequest } from "@/lib/public-url";
+import { isValidCnpj, normalizeDocumentDigits } from "@/core/billing";
 import {
   getMaskedPlatformSettings,
   regenerateInternalApiSecret,
@@ -18,6 +20,9 @@ import {
   type ConnectionTestResult,
 } from "./connection-tests";
 import { activateBotWorkflow, deactivateBotWorkflow, syncN8n, type N8nSyncSummary } from "./n8n-sync";
+import { getPlatformLegalInfo, updatePlatformLegalInfo } from "./legal-service";
+import type { PlatformLegalInfo } from "@/core/legal/placeholders";
+import { getPlatformHealth, type PlatformHealth } from "./health-service";
 
 /**
  * Server Actions do admin da plataforma (docs/contratos.md). Guardadas por
@@ -149,5 +154,57 @@ export async function deactivateBotWorkflowAction(): Promise<Result<{ activated:
     await requirePlatformAdmin();
     await deactivateBotWorkflow();
     return { activated: false };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Dados jurídicos da empresa operadora (docs/contratos.md, "Dados jurídicos") — nenhum campo é
+// segredo, tudo devolvido em claro.
+// ---------------------------------------------------------------------------
+
+export async function getPlatformLegalInfoAction(): Promise<Result<PlatformLegalInfo>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    return getPlatformLegalInfo();
+  });
+}
+
+const updatePlatformLegalInfoSchema = z.object({
+  companyLegalName: z.string().trim().max(160).nullable().optional(),
+  companyCnpj: z.string().trim().max(30).nullable().optional(),
+  companyAddress: z.string().trim().max(300).nullable().optional(),
+  contactEmail: z.union([z.literal(""), z.string().trim().email()]).nullable().optional(),
+  dpoName: z.string().trim().max(160).nullable().optional(),
+  dpoEmail: z.union([z.literal(""), z.string().trim().email()]).nullable().optional(),
+  forumCity: z.string().trim().max(120).nullable().optional(),
+  hostingRegion: z.string().trim().max(120).nullable().optional(),
+  backupRetentionDays: z.coerce.number().int().min(1).max(3650).nullable().optional(),
+});
+
+export async function updatePlatformLegalInfoAction(input: unknown): Promise<Result<PlatformLegalInfo>> {
+  return runAction(async () => {
+    const admin = await requirePlatformAdmin();
+    const data = updatePlatformLegalInfoSchema.parse(input);
+
+    if (data.companyCnpj) {
+      const digits = normalizeDocumentDigits(data.companyCnpj);
+      if (!isValidCnpj(digits)) {
+        throw new DomainError("INVALID_CNPJ", "CNPJ inválido — confira os dígitos.");
+      }
+      data.companyCnpj = digits;
+    }
+
+    return updatePlatformLegalInfo(data, admin.id);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Admin → Saúde (docs/contratos.md, "Admin Saúde")
+// ---------------------------------------------------------------------------
+
+export async function getPlatformHealthAction(): Promise<Result<PlatformHealth>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    return getPlatformHealth();
   });
 }

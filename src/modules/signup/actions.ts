@@ -31,6 +31,10 @@ const signUpSchema = z.object({
   ownerName: z.string().trim().min(2).max(120),
   email: z.string().trim().email().max(255),
   password: z.string().min(8).max(200),
+  // CPF/CNPJ da empresa, formatado ou só dígitos (decisão do dono, 2026-09-29 — ver
+  // `src/modules/signup/service.ts#signUp` e docs/contratos.md "Cadastro público"). Só a
+  // presença é checada aqui; o dígito verificador é conferido em `signUp` (`INVALID_DOCUMENT`).
+  document: z.string().trim().min(1, "Informe o CPF ou CNPJ da empresa."),
   termsVersion: z.string().min(1).max(50),
   acceptedTerms: z.boolean().refine((v) => v === true, { message: "É preciso aceitar os termos." }),
 });
@@ -63,6 +67,7 @@ export async function signUpAction(input: unknown): Promise<Result<{ tenantSlug:
       ownerName: data.ownerName,
       email: data.email,
       password: data.password,
+      document: data.document,
       termsVersion: TERMS_VERSION,
     });
     return { tenantSlug: result.tenantSlug };

@@ -295,6 +295,20 @@ export async function regeneratePixForInvoice(invoiceId: string, payerEmail: str
   });
 }
 
+/**
+ * Confere que `invoiceId` pertence de fato à `Subscription` de `tenantId` — para
+ * `regenerateMyInvoicePixAction` (`src/modules/billing/actions.ts`, tela de Assinatura da
+ * própria empresa) nunca deixar um OWNER regerar Pix de uma fatura de OUTRA empresa só por
+ * adivinhar/tentar um `invoiceId` de outra conta.
+ */
+export async function findOwnInvoiceOrThrow(tenantId: string, invoiceId: string) {
+  const invoice = await getPrisma().invoice.findUnique({ where: { id: invoiceId }, include: { subscription: true } });
+  if (!invoice || invoice.subscription.tenantId !== tenantId) {
+    throw new DomainError("NOT_FOUND", "Fatura não encontrada.");
+  }
+  return invoice;
+}
+
 // ---------------------------------------------------------------------------
 // Pagamento confirmado (webhook / tick reconsultando o MP)
 // ---------------------------------------------------------------------------

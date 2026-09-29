@@ -3,7 +3,9 @@
 import { z } from "zod";
 import { requireTenantMember } from "@/lib/auth/guards";
 import { runAction, type Result } from "@/lib/result";
-import { changePlan, listActivePlans, type ChangePlanResult } from "./service";
+import { DomainError } from "@/lib/errors";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { changePlan, findBillingRecipientEmail, findOwnInvoiceOrThrow, listActivePlans, regeneratePixForInvoice, type ChangePlanResult } from "./service";
 
 /**
  * Server Actions de cobrança do lado da empresa (docs/arquitetura.md §7.2, tela de Assinatura).
@@ -45,5 +47,44 @@ export async function changePlanAction(tenantSlug: string, input: unknown): Prom
     const { tenant } = await requireTenantMember(tenantSlug, ["OWNER"]);
     const data = changePlanSchema.parse(input);
     return changePlan(tenant.id, data.planId);
+  });
+}
+
+const REGENERATE_PIX_LIMIT = 5;
+const REGENERATE_PIX_WINDOW_MS = 10 * 60 * 1000; // 5 tentativas/10min por empresa — chama o Mercado Pago de verdade
+
+/**
+ * "Gerar Pix agora"/"Tentar de novo" (tela de Assinatura) — hoje `regeneratePixForInvoice` só
+ * rodava em segundo plano pelo `billing/tick` (de hora em hora); esta action deixa a EMPRESA
+ * disparar na hora, depois de ver `MERCADOPAGO_MISSING_DOCUMENT` (cadastrar documento em
+ * Configurações e tentar de novo) ou `MERCADOPAGO_UNAVAILABLE` (tentar de novo). Restrito a
+ * `OWNER` (mesma régua de `changePlanAction`) e escopado por `findOwnInvoiceOrThrow` — o
+ * `invoiceId` nunca é confiado sem confirmar que pertence à assinatura DESTE tenant (nunca de
+ * outra empresa, mesmo que alguém adivinhe/tente um id de fatura de outra conta). Rate limit
+ * leve por tenant: é uma chamada de rede de verdade ao Mercado Pago, não um clique de UI barato.
+ */
+export async function regenerateMyInvoicePixAction(tenantSlug: string, invoiceId: string): Promise<Result<{ invoiceId: string; pixCopyPaste: string | null }>> {
+  return runAction(async () => {
+    const { tenant } = await requireTenantMember(tenantSlug, ["OWNER"]);
+
+    const rateLimit = checkRateLimit(`regenerate-pix:${tenant.id}`, REGENERATE_PIX_LIMIT, REGENERATE_PIX_WINDOW_MS);
+    if (!rateLimit.allowed) {
+      throw new DomainError("RATE_LIMITED", "Muitas tentativas. Aguarde alguns minutos antes de tentar de novo.", {
+        retryAfterMs: rateLimit.retryAfterMs,
+      });
+    }
+
+    await findOwnInvoiceOrThrow(tenant.id, invoiceId);
+
+    const payerEmail = (await findBillingRecipientEmail(tenant.id)) ?? undefined;
+    if (!payerEmail) {
+      // Não deveria acontecer (toda empresa nasce com um OWNER, e `Membership` nunca perde o
+      // último OWNER) — mas sem e-mail de cobrança não há para quem o Mercado Pago devolver
+      // notificação, então falha cedo com uma mensagem clara em vez de mandar `undefined`.
+      throw new DomainError("NOT_FOUND", "Nenhum e-mail de cobrança encontrado para esta empresa. Contate o suporte.");
+    }
+
+    const invoice = await regeneratePixForInvoice(invoiceId, payerEmail);
+    return { invoiceId: invoice.id, pixCopyPaste: invoice.pixCopyPaste };
   });
 }

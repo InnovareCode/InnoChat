@@ -3,14 +3,23 @@
 import { z } from "zod";
 import { requirePlatformAdmin } from "@/lib/auth/guards";
 import { runAction, type Result } from "@/lib/result";
+import type { InvoiceStatus } from "@/lib/db/types";
 import {
+  billingMonthlyTotals,
   extendTrialManually,
   listCompanies,
+  listDelinquentCompanies,
+  listInvoicesAdmin,
   listPlans,
+  markInvoicePaidManually,
   reactivateCompanyManually,
+  regeneratePixForInvoiceAdmin,
   suspendCompanyManually,
   updatePlan,
+  type AdminInvoiceListItem,
+  type BillingMonthlyTotals,
   type CompanyListItem,
+  type DelinquentCompany,
 } from "./admin-service";
 
 /** Server Actions do admin da plataforma para planos e empresas (docs/contratos.md, Fase 7). */
@@ -73,5 +82,62 @@ export async function extendTrialAction(tenantId: string, input: unknown): Promi
     const data = extendTrialSchema.parse(input);
     await extendTrialManually(tenantId, data.extraDays);
     return { tenantId };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Admin → Cobrança (docs/contratos.md, "Admin Cobrança")
+// ---------------------------------------------------------------------------
+
+const INVOICE_STATUSES = ["OPEN", "PAID", "EXPIRED", "VOID"] as const satisfies readonly InvoiceStatus[];
+
+const listInvoicesAdminSchema = z.object({
+  status: z.enum(INVOICE_STATUSES).optional(),
+  tenantId: z.string().min(1).optional(),
+  fromDate: z.coerce.date().optional(),
+  toDate: z.coerce.date().optional(),
+  cursor: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+export async function listInvoicesAdminAction(input?: unknown): Promise<Result<{ items: AdminInvoiceListItem[]; nextCursor: string | null }>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    const data = listInvoicesAdminSchema.parse(input ?? {});
+    return listInvoicesAdmin(data);
+  });
+}
+
+export async function billingMonthlyTotalsAction(): Promise<Result<BillingMonthlyTotals>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    return billingMonthlyTotals();
+  });
+}
+
+export async function listDelinquentCompaniesAction(): Promise<Result<DelinquentCompany[]>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    return listDelinquentCompanies();
+  });
+}
+
+export async function regeneratePixForInvoiceAdminAction(invoiceId: string): Promise<Result<{ invoiceId: string; hasPix: boolean }>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    const invoice = await regeneratePixForInvoiceAdmin(invoiceId);
+    return { invoiceId: invoice.id, hasPix: !!invoice.pixCopyPaste };
+  });
+}
+
+const markInvoicePaidManuallySchema = z.object({
+  reason: z.string().trim().min(3, "Informe o motivo da baixa manual.").max(500),
+});
+
+export async function markInvoicePaidManuallyAction(invoiceId: string, input: unknown): Promise<Result<{ alreadyProcessed: boolean }>> {
+  return runAction(async () => {
+    const admin = await requirePlatformAdmin();
+    const data = markInvoicePaidManuallySchema.parse(input);
+    return markInvoicePaidManually(invoiceId, admin.id, data.reason);
   });
 }

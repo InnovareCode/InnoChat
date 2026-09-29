@@ -17,4 +17,6 @@ export type {
   InboundOutcome,
   InboundIgnoreReason,
   BotTextKey,
+  InvoiceStatus,
+  SubscriptionStatus,
 } from "@prisma/client";

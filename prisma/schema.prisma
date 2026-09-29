@@ -78,11 +78,14 @@ model Tenant {
   name      String
   timezone  String
   // CPF/CNPJ da empresa (só dígitos), exigido pelo Mercado Pago para criar cobrança Pix
-  // (`payer.identification` — ver `src/modules/billing/mercadopago.ts`). Nasce `null`: a tela
-  // pública de cadastro (Fase 7.3) não coleta isto ainda — contrato pendente para a Lyra
-  // (docs/contratos.md, seção Cobrança). Enquanto for `null`, a fatura nasce sem Pix (mesmo
-  // caminho já existente de "Mercado Pago indisponível" — a tela de Assinatura oferece "gerar
-  // Pix" de novo depois que o CPF/CNPJ for cadastrado).
+  // (`payer.identification` — ver `src/modules/billing/mercadopago.ts`). Decisão do dono,
+  // 2026-09-29: como a PRIMEIRA fatura (com Pix) já nasce no cadastro, `signUpAction` passou a
+  // EXIGIR este campo (`INVALID_DOCUMENT` se o dígito verificador for inválido) — toda empresa
+  // criada a partir de então já nasce com `document` preenchido. Continua `String?` (nullable)
+  // só por causa das empresas criadas ANTES desta mudança (nasceram com `null`) — para elas,
+  // `updateTenantDocumentAction` (`src/modules/tenant/actions.ts`) continua existindo para
+  // corrigir depois. Enquanto for `null`, a fatura nasce sem Pix (mesmo caminho já existente de
+  // "Mercado Pago indisponível").
   document  String?
   segment   String?
   // Tema visual do painel (decisão do dono, 2026-09-28): só os 3 temas prontos abaixo — sem cor
@@ -191,6 +194,32 @@ model PlatformSettings {
   // Coluna mantida de propósito (nenhuma migration destrutiva sem necessidade real) — candidata
   // a uma migration de remoção quando convier ao Cronos.
   termsVersion String?
+
+  // Dados jurídicos da empresa OPERADORA do InnoChat (Innovare Code) — decisão do dono,
+  // 2026-09-29: nada disso pelo chat/código, tudo cadastrável pelo admin (tela "Dados
+  // jurídicos"). Todos opcionais e NENHUM é segredo (podem voltar em claro pela action de
+  // leitura) — são os mesmos dados que já apareceriam public/mente nos Termos/Privacidade.
+  // `getPublicLegalInfo()` (src/modules/platform/legal-service.ts) expõe só estes campos para
+  // as páginas `/termos` e `/privacidade` substituírem os marcadores `[CNPJ]`, `[ENDEREÇO]` etc.
+  companyLegalName     String?
+  companyCnpj          String?
+  companyAddress       String?
+  contactEmail         String?
+  dpoName              String?
+  dpoEmail             String?
+  forumCity            String?
+  hostingRegion        String?
+  backupRetentionDays  Int?
+
+  // Última execução dos jobs periódicos (`billing/tick`/`maintenance/tick`, chamados por cron
+  // externo) — para a tela admin "Saúde" mostrar quando rodou e o resultado, e alertar se um tick
+  // parou de rodar (docs/contratos.md, seção "Admin Saúde"). `*Result` guarda o resumo já
+  // devolvido por cada tick (`BillingTickSummary`/`MaintenanceTickSummary`), sem achatar em
+  // colunas novas a cada contador futuro.
+  lastBillingTickAt        DateTime?
+  lastBillingTickResult     Json?
+  lastMaintenanceTickAt     DateTime?
+  lastMaintenanceTickResult Json?
 
   updatedByUserId String?
   updatedAt       DateTime @updatedAt

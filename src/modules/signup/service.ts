@@ -7,6 +7,7 @@ import { sendMail, verificationEmail, passwordResetEmail, teamInviteEmail } from
 import { getPublicBaseUrl } from "@/lib/public-url";
 import type { MembershipRole } from "@/lib/db/types";
 import { validateSlug, type SlugValidationError } from "@/core/signup/slug";
+import { validateCpfCnpj } from "@/core/billing";
 import {
   billingUrlFor,
   findBillingRecipientEmail,
@@ -85,6 +86,11 @@ export type SignUpInput = {
   email: string;
   password: string;
   termsVersion: string;
+  // CPF/CNPJ da empresa (docs/contratos.md, "Cadastro público" — OBRIGATÓRIO desde
+  // 2026-09-29: a primeira fatura já nasce no cadastro e o Mercado Pago exige
+  // `payer.identification` para gerar o Pix dela; sem o documento, aquele Pix nunca saía de
+  // verdade — ver `tryAttachPix`). Aceita formatado ou só dígitos (`validateCpfCnpj` normaliza).
+  document: string;
 };
 
 export type SignUpResult = {
@@ -123,6 +129,11 @@ export async function signUp(input: SignUpInput, gateway?: MercadoPagoGateway): 
     throw new DomainError("INVALID_SLUG", slugErrorMessage(slugError), { rule: slugError });
   }
 
+  const validatedDocument = validateCpfCnpj(input.document);
+  if (!validatedDocument.valid) {
+    throw new DomainError("INVALID_DOCUMENT", "CPF ou CNPJ inválido — confira os dígitos.");
+  }
+
   const prisma = getPrisma();
   const now = new Date();
   const trialEndsAt = newTrialEndsAt(now);
@@ -154,6 +165,7 @@ export async function signUp(input: SignUpInput, gateway?: MercadoPagoGateway): 
         slug,
         name: input.companyName.trim(),
         segment: input.segment?.trim() || null,
+        document: validatedDocument.digits,
         timezone: "America/Sao_Paulo", // único fuso suportado na v1 (docs/arquitetura.md §14)
       },
     });
