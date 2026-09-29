@@ -7,9 +7,10 @@ Decisões do dono: memória `decisoes-iniciais-innochat` e `docs/arquitetura.md`
 
 ## Estado atual (2026-09-28)
 
-Produto funcional localmente, **ainda não publicado**. Em andamento: protótipo premium
-(4 pacotes de melhoria + responsividade, Lyra) e alinhamento do Mercado Pago ao
-adaptador validado do Parque das Feiras (Vega).
+**Etapas A, B e C do `docs/plano-implementacao.md` concluídas em 2026-09-29**: visual premium em todas as telas,
+MP alinhado ao Parque das Feiras (CPF/CNPJ obrigatório), teste de 3 dias, termos/privacidade lidos do banco,
+admin Cobrança/Saúde/Dados jurídicos, revisões de segurança liberadas, QA final aprovado
+(2 rodadas E2E seguidas 123/123, 203 unit, 144 integração, build). **Próximo: etapa D (publicação com o dono).**
 
 ## Concluído
 
