@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Check, CheckCircle2, Copy, KeyRound, Loader2, Power, PowerOff, RefreshCw, Scale, XCircle } from "lucide-react";
 import { cn } from "@/components/lib/cn";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -366,7 +367,7 @@ export function AdminConfiguracoesClient({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
+      <PageHeader icon={navIconFor("admin/configuracoes")}
         title="Configurações da plataforma"
         description="Evolution, n8n, e-mail transacional, Mercado Pago e o segredo da API interna — tudo cadastrado aqui, nunca em variável de ambiente."
       />

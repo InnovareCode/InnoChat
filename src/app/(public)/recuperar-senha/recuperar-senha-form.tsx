@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { MailCheck } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { requestPasswordResetAction } from "@/modules/signup/actions";
+import { Mail } from "lucide-react";
+import { AuthInput } from "@/components/public/auth-input";
+import { AUTH_SUBMIT_CLASS, AuthPanel } from "@/components/public/auth-panel";
 
 export function RecuperarSenhaForm() {
   const [email, setEmail] = useState("");
@@ -36,8 +37,7 @@ export function RecuperarSenhaForm() {
 
   if (done) {
     return (
-      <Card className="rounded-hero">
-        <CardContent className="pt-5">
+      <AuthPanel>
           <EmptyState
             icon={MailCheck}
             title="Verifique seu e-mail"
@@ -48,24 +48,19 @@ export function RecuperarSenhaForm() {
               </Button>
             }
           />
-        </CardContent>
-      </Card>
+        </AuthPanel>
     );
   }
 
   return (
-    <Card className="rounded-hero">
-      <CardHeader>
-        <CardTitle>Recuperar senha</CardTitle>
-        <CardDescription>Informe o e-mail da sua conta para receber um link de redefinição.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <AuthPanel title="Recuperar senha" description="Informe o e-mail da sua conta para receber um link de redefinição.">
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           {error ? <Alert variant="danger">{error}</Alert> : null}
           <Field label="E-mail" htmlFor="email" required>
             {(fieldProps) => (
-              <Input
+              <AuthInput
                 {...fieldProps}
+                icon={Mail}
                 type="email"
                 name="email"
                 autoComplete="email"
@@ -76,7 +71,7 @@ export function RecuperarSenhaForm() {
               />
             )}
           </Field>
-          <Button type="submit" isLoading={isPending}>
+          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS}>
             Enviar link
           </Button>
           <p className="text-center text-sm text-text-secondary">
@@ -85,7 +80,6 @@ export function RecuperarSenhaForm() {
             </Link>
           </p>
         </form>
-      </CardContent>
-    </Card>
+      </AuthPanel>
   );
 }

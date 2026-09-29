@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { AlertTriangle, Banknote, Check, Clock, FlaskConical, QrCode, ReceiptText, TrendingUp } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
@@ -211,7 +212,7 @@ export function AdminCobrancaClient({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Cobrança" description="Faturas de todas as empresas, totais do mês e inadimplência." />
+      <PageHeader icon={navIconFor("admin/cobranca")} title="Cobrança" description="Faturas de todas as empresas, totais do mês e inadimplência." />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatBlock icon={<Banknote aria-hidden="true" />} label="Recebido no mês" value={formatCentsBRL(totals.receivedCents)} tone="success" />

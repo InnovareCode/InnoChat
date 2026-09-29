@@ -1,5 +1,6 @@
 import { Layers } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { listPlansAction } from "@/modules/billing/admin-actions";
 import { AdminPlanosClient, type PlanRow } from "./admin-planos-client";
@@ -10,7 +11,7 @@ export default async function AdminPlanosPage() {
   if (!result.ok) {
     return (
       <div>
-        <PageHeader title="Planos" description="Limites, preço e ativação de cada plano." />
+        <PageHeader icon={navIconFor("admin/planos")} title="Planos" description="Limites, preço e ativação de cada plano." />
         <EmptyState icon={Layers} title="Não deu para carregar os planos" description={result.error.message} />
       </div>
     );

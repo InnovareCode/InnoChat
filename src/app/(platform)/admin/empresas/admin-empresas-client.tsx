@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Ban, RotateCcw, Timer } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -138,7 +139,7 @@ export function AdminEmpresasClient({
 
   return (
     <div>
-      <PageHeader title="Empresas" description="Status da assinatura, limites e trial de cada empresa." />
+      <PageHeader icon={navIconFor("admin/empresas")} title="Empresas" description="Status da assinatura, limites e trial de cada empresa." />
 
       <Card className="rounded-hero">
         <Table>

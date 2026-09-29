@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+
+const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8")) as { version: string };
 
 export default defineConfig({
   test: {
@@ -16,6 +19,8 @@ export default defineConfig({
     // definida (testes de integração com Postgres real — Fase 4+), ela também
     // vira o `DATABASE_URL` do processo.
     env: {
+      NEXT_PUBLIC_APP_VERSION: pkg.version,
+      NEXT_PUBLIC_BUILD_DATE: "2026-01-01",
       DATABASE_URL:
         process.env.TEST_DATABASE_URL ?? "postgresql://user:pass@localhost:5432/innochat_test",
     },

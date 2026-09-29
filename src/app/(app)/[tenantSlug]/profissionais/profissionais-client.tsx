@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Plus, Trash2, UserRound } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -115,7 +116,7 @@ export function ProfissionaisClient({
 
   return (
     <div>
-      <PageHeader
+      <PageHeader icon={navIconFor("profissionais")}
         title="Profissionais"
         description="Expediente semanal e serviços de cada um."
         action={

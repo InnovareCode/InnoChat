@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { CalendarOff, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -117,7 +118,7 @@ export function BloqueiosClient({
 
   return (
     <div>
-      <PageHeader
+      <PageHeader icon={navIconFor("configuracoes")}
         title="Bloqueios e feriados"
         description="Períodos em que a empresa inteira não atende — vale para todos os profissionais, diferente do bloqueio individual em Profissionais."
         action={

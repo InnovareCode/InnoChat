@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { CreditCard } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getPrisma } from "@/lib/db/prisma";
 import { auth } from "@/lib/auth";
@@ -31,7 +32,7 @@ export default async function AssinaturaPage({
   if (!subscription) {
     return (
       <div>
-        <PageHeader title="Assinatura" description="Plano atual, fatura em aberto e histórico." />
+        <PageHeader icon={navIconFor("assinatura")} title="Assinatura" description="Plano atual, fatura em aberto e histórico." />
         <EmptyState icon={CreditCard} title="Sem assinatura" description="Nenhuma assinatura encontrada para esta empresa. Contate o suporte." />
       </div>
     );

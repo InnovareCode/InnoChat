@@ -1,8 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
 import { AuthShell } from "@/components/public/auth-shell";
+import { AuthPanel } from "@/components/public/auth-panel";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = { title: "Entrar — InnoChat" };
@@ -15,13 +15,9 @@ export default async function LoginPage({
   const { erro, redefinida, instalado } = await searchParams;
 
   return (
-    <AuthShell>
-      <Card className="rounded-hero">
-        <CardHeader>
-          <CardTitle>Entrar</CardTitle>
-          <CardDescription>Acesse o painel da sua empresa.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+    <AuthShell topLink={{ prompt: "Não tem conta?", label: "Criar conta", href: "/cadastro" }}>
+      <AuthPanel title="Bem-vindo de volta" description="Entre para acessar o painel da sua empresa.">
+        <div className="flex flex-col gap-4">
           {erro === "sem-empresa" ? (
             <Alert variant="warning" title="Sem empresa vinculada">
               Sua conta ainda não está ligada a nenhuma empresa no InnoChat.
@@ -37,20 +33,18 @@ export default async function LoginPage({
               A conta de administrador da plataforma foi criada. Entre com o e-mail e a senha que você definiu.
             </Alert>
           ) : null}
-          <LoginForm />
-          <p className="text-center text-sm text-text-secondary">
-            <Link href="/recuperar-senha" className="text-primary hover:underline">
-              Esqueci minha senha
-            </Link>
-          </p>
-          <p className="text-center text-sm text-text-secondary">
-            Ainda não tem conta?{" "}
-            <Link href="/cadastro" className="text-primary hover:underline">
-              Criar conta
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
+          <LoginForm
+            forgotLink={
+              <Link
+                href="/recuperar-senha"
+                className="inline-flex min-h-6 items-center text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                Esqueci minha senha
+              </Link>
+            }
+          />
+        </div>
+      </AuthPanel>
     </AuthShell>
   );
 }

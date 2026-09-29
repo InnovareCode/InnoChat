@@ -15,3 +15,5 @@
 - [Página pública lendo banco vira estática no build](static-optimization-trava-dado-de-banco.md) — sem `revalidate`/`dynamic`, o dado congela até o próximo deploy.
 - [Painel Mercado Pago + armadilha do banco local](painel-mercado-pago-e-dev-db.md) — ações imediatas, diálogo único; dev quebra sem migration aplicada.
 - [Tour/checklist do Inno](tour-onboarding-inno.md) — spotlight próprio com data-tour, geometria pura testável, armadilhas de scroll/foco/overflow medidas.
+- [PageHeader com selo do menu](page-header-selo-icone-do-menu.md) — icon via navIconFor (fonte única); regra p/ páginas novas.
+- [Selo InnovareCode + auth premium](selo-innovarecode-e-auth-premium.md) — AA do selo, toast acima dele, getByLabel x botão de senha, env do next.config.

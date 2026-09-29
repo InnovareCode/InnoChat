@@ -1,5 +1,6 @@
 import { Receipt } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { billingMonthlyTotalsAction, listDelinquentCompaniesAction, listInvoicesAdminAction } from "@/modules/billing/admin-actions";
 import { AdminCobrancaClient } from "./admin-cobranca-client";
@@ -15,7 +16,7 @@ export default async function AdminCobrancaPage() {
     const error = !totalsResult.ok ? totalsResult.error : !invoicesResult.ok ? invoicesResult.error : (delinquentsResult as { ok: false; error: { message: string } }).error;
     return (
       <div>
-        <PageHeader title="Cobrança" description="Faturas abertas, vencidas e eventos do Mercado Pago." />
+        <PageHeader icon={navIconFor("admin/cobranca")} title="Cobrança" description="Faturas abertas, vencidas e eventos do Mercado Pago." />
         <EmptyState icon={Receipt} title="Não deu para carregar a cobrança" description={error.message} />
       </div>
     );

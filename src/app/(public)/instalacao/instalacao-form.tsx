@@ -2,12 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { installPlatformAdminAction } from "@/modules/platform/install-actions";
+import { KeyRound, Lock, Mail, User } from "lucide-react";
+import { AuthInput } from "@/components/public/auth-input";
+import { AUTH_SUBMIT_CLASS, AuthPanel } from "@/components/public/auth-panel";
 
 /**
  * Formulário mínimo — a Lyra cuida do polimento visual. O contrato com a Server Action é o que
@@ -66,15 +67,8 @@ export function InstalacaoForm() {
   }
 
   return (
-    <Card className="rounded-hero">
-      <CardHeader>
-        <CardTitle>Instalar o InnoChat</CardTitle>
-        <CardDescription>
-          Crie a conta de administrador da plataforma. O código de instalação aparece no log do container do
-          painel no Easypanel (procure por &ldquo;InnoChat: código de instalação&rdquo;) e vale por 24 horas.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <AuthPanel title="Instalar o InnoChat" description={<>Crie a conta de administrador da plataforma. O código de instalação aparece no log do container do
+          painel no Easypanel (procure por &ldquo;InnoChat: código de instalação&rdquo;) e vale por 24 horas.</>}>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           {formError ? <Alert variant="danger">{formError}</Alert> : null}
 
@@ -86,8 +80,9 @@ export function InstalacaoForm() {
             hint={!fieldErrors.code ? "Log do container do painel no Easypanel, impresso quando ele sobe." : undefined}
           >
             {(fieldProps) => (
-              <Input
+              <AuthInput
                 {...fieldProps}
+                icon={KeyRound}
                 name="code"
                 autoComplete="off"
                 value={form.code}
@@ -100,8 +95,9 @@ export function InstalacaoForm() {
 
           <Field label="Seu nome" htmlFor="name" required error={fieldErrors.name}>
             {(fieldProps) => (
-              <Input
+              <AuthInput
                 {...fieldProps}
+                icon={User}
                 name="name"
                 autoComplete="name"
                 value={form.name}
@@ -114,8 +110,9 @@ export function InstalacaoForm() {
 
           <Field label="E-mail" htmlFor="email" required error={fieldErrors.email}>
             {(fieldProps) => (
-              <Input
+              <AuthInput
                 {...fieldProps}
+                icon={Mail}
                 type="email"
                 name="email"
                 autoComplete="email"
@@ -129,8 +126,9 @@ export function InstalacaoForm() {
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Senha" htmlFor="password" required error={fieldErrors.password}>
               {(fieldProps) => (
-                <Input
+                <AuthInput
                   {...fieldProps}
+                  icon={Lock}
                   type="password"
                   name="password"
                   autoComplete="new-password"
@@ -142,8 +140,9 @@ export function InstalacaoForm() {
             </Field>
             <Field label="Confirmar senha" htmlFor="confirmPassword" required error={fieldErrors.confirmPassword}>
               {(fieldProps) => (
-                <Input
+                <AuthInput
                   {...fieldProps}
+                  icon={Lock}
                   type="password"
                   name="confirmPassword"
                   autoComplete="new-password"
@@ -155,11 +154,10 @@ export function InstalacaoForm() {
             </Field>
           </div>
 
-          <Button type="submit" isLoading={isPending} className="mt-1">
+          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS}>
             Concluir instalação
           </Button>
         </form>
-      </CardContent>
-    </Card>
+      </AuthPanel>
   );
 }

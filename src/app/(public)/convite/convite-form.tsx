@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { acceptInviteAction } from "@/modules/signup/actions";
+import { Lock } from "lucide-react";
+import { AuthInput } from "@/components/public/auth-input";
+import { AUTH_SUBMIT_CLASS, AuthPanel } from "@/components/public/auth-panel";
 
 export function ConviteForm({ token }: { token: string | null }) {
   const router = useRouter();
@@ -19,17 +20,11 @@ export function ConviteForm({ token }: { token: string | null }) {
 
   if (!token) {
     return (
-      <Card className="rounded-hero">
-        <CardHeader>
-          <CardTitle>Link incompleto</CardTitle>
-          <CardDescription>Este convite está sem o código necessário. Peça um novo convite a quem te convidou.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <AuthPanel title="Link incompleto" description="Este convite está sem o código necessário. Peça um novo convite a quem te convidou.">
           <Button asChild>
             <Link href="/login">Ir para o login</Link>
           </Button>
-        </CardContent>
-      </Card>
+        </AuthPanel>
     );
   }
 
@@ -59,18 +54,14 @@ export function ConviteForm({ token }: { token: string | null }) {
   }
 
   return (
-    <Card className="rounded-hero">
-      <CardHeader>
-        <CardTitle>Aceitar convite</CardTitle>
-        <CardDescription>Defina sua senha para entrar no painel da empresa que te convidou.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <AuthPanel title="Aceitar convite" description="Defina sua senha para entrar no painel da empresa que te convidou.">
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           {error ? <Alert variant="danger">{error}</Alert> : null}
           <Field label="Senha" htmlFor="password" required>
             {(fieldProps) => (
-              <Input
+              <AuthInput
                 {...fieldProps}
+                icon={Lock}
                 type="password"
                 name="password"
                 autoComplete="new-password"
@@ -83,8 +74,9 @@ export function ConviteForm({ token }: { token: string | null }) {
           </Field>
           <Field label="Confirmar senha" htmlFor="confirmPassword" required>
             {(fieldProps) => (
-              <Input
+              <AuthInput
                 {...fieldProps}
+                icon={Lock}
                 type="password"
                 name="confirmPassword"
                 autoComplete="new-password"
@@ -95,11 +87,10 @@ export function ConviteForm({ token }: { token: string | null }) {
               />
             )}
           </Field>
-          <Button type="submit" isLoading={isPending}>
+          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS}>
             Entrar
           </Button>
         </form>
-      </CardContent>
-    </Card>
+      </AuthPanel>
   );
 }

@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AlertTriangle } from "lucide-react";
 import { listProfessionalsAction, listServicesAction } from "@/modules/agenda/catalog-actions";
@@ -21,7 +22,7 @@ export default async function OnboardingPage({
   if (!servicesResult.ok || !professionalsResult.ok) {
     return (
       <div>
-        <PageHeader title="Primeiros passos" description="Configure sua empresa para começar a agendar." />
+        <PageHeader icon={navIconFor("onboarding")} title="Primeiros passos" description="Configure sua empresa para começar a agendar." />
         <EmptyState
           icon={AlertTriangle}
           title="Não deu para carregar"

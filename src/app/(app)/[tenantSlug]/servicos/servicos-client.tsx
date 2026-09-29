@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Pencil, Plus, Scissors, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -177,7 +178,7 @@ export function ServicosClient({
 
   return (
     <div>
-      <PageHeader
+      <PageHeader icon={navIconFor("servicos")}
         title="Serviços"
         description="Nome, duração, intervalo, preço opcional e ordem."
         action={

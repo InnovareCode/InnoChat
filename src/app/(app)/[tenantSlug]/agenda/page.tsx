@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Calendar } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getPrisma } from "@/lib/db/prisma";
 import { listProfessionalsAction, listServicesAction } from "@/modules/agenda/catalog-actions";
@@ -33,7 +34,7 @@ export default async function AgendaPage({
   if (professionals.filter((p) => p.active).length === 0) {
     return (
       <div>
-        <PageHeader title="Agenda" description="Dia e semana por profissional." />
+        <PageHeader icon={navIconFor("agenda")} title="Agenda" description="Dia e semana por profissional." />
         <EmptyState
           icon={Calendar}
           title="Cadastre um profissional ativo para começar"

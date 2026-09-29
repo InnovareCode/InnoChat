@@ -1,5 +1,6 @@
 import { UserRound } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getPrisma } from "@/lib/db/prisma";
 import { listProfessionalsAction } from "@/modules/agenda/catalog-actions";
@@ -17,7 +18,7 @@ export default async function ProfissionaisPage({
   if (!result.ok) {
     return (
       <div>
-        <PageHeader title="Profissionais" description="Expediente semanal e serviços de cada um." />
+        <PageHeader icon={navIconFor("profissionais")} title="Profissionais" description="Expediente semanal e serviços de cada um." />
         <EmptyState
           icon={UserRound}
           title="Não deu para carregar os profissionais"

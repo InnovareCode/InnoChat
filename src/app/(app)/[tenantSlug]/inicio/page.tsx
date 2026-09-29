@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { CalendarClock, CalendarPlus, CalendarRange, MessageCircle, Percent, Plus, Scissors, UserX, UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -32,7 +33,7 @@ export default async function InicioPage({ params }: { params: Promise<{ tenantS
 
   return (
     <div>
-      <PageHeader
+      <PageHeader icon={navIconFor("inicio")}
         size="hero"
         title="Início"
         description="O resumo do seu negócio hoje."

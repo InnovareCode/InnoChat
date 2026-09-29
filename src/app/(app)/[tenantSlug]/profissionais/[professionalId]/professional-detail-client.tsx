@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -184,7 +185,7 @@ export function ProfessionalDetailClient({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
+      <PageHeader icon={navIconFor("profissionais")}
         title={
           <span className="flex items-center gap-3">
             <Avatar id={professional.id} name={professional.name} />

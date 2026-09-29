@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle2, XCircle } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { AuthPanel } from "@/components/public/auth-panel";
 import { Button } from "@/components/ui/button";
 import { AuthShell } from "@/components/public/auth-shell";
 import { verifyEmailAction } from "@/modules/signup/actions";
@@ -18,17 +18,11 @@ export default async function VerificarEmailPage({
   if (!token) {
     return (
       <AuthShell>
-        <Card className="rounded-hero">
-          <CardHeader>
-            <CardTitle>Link incompleto</CardTitle>
-            <CardDescription>Este link de confirmação está sem o código necessário.</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <AuthPanel title="Link incompleto" description="Este link de confirmação está sem o código necessário.">
             <Button asChild>
               <Link href="/login">Ir para o login</Link>
             </Button>
-          </CardContent>
-        </Card>
+          </AuthPanel>
       </AuthShell>
     );
   }
@@ -37,34 +31,31 @@ export default async function VerificarEmailPage({
 
   return (
     <AuthShell>
-      <Card className="rounded-hero">
-        <CardHeader>
-          <div
-            className={`mb-2 flex h-10 w-10 items-center justify-center rounded-full ${
-              result.ok ? "bg-success-bg" : "bg-danger-bg"
-            }`}
-          >
-            {result.ok ? (
-              <CheckCircle2 className="h-5 w-5 text-success" aria-hidden="true" />
-            ) : (
-              <XCircle className="h-5 w-5 text-danger" aria-hidden="true" />
-            )}
-          </div>
-          <CardTitle>{result.ok ? "E-mail confirmado!" : "Não foi possível confirmar"}</CardTitle>
-          <CardDescription>
-            {result.ok
-              ? "Sua conta já está pronta para uso."
-              : "Este link é inválido, já foi usado ou expirou. Peça um novo pelo login."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button asChild>
-            <Link href={result.ok && result.data.tenantSlug ? `/${result.data.tenantSlug}/inicio` : "/login"}>
-              {result.ok ? "Ir para o painel" : "Ir para o login"}
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
+      <AuthPanel
+        title={result.ok ? "E-mail confirmado!" : "Não foi possível confirmar"}
+        description={
+          result.ok
+            ? "Sua conta já está pronta para uso."
+            : "Este link é inválido, já foi usado ou expirou. Peça um novo pelo login."
+        }
+      >
+        <div
+          className={`mb-6 flex h-12 w-12 items-center justify-center rounded-full ${
+            result.ok ? "bg-success-bg" : "bg-danger-bg"
+          }`}
+        >
+          {result.ok ? (
+            <CheckCircle2 className="h-6 w-6 text-success" aria-hidden="true" />
+          ) : (
+            <XCircle className="h-6 w-6 text-danger" aria-hidden="true" />
+          )}
+        </div>
+        <Button asChild size="lg" className="w-full">
+          <Link href={result.ok && result.data.tenantSlug ? `/${result.data.tenantSlug}/inicio` : "/login"}>
+            {result.ok ? "Ir para o painel" : "Ir para o login"}
+          </Link>
+        </Button>
+      </AuthPanel>
     </AuthShell>
   );
 }

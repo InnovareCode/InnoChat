@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Download, Plus, Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PeopleEmptyIllustration } from "@/components/ui/empty-illustration";
 import { Card } from "@/components/ui/card";
@@ -188,7 +189,7 @@ export function ClientesClient({
 
   return (
     <div>
-      <PageHeader
+      <PageHeader icon={navIconFor("clientes")}
         title="Clientes"
         description="Lista, agendamentos e pausa do bot por cliente."
         action={

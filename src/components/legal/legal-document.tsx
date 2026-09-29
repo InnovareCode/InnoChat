@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AppSignature } from "@/components/brand/app-signature";
 import { Info } from "lucide-react";
 import { LEGAL_DRAFT_NOTICE, LEGAL_EFFECTIVE_DATE, TERMS_VERSION } from "@/lib/legal";
 import { fillLegalPlaceholders, type PlatformLegalInfo } from "@/core/legal/placeholders";
@@ -200,6 +201,7 @@ export function LegalDocument({ title, intro, sections, related }: LegalDocument
             .
           </p>
         </footer>
+        <AppSignature className="mt-8 text-center" />
       </main>
     </div>
   );

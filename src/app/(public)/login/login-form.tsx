@@ -1,15 +1,17 @@
 "use client";
 
 import { useActionState } from "react";
+import { Lock, Mail } from "lucide-react";
 import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
+import { AuthInput } from "@/components/public/auth-input";
+import { AUTH_SUBMIT_CLASS, AuthTrust } from "@/components/public/auth-panel";
 import { loginAction, type LoginState } from "./actions";
 
 const INITIAL_STATE: LoginState = { error: null };
 
-export function LoginForm() {
+export function LoginForm({ forgotLink }: { forgotLink: React.ReactNode }) {
   const [state, formAction, isPending] = useActionState(loginAction, INITIAL_STATE);
 
   return (
@@ -18,21 +20,24 @@ export function LoginForm() {
 
       <Field label="E-mail" htmlFor="email" required>
         {(fieldProps) => (
-          <Input
+          <AuthInput
             {...fieldProps}
+            icon={Mail}
             type="email"
             name="email"
             autoComplete="email"
+            placeholder="voce@empresa.com.br"
             required
             invalid={!!state.error}
           />
         )}
       </Field>
 
-      <Field label="Senha" htmlFor="password" required>
+      <Field label="Senha" htmlFor="password" required labelAction={forgotLink}>
         {(fieldProps) => (
-          <Input
+          <AuthInput
             {...fieldProps}
+            icon={Lock}
             type="password"
             name="password"
             autoComplete="current-password"
@@ -42,9 +47,10 @@ export function LoginForm() {
         )}
       </Field>
 
-      <Button type="submit" isLoading={isPending} className="mt-1">
+      <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS}>
         Entrar
       </Button>
+      <AuthTrust />
     </form>
   );
 }

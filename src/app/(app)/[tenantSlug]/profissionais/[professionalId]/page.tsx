@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { UserRound } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getPrisma } from "@/lib/db/prisma";
 import { listProfessionalsAction, listServicesAction } from "@/modules/agenda/catalog-actions";
@@ -26,7 +27,7 @@ export default async function ProfessionalDetailPage({
   if (!professionalsResult.ok) {
     return (
       <div>
-        <PageHeader title="Profissional" />
+        <PageHeader icon={navIconFor("profissionais")} title="Profissional" />
         <EmptyState icon={UserRound} title="Não deu para carregar" description={professionalsResult.error.message} />
       </div>
     );

@@ -1,5 +1,6 @@
 import { Scissors } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getPrisma } from "@/lib/db/prisma";
 import { listServicesAction } from "@/modules/agenda/catalog-actions";
@@ -17,7 +18,7 @@ export default async function ServicosPage({
   if (!result.ok) {
     return (
       <div>
-        <PageHeader title="Serviços" description="Nome, duração, intervalo, preço opcional e ordem." />
+        <PageHeader icon={navIconFor("servicos")} title="Serviços" description="Nome, duração, intervalo, preço opcional e ordem." />
         <EmptyState
           icon={Scissors}
           title="Não deu para carregar os serviços"

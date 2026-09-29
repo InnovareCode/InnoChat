@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Calendar, MessageCircle, ShieldCheck } from "lucide-react";
+import { AppSignature } from "@/components/brand/app-signature";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -65,6 +66,10 @@ export default function LandingPage() {
           </Card>
         ))}
       </section>
+
+      <footer className="border-t border-border px-4 py-6 text-center sm:px-8">
+        <AppSignature />
+      </footer>
     </main>
   );
 }

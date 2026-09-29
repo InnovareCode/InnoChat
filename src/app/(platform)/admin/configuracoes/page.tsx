@@ -1,5 +1,6 @@
 import { Settings } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getMercadoPagoConfigAction, getPlatformLegalInfoAction, getPlatformSettingsAction } from "@/modules/platform/actions";
 import { AdminConfiguracoesClient } from "./admin-configuracoes-client";
@@ -14,7 +15,7 @@ export default async function AdminConfiguracoesPage() {
   if (!settingsResult.ok) {
     return (
       <div>
-        <PageHeader title="Configurações da plataforma" description="Evolution, n8n, e-mail, Mercado Pago e segredo da API interna." />
+        <PageHeader icon={navIconFor("admin/configuracoes")} title="Configurações da plataforma" description="Evolution, n8n, e-mail, Mercado Pago e segredo da API interna." />
         <EmptyState icon={Settings} title="Não deu para carregar" description={settingsResult.error.message} />
       </div>
     );

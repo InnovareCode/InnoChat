@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { NextConfig } from "next";
 
 /**
@@ -40,7 +41,16 @@ const cspHeader = `
   .replace(/\s{2,}/g, " ")
   .trim();
 
+// Versão e data do build injetadas no bundle (fonte única: `version` do package.json) — ver
+// `src/lib/app-info.ts`. `env` no next.config continua suportado no Next 16 (docs `next-config-js/env`).
+const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8")) as { version: string };
+
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_APP_VERSION: pkg.version,
+    NEXT_PUBLIC_BUILD_DATE: new Date().toISOString().slice(0, 10),
+  },
+
   // Exigido pelo Dockerfile (build standalone) — gera .next/standalone com o server mínimo para
   // rodar sem o node_modules completo na imagem final.
   output: "standalone",

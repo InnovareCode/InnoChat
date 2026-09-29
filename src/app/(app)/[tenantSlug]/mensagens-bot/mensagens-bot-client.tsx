@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { CheckCheck, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { STAGGER_DELAY_S } from "@/components/lib/motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -175,7 +176,7 @@ export function MensagensBotClient({ tenantSlug, initialTexts }: { tenantSlug: s
 
   return (
     <div>
-      <PageHeader title="Mensagens do bot" description="Edite os textos que o bot envia no WhatsApp, por etapa da conversa." />
+      <PageHeader icon={navIconFor("mensagens-bot")} title="Mensagens do bot" description="Edite os textos que o bot envia no WhatsApp, por etapa da conversa." />
 
       <div className="flex flex-col gap-6">
         {GROUPS.map((group, groupIndex) => (

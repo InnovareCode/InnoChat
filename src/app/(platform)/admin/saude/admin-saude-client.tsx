@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Inbox, Mail, RefreshCw, Server, Wallet, Wifi } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -124,7 +125,7 @@ export function AdminSaudeClient({ initialHealth }: { initialHealth: PlatformHea
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
+      <PageHeader icon={navIconFor("admin/saude")}
         title="Saúde"
         description="Integrações, jobs periódicos e volume operacional da plataforma."
         action={

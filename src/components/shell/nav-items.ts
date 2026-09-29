@@ -82,7 +82,7 @@ const TENANT_GROUPS_DEF: { id: string; label: string; items: { label: string; pa
  * então não faz sentido poder escondê-la atrás de um grupo fechado.
  */
 export function tenantOnboardingItem(tenantSlug: string): NavItem | null {
-  return { label: "Primeiros passos", icon: Rocket, href: `/${tenantSlug}/onboarding` };
+  return { label: "Primeiros passos", icon: navIconFor("onboarding"), href: `/${tenantSlug}/onboarding` };
 }
 
 export function tenantNavGroups(
@@ -135,3 +135,25 @@ const ADMIN_GROUPS_DEF: { id: string; label: string; items: { label: string; hre
 export const adminNavGroups: NavGroup[] = ADMIN_GROUPS_DEF;
 
 export const adminNavItems: NavItem[] = ADMIN_GROUPS_DEF.flatMap((g) => g.items);
+
+/**
+ * Fonte única dos ícones de página: o `PageHeader` mostra o MESMO ícone que a seção tem no menu
+ * lateral (confirma onde a pessoa está). Chave = segmento do caminho no painel da empresa
+ * (`"agenda"`, `"onboarding"`) ou o caminho completo no admin (`"admin/empresas"`). Subpáginas e
+ * detalhes usam a chave da seção-mãe (ex.: `"configuracoes"` para Equipe, `"profissionais"` para o
+ * detalhe). Chave desconhecida lança — melhor quebrar no build/teste do que exibir cabeçalho sem
+ * ícone em silêncio.
+ */
+const ICON_BY_KEY: Record<string, LucideIcon> = {
+  onboarding: Rocket,
+  ...Object.fromEntries(TENANT_GROUPS_DEF.flatMap((g) => g.items.map((i) => [i.path, i.icon] as const))),
+  ...Object.fromEntries(ADMIN_GROUPS_DEF.flatMap((g) => g.items.map((i) => [i.href.replace(/^\//, ""), i.icon] as const))),
+};
+
+export function navIconFor(key: string): LucideIcon {
+  const icon = ICON_BY_KEY[key];
+  if (!icon) throw new Error(`navIconFor: sem ícone de menu para "${key}"`);
+  return icon;
+}
+
+export const NAV_ICON_KEYS: string[] = Object.keys(ICON_BY_KEY);

@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { resetPasswordAction } from "@/modules/signup/actions";
+import { Lock } from "lucide-react";
+import { AuthInput } from "@/components/public/auth-input";
+import { AUTH_SUBMIT_CLASS, AuthPanel } from "@/components/public/auth-panel";
 
 export function RedefinirSenhaForm({ token }: { token: string | null }) {
   const router = useRouter();
@@ -19,17 +20,11 @@ export function RedefinirSenhaForm({ token }: { token: string | null }) {
 
   if (!token) {
     return (
-      <Card className="rounded-hero">
-        <CardHeader>
-          <CardTitle>Link incompleto</CardTitle>
-          <CardDescription>Este link de redefinição está sem o código necessário.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <AuthPanel title="Link incompleto" description="Este link de redefinição está sem o código necessário.">
           <Button asChild>
             <Link href="/recuperar-senha">Pedir novo link</Link>
           </Button>
-        </CardContent>
-      </Card>
+        </AuthPanel>
     );
   }
 
@@ -59,12 +54,7 @@ export function RedefinirSenhaForm({ token }: { token: string | null }) {
   }
 
   return (
-    <Card className="rounded-hero">
-      <CardHeader>
-        <CardTitle>Redefinir senha</CardTitle>
-        <CardDescription>Escolha uma nova senha para sua conta.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <AuthPanel title="Redefinir senha" description="Escolha uma nova senha para sua conta.">
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           {error ? (
             <Alert variant="danger">
@@ -81,8 +71,9 @@ export function RedefinirSenhaForm({ token }: { token: string | null }) {
           ) : null}
           <Field label="Nova senha" htmlFor="password" required>
             {(fieldProps) => (
-              <Input
+              <AuthInput
                 {...fieldProps}
+                icon={Lock}
                 type="password"
                 name="password"
                 autoComplete="new-password"
@@ -95,8 +86,9 @@ export function RedefinirSenhaForm({ token }: { token: string | null }) {
           </Field>
           <Field label="Confirmar nova senha" htmlFor="confirmPassword" required>
             {(fieldProps) => (
-              <Input
+              <AuthInput
                 {...fieldProps}
+                icon={Lock}
                 type="password"
                 name="confirmPassword"
                 autoComplete="new-password"
@@ -107,11 +99,10 @@ export function RedefinirSenhaForm({ token }: { token: string | null }) {
               />
             )}
           </Field>
-          <Button type="submit" isLoading={isPending}>
+          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS}>
             Salvar nova senha
           </Button>
         </form>
-      </CardContent>
-    </Card>
+      </AuthPanel>
   );
 }

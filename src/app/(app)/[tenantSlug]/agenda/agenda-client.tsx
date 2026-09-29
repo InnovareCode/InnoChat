@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/core";
 import { CalendarClock, CalendarPlus, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -287,7 +288,7 @@ export function AgendaClient({
 
   return (
     <div>
-      <PageHeader
+      <PageHeader icon={navIconFor("agenda")}
         title="Agenda"
         description={friendlyTimezoneLabel(timezone)}
         action={

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { AuthShell } from "@/components/public/auth-shell";
 import { CadastroForm } from "./cadastro-form";
 
@@ -7,14 +6,8 @@ export const metadata: Metadata = { title: "Criar conta — InnoChat" };
 
 export default function CadastroPage() {
   return (
-    <AuthShell formMaxWidth="max-w-md">
+    <AuthShell formMaxWidth="max-w-2xl" topLink={{ prompt: "Já tem conta?", label: "Entrar", href: "/login" }}>
       <CadastroForm />
-      <p className="mt-4 text-center text-sm text-text-secondary">
-        Já tem conta?{" "}
-        <Link href="/login" className="text-primary hover:underline">
-          Entrar
-        </Link>
-      </p>
     </AuthShell>
   );
 }

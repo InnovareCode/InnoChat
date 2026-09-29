@@ -1,5 +1,6 @@
 import { MessageCircle } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getPrisma } from "@/lib/db/prisma";
 import { auth } from "@/lib/auth";
@@ -19,7 +20,7 @@ export default async function WhatsappPage({
   if (!result.ok) {
     return (
       <div>
-        <PageHeader title="WhatsApp" description="Números conectados, QR code e status da conexão." />
+        <PageHeader icon={navIconFor("whatsapp")} title="WhatsApp" description="Números conectados, QR code e status da conexão." />
         <EmptyState icon={MessageCircle} title="Não deu para carregar os números" description={result.error.message} />
       </div>
     );

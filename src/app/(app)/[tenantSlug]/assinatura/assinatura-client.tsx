@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/components/lib/cn";
@@ -434,7 +435,7 @@ export function AssinaturaClient({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Assinatura" description="Plano atual, status e fatura em aberto." />
+      <PageHeader icon={navIconFor("assinatura")} title="Assinatura" description="Plano atual, status e fatura em aberto." />
 
       <Card className="rounded-hero">
         <CardHeader>

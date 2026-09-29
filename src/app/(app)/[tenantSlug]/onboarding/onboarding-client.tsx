@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Check, MessageCircle, Rocket, Scissors, UserRound } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -146,7 +147,7 @@ export function OnboardingClient({
 
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader title="Primeiros passos" description="Configure sua empresa para começar a agendar pelo painel." />
+      <PageHeader icon={navIconFor("onboarding")} title="Primeiros passos" description="Configure sua empresa para começar a agendar pelo painel." />
 
       <StepIndicator current={step} />
 

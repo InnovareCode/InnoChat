@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { getPrisma } from "@/lib/db/prisma";
 import { forTenant } from "@/lib/db/tenant-client";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EquipeClient, type MemberRow } from "./equipe-client";
 
 export default async function EquipePage({
@@ -44,7 +45,7 @@ export default async function EquipePage({
 
   return (
     <div>
-      <PageHeader title="Equipe" description="Quem tem acesso ao painel desta empresa." />
+      <PageHeader icon={navIconFor("configuracoes")} title="Equipe" description="Quem tem acesso ao painel desta empresa." />
       <EquipeClient tenantSlug={tenantSlug} initialMembers={members} canInvite={canInvite} />
     </div>
   );

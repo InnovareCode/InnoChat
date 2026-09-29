@@ -1,4 +1,5 @@
 import { AdminSidebarNav } from "./sidebar-nav";
+import { InnovareCodeBadge } from "@/components/brand/innovarecode-badge";
 import { MobileNav } from "./mobile-nav";
 import { UserBlock } from "./user-block";
 import { AdminSectionLabel } from "./section-label";
@@ -58,10 +59,11 @@ export function AdminShell({ userEmail, children }: AdminShellProps) {
           </div>
         </header>
 
-        <main className="flex-1 p-4 sm:p-6">
+        <main className="flex-1 p-4 pb-20 sm:p-6 sm:pb-20">
           <PageTransition>{children}</PageTransition>
         </main>
       </div>
+      <InnovareCodeBadge />
     </div>
   );
 }

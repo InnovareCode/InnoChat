@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { Palette, Building2, Clock, Users2, CalendarOff } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { getPrisma } from "@/lib/db/prisma";
 import { auth } from "@/lib/auth";
 import { ConfiguracoesGrid, type ConfigSection } from "./configuracoes-grid";
@@ -69,7 +70,7 @@ export default async function ConfiguracoesPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Configurações" description="Empresa, regras de agenda e do bot, equipe." />
+      <PageHeader icon={navIconFor("configuracoes")} title="Configurações" description="Empresa, regras de agenda e do bot, equipe." />
 
       <EmpresaDocumentForm
         tenantSlug={tenantSlug}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Smartphone } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WhatsappEmptyIllustration } from "@/components/ui/empty-illustration";
 import { Alert } from "@/components/ui/alert";
@@ -121,7 +122,7 @@ export function WhatsappClient({
 
   return (
     <div>
-      <PageHeader
+      <PageHeader icon={navIconFor("whatsapp")}
         title="WhatsApp"
         description="Números conectados, QR code e status da conexão."
         action={isOwner && hasInstances ? renderConnectTrigger() : undefined}

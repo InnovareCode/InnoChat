@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CalendarClock, ClipboardList, Plus } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -107,7 +108,7 @@ export function AgendamentosClient({
 
   return (
     <div>
-      <PageHeader
+      <PageHeader icon={navIconFor("agendamentos")}
         title="Agendamentos"
         description="Lista filtrável por período, profissional e status."
         action={

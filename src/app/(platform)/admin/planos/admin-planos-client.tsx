@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Pencil, Users2, MessageCircle } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
@@ -106,7 +107,7 @@ export function AdminPlanosClient({ initialPlans }: { initialPlans: PlanRow[] })
 
   return (
     <div>
-      <PageHeader title="Planos" description="Limites, preço e ativação de cada plano." />
+      <PageHeader icon={navIconFor("admin/planos")} title="Planos" description="Limites, preço e ativação de cada plano." />
 
       {hasUndefinedPrice ? (
         <Alert variant="warning" title="Preço ainda não definido" className="mb-4">

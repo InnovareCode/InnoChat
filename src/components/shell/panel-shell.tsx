@@ -9,6 +9,7 @@ import { CommandPalette } from "./command-palette";
 import { WhatsappStatusChip, type WhatsappTopbarStatus } from "./whatsapp-status-chip";
 import { PageTransition } from "./page-transition";
 import { OnboardingTourProvider, TourReplayButton } from "@/components/onboarding/onboarding-tour";
+import { InnovareCodeBadge } from "@/components/brand/innovarecode-badge";
 import { ResendVerificationButton } from "@/components/account/resend-verification-button";
 
 type SubscriptionStatus = "TRIALING" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELED" | null;
@@ -198,10 +199,11 @@ export function PanelShell({
         <SubscriptionBanner tenantSlug={tenantSlug} status={subscriptionStatus} trialHoursLeft={trialHoursLeft} />
         {!emailVerified ? <EmailVerificationBanner /> : null}
 
-        <main className="flex-1 p-4 sm:p-6">
+        <main className="flex-1 p-4 pb-20 sm:p-6 sm:pb-20">
           <PageTransition>{children}</PageTransition>
         </main>
       </div>
+      <InnovareCodeBadge />
     </div>
     </OnboardingTourProvider>
   );

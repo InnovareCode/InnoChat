@@ -7,6 +7,8 @@ export type FieldProps = {
   hint?: string;
   error?: string | null;
   required?: boolean;
+  /** Ação alinhada à direita da linha do label (ex.: "Esqueci minha senha"). */
+  labelAction?: React.ReactNode;
   children: (fieldProps: { id: string; "aria-describedby"?: string; "aria-invalid"?: boolean }) => React.ReactNode;
 };
 
@@ -16,7 +18,7 @@ export type FieldProps = {
  * precisa receber `id` + `aria-describedby`, e cada um tem uma prop diferente
  * para isso — aqui é só o contrato de acessibilidade, não o componente.
  */
-export function Field({ label, htmlFor, hint, error, required, children }: FieldProps) {
+export function Field({ label, htmlFor, hint, error, required, labelAction, children }: FieldProps) {
   const autoId = useId();
   const id = htmlFor ?? autoId;
   const hintId = hint ? `${id}-hint` : undefined;
@@ -25,10 +27,20 @@ export function Field({ label, htmlFor, hint, error, required, children }: Field
 
   return (
     <div>
-      <Label htmlFor={id}>
-        {label}
-        {required ? <span className="text-danger"> *</span> : null}
-      </Label>
+      {labelAction ? (
+        <div className="mb-1.5 flex items-baseline justify-between gap-3">
+          <Label htmlFor={id} className="mb-0">
+            {label}
+            {required ? <span className="text-danger"> *</span> : null}
+          </Label>
+          {labelAction}
+        </div>
+      ) : (
+        <Label htmlFor={id}>
+          {label}
+          {required ? <span className="text-danger"> *</span> : null}
+        </Label>
+      )}
       {children({ id, "aria-describedby": describedBy, "aria-invalid": !!error })}
       {hint && !error ? (
         <p id={hintId} className="mt-1.5 text-xs text-text-secondary">

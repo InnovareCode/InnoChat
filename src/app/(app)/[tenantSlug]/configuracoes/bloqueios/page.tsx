@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { CalendarOff } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getPrisma } from "@/lib/db/prisma";
 import { listScheduleExceptionsAction } from "@/modules/agenda/catalog-actions";
@@ -30,7 +31,7 @@ export default async function BloqueiosPage({
   if (!result.ok) {
     return (
       <div>
-        <PageHeader title="Bloqueios e feriados" description="Períodos em que a empresa inteira não atende." />
+        <PageHeader icon={navIconFor("configuracoes")} title="Bloqueios e feriados" description="Períodos em que a empresa inteira não atende." />
         <EmptyState icon={CalendarOff} title="Não deu para carregar" description={result.error.message} />
       </div>
     );
