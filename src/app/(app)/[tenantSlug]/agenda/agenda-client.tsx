@@ -246,12 +246,12 @@ export function AgendaClient({
 
       {!loading ? (
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs text-text-secondary">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs text-text-secondary ring-1 ring-primary/15">
             <CalendarClock className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
             <span className="font-semibold tabular-nums text-text">{totalCount}</span>
             {isCountingToday ? "agendamentos hoje" : "agendamentos no dia selecionado"}
           </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs text-text-secondary">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs text-text-secondary ring-1 ring-primary/15">
             <CalendarPlus className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
             <span className="font-semibold tabular-nums text-text">{upcomingCount}</span>
             próximos
@@ -514,7 +514,7 @@ function DayView({
   return (
     <>
       {/* Desktop/tablet: colunas por profissional */}
-      <Card className="hidden overflow-x-auto md:block">
+      <Card className="hidden overflow-x-auto rounded-hero md:block">
         <div className="flex min-w-full">
           <div className="w-16 shrink-0 border-r border-border">
             <div className="h-14 border-b border-border" />
@@ -773,7 +773,7 @@ function WeekView({
   return (
     <>
       {/* Desktop/tablet: grade por horário, 7 colunas (dias) */}
-      <Card className="hidden overflow-x-auto md:block">
+      <Card className="hidden overflow-x-auto rounded-hero md:block">
         <div className="flex min-w-full">
           <div className="w-14 shrink-0 border-r border-border">
             <div className="h-14 border-b border-border" />

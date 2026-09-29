@@ -27,14 +27,17 @@ const manrope = Manrope({
 
 const fraunces = Fraunces({
   subsets: ["latin"],
-  weight: ["600", "700"],
+  // "800" acrescentado na escala premium (docs/design/premium-spec.md §4) — sem isso,
+  // `font-black` no tema Âmbar caía sintetizado (negrito artificial do navegador) em vez de
+  // usar o peso real da fonte.
+  weight: ["600", "700", "800"],
   variable: "--font-fraunces",
   display: "swap",
 });
 
 const sora = Sora({
   subsets: ["latin"],
-  weight: ["600", "700"],
+  weight: ["600", "700", "800"],
   variable: "--font-sora",
   display: "swap",
 });

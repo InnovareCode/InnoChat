@@ -54,7 +54,7 @@ export function ConviteForm({ token }: { token: string | null }) {
         );
         return;
       }
-      router.push(result.data.tenantSlug ? `/${result.data.tenantSlug}/agenda` : "/login");
+      router.push(result.data.tenantSlug ? `/${result.data.tenantSlug}/inicio` : "/login");
     });
   }
 

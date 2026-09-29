@@ -27,7 +27,7 @@ export default async function PosLoginPage() {
 
   const tenantSlug = user?.memberships[0]?.tenant.slug;
   if (tenantSlug) {
-    redirect(`/${tenantSlug}/agenda`);
+    redirect(`/${tenantSlug}/inicio`);
   }
   if (user?.isPlatformAdmin) {
     redirect("/admin/empresas");

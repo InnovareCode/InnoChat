@@ -57,7 +57,7 @@ export default async function VerificarEmailPage({
           </CardHeader>
           <CardContent>
             <Button asChild>
-              <Link href={result.ok && result.data.tenantSlug ? `/${result.data.tenantSlug}/agenda` : "/login"}>
+              <Link href={result.ok && result.data.tenantSlug ? `/${result.data.tenantSlug}/inicio` : "/login"}>
                 {result.ok ? "Ir para o painel" : "Ir para o login"}
               </Link>
             </Button>

@@ -6,5 +6,5 @@ export default async function TenantIndexPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = await params;
-  redirect(`/${tenantSlug}/agenda`);
+  redirect(`/${tenantSlug}/inicio`);
 }

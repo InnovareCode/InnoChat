@@ -1,7 +1,10 @@
 import { AdminSidebarNav } from "./sidebar-nav";
 import { MobileNav } from "./mobile-nav";
-import { LogoutButton } from "./logout-button";
+import { UserBlock } from "./user-block";
 import { AdminSectionLabel } from "./section-label";
+import { BackgroundGlow } from "./background-glow";
+import { CommandPalette } from "./command-palette";
+import { PageTransition } from "./page-transition";
 
 type AdminShellProps = {
   userEmail: string;
@@ -11,7 +14,7 @@ type AdminShellProps = {
 function AdminBrand() {
   return (
     <div className="flex items-center gap-2.5">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-card bg-primary font-display text-sm font-bold text-white">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-card bg-gradient-to-br from-primary to-primary-strong font-display text-sm font-bold text-white shadow-card">
         IC
       </div>
       <span className="truncate font-display text-sm font-bold text-sidebar-text">
@@ -21,39 +24,43 @@ function AdminBrand() {
   );
 }
 
-/** Shell do admin da plataforma — mesmo padrão do painel do tenant, tema fixo Índigo Clínico. */
+/** Shell do admin da plataforma — mesmo padrão premium do painel do tenant, tema fixo Índigo Clínico. */
 export function AdminShell({ userEmail, children }: AdminShellProps) {
   return (
-    <div className="flex min-h-screen">
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-sidebar px-4 py-6 lg:flex">
+    <div className="relative flex min-h-screen">
+      <BackgroundGlow />
+      <aside className="relative z-10 hidden w-64 shrink-0 flex-col panel-sidebar-surface px-4 py-6 lg:flex">
         <div className="mb-8 px-2">
           <AdminBrand />
         </div>
         <div className="flex-1 overflow-y-auto">
           <AdminSidebarNav />
         </div>
+        <div className="mt-4 border-t border-white/10 pt-4">
+          <UserBlock userEmail={userEmail} />
+        </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-3 border-b border-border bg-surface px-4 sm:px-6">
-          <div className="flex items-center gap-3">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-surface/70 px-4 backdrop-blur-2xl sm:px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <MobileNav
               variant="admin"
               brand={<AdminBrand />}
-              footer={<LogoutButton className="w-full justify-start gap-2 text-sidebar-text hover:bg-sidebar-hover" />}
+              footer={<UserBlock userEmail={userEmail} />}
             />
-            <span className="font-display text-sm font-bold text-text lg:hidden">Plataforma</span>
+            <span className="truncate font-display text-sm font-bold text-text lg:hidden">Plataforma</span>
             <AdminSectionLabel />
           </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden max-w-[14rem] truncate text-sm text-text-secondary sm:inline">
-              {userEmail}
-            </span>
-            <LogoutButton />
+
+          <div className="flex shrink-0 items-center gap-3">
+            <CommandPalette variant="admin" />
           </div>
         </header>
 
-        <main className="flex-1 p-4 sm:p-6">{children}</main>
+        <main className="flex-1 p-4 sm:p-6">
+          <PageTransition>{children}</PageTransition>
+        </main>
       </div>
     </div>
   );

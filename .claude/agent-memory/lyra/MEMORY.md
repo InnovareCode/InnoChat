@@ -10,3 +10,4 @@
 - [Fase 7 — cobrança e cadastro público](fase7-cobranca-e-cadastro-publico.md) — leitura direta em Server Component, `router.refresh()` como polling, QR Pix gerado no cliente com `qrcode`, nav condicional por booleano.
 - [Fase 3 — WhatsApp QR](fase3-whatsapp-qr.md) — componente único de conexão reaproveitado no onboarding; timer de longa duração precisa de `ref`, não `state`, para ler o valor mais recente.
 - [Bug: diálogo dentro de condicional que a própria ação dele desmonta](bug-dialog-dentro-de-renderizacao-condicional.md) — `open` sempre no pai, componente com estado interno nunca amarrado a condição que sua própria ação muda.
+- [UI tipada contra contrato antes do backend existir](ui-tipada-contra-contrato-antes-do-backend.md) — valide com um stub temporário no caminho real, apague tudo depois, nunca deixe fantasma no diretório de outro agente.

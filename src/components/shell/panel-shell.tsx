@@ -2,8 +2,12 @@ import Link from "next/link";
 import { AlertTriangle, Clock, Lock, Mail } from "lucide-react";
 import { TenantSidebarNav } from "./sidebar-nav";
 import { MobileNav } from "./mobile-nav";
-import { LogoutButton } from "./logout-button";
+import { UserBlock } from "./user-block";
 import { TenantSectionLabel } from "./section-label";
+import { BackgroundGlow } from "./background-glow";
+import { CommandPalette } from "./command-palette";
+import { WhatsappStatusChip, type WhatsappTopbarStatus } from "./whatsapp-status-chip";
+import { PageTransition } from "./page-transition";
 import { ResendVerificationButton } from "@/components/account/resend-verification-button";
 
 type SubscriptionStatus = "TRIALING" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELED" | null;
@@ -16,6 +20,9 @@ type PanelShellProps = {
   trialHoursLeft?: number | null;
   onboardingIncomplete?: boolean;
   whatsappNeedsAttention?: boolean;
+  /** Status simples, já resolvido pelo servidor (`layout.tsx`) para o chip "ao vivo" da topbar —
+   * ver docs/design/premium-spec.md §1/§10. Nunca calculado aqui: este componente só desenha. */
+  whatsappStatus?: WhatsappTopbarStatus;
   /** `User.emailVerifiedAt` do dono da sessão, já resolvido como booleano pelo layout do tenant
    * (nunca lido daqui — o layout relê do banco, mesma regra de `requireVerifiedEmail`). */
   emailVerified?: boolean;
@@ -111,7 +118,7 @@ function Brand({ tenantName }: { tenantName: string }) {
 
   return (
     <div className="flex items-center gap-2.5">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-card bg-primary font-display text-sm font-bold text-white">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-card bg-gradient-to-br from-primary to-primary-strong font-display text-sm font-bold text-white shadow-card">
         {initials || "IC"}
       </div>
       <span className="truncate font-display text-sm font-bold text-sidebar-text">{tenantName}</span>
@@ -120,9 +127,10 @@ function Brand({ tenantName }: { tenantName: string }) {
 }
 
 /**
- * Shell do painel do tenant: sidebar fixa em desktop (≥ 1024px), gaveta com
- * hambúrguer no celular, topbar fixa com nome da empresa/usuário e botão de
- * sair sempre visível. Todo o conteúdo real das páginas vem em `children`.
+ * Shell do painel do tenant (docs/design/premium-spec.md §1/§2/§3/§11): sidebar em gradiente com
+ * navegação agrupada colapsável, topbar com vidro (`backdrop-blur-2xl`) + paleta de comando
+ * (Ctrl+K) + chip de status do WhatsApp, brilho de fundo sutil, transição entre páginas. Gaveta
+ * com hambúrguer no celular. Todo o conteúdo real das páginas vem em `children`.
  */
 export function PanelShell({
   tenantName,
@@ -132,12 +140,14 @@ export function PanelShell({
   trialHoursLeft = null,
   onboardingIncomplete = false,
   whatsappNeedsAttention = false,
+  whatsappStatus = "none",
   emailVerified = true,
   children,
 }: PanelShellProps) {
   return (
-    <div className="flex min-h-screen">
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-sidebar px-4 py-6 lg:flex">
+    <div className="relative flex min-h-screen">
+      <BackgroundGlow />
+      <aside className="relative z-10 hidden w-64 shrink-0 flex-col panel-sidebar-surface px-4 py-6 lg:flex">
         <div className="mb-8 px-2">
           <Brand tenantName={tenantName} />
         </div>
@@ -148,34 +158,38 @@ export function PanelShell({
             whatsappNeedsAttention={whatsappNeedsAttention}
           />
         </div>
+        <div className="mt-4 border-t border-white/10 pt-4">
+          <UserBlock userEmail={userEmail} />
+        </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-40 flex h-16 items-center justify-between gap-3 border-b border-border bg-surface px-4 sm:px-6">
-          <div className="flex items-center gap-3">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-40 flex h-16 items-center gap-3 border-b border-border bg-surface/70 px-4 backdrop-blur-2xl sm:px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <MobileNav
               variant="tenant"
               tenantSlug={tenantSlug}
               onboardingIncomplete={onboardingIncomplete}
               whatsappNeedsAttention={whatsappNeedsAttention}
               brand={<Brand tenantName={tenantName} />}
-              footer={<LogoutButton className="w-full justify-start gap-2 text-sidebar-text hover:bg-sidebar-hover" />}
+              footer={<UserBlock userEmail={userEmail} />}
             />
-            <span className="font-display text-sm font-bold text-text lg:hidden">{tenantName}</span>
+            <span className="truncate font-display text-sm font-bold text-text lg:hidden">{tenantName}</span>
             <TenantSectionLabel tenantSlug={tenantSlug} />
           </div>
-          <div className="flex items-center gap-3">
-            <span className="hidden max-w-[14rem] truncate text-sm text-text-secondary sm:inline">
-              {userEmail}
-            </span>
-            <LogoutButton />
+
+          <div className="flex shrink-0 items-center gap-3">
+            <CommandPalette variant="tenant" tenantSlug={tenantSlug} />
+            <WhatsappStatusChip status={whatsappStatus} />
           </div>
         </header>
 
         <SubscriptionBanner tenantSlug={tenantSlug} status={subscriptionStatus} trialHoursLeft={trialHoursLeft} />
         {!emailVerified ? <EmailVerificationBanner /> : null}
 
-        <main className="flex-1 p-4 sm:p-6">{children}</main>
+        <main className="flex-1 p-4 sm:p-6">
+          <PageTransition>{children}</PageTransition>
+        </main>
       </div>
     </div>
   );

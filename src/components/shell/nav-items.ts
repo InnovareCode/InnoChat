@@ -1,17 +1,18 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Activity,
   Bot,
   Building2,
   Calendar,
   ClipboardList,
   CreditCard,
+  LayoutDashboard,
   Layers,
   MessageCircle,
   Receipt,
   Rocket,
   Scissors,
   Settings,
-  Activity,
   UserRound,
   Users,
 } from "lucide-react";
@@ -26,54 +27,111 @@ export type NavItem = {
   dot?: boolean;
 };
 
+export type NavGroup = {
+  id: string;
+  label: string;
+  items: NavItem[];
+};
+
 /**
- * Itens da sidebar do painel do tenant (docs/arquitetura.md §9 + escopo
- * combinado com o dono para esta fase — "Bloqueios e feriados" e
- * "Atendimentos" entram nas Fases 2 e 8, quando as telas existirem).
- * `href` é relativo à raiz do tenant (`/{tenantSlug}`); `tenantNavItems(slug)`
- * resolve o caminho absoluto.
+ * Agrupamento da sidebar (docs/design/premium-spec.md §1/§2/§11, escopo combinado com o dono):
+ * navegação colapsável — grupos fixos e sempre abertos (padrão anterior) ficam ruins quando há
+ * 9+ seções. "Início" abre o grupo Operação porque é onde o dono passa mais tempo no dia a dia.
  */
-const TENANT_NAV_DEF: { label: string; path: string; icon: LucideIcon }[] = [
-  { label: "Agenda", path: "agenda", icon: Calendar },
-  { label: "Agendamentos", path: "agendamentos", icon: ClipboardList },
-  { label: "Serviços", path: "servicos", icon: Scissors },
-  { label: "Profissionais", path: "profissionais", icon: UserRound },
-  { label: "WhatsApp", path: "whatsapp", icon: MessageCircle },
-  { label: "Mensagens do bot", path: "mensagens-bot", icon: Bot },
-  { label: "Clientes", path: "clientes", icon: Users },
-  { label: "Configurações", path: "configuracoes", icon: Settings },
-  { label: "Assinatura", path: "assinatura", icon: CreditCard },
+const TENANT_GROUPS_DEF: { id: string; label: string; items: { label: string; path: string; icon: LucideIcon }[] }[] = [
+  {
+    id: "operacao",
+    label: "Operação",
+    items: [
+      { label: "Início", path: "inicio", icon: LayoutDashboard },
+      { label: "Agenda", path: "agenda", icon: Calendar },
+      { label: "Agendamentos", path: "agendamentos", icon: ClipboardList },
+      { label: "Clientes", path: "clientes", icon: Users },
+    ],
+  },
+  {
+    id: "catalogo",
+    label: "Catálogo",
+    items: [
+      { label: "Serviços", path: "servicos", icon: Scissors },
+      { label: "Profissionais", path: "profissionais", icon: UserRound },
+    ],
+  },
+  {
+    id: "canal",
+    label: "Canal",
+    items: [
+      { label: "WhatsApp", path: "whatsapp", icon: MessageCircle },
+      { label: "Mensagens do bot", path: "mensagens-bot", icon: Bot },
+    ],
+  },
+  {
+    id: "conta",
+    label: "Conta",
+    items: [
+      { label: "Configurações", path: "configuracoes", icon: Settings },
+      { label: "Assinatura", path: "assinatura", icon: CreditCard },
+    ],
+  },
 ];
 
 /**
  * `includeOnboarding` (docs/arquitetura.md §13, decisão do dono): o link para o assistente de
- * primeiros passos só aparece enquanto a configuração inicial (serviços, profissionais e
- * expediente) não está completa — calculado no `layout.tsx` do tenant, que já consulta o banco
- * para o banner de assinatura.
+ * primeiros passos só aparece enquanto a configuração inicial não está completa. Fica FORA dos
+ * grupos colapsáveis (item fixado no topo) — é uma tarefa temporária, não uma seção do produto,
+ * então não faz sentido poder escondê-la atrás de um grupo fechado.
  */
+export function tenantOnboardingItem(tenantSlug: string): NavItem | null {
+  return { label: "Primeiros passos", icon: Rocket, href: `/${tenantSlug}/onboarding` };
+}
+
+export function tenantNavGroups(
+  tenantSlug: string,
+  options: { whatsappNeedsAttention?: boolean } = {},
+): NavGroup[] {
+  return TENANT_GROUPS_DEF.map((group) => ({
+    id: group.id,
+    label: group.label,
+    items: group.items.map(({ label, path, icon }) => ({
+      label,
+      icon,
+      href: `/${tenantSlug}/${path}`,
+      dot: path === "whatsapp" && !!options.whatsappNeedsAttention,
+    })),
+  }));
+}
+
+/** Lista plana — usada pela paleta de comando e por `section-label.tsx` (não precisam de grupo). */
 export function tenantNavItems(
   tenantSlug: string,
   options: { includeOnboarding?: boolean; whatsappNeedsAttention?: boolean } = {},
 ): NavItem[] {
-  const items: NavItem[] = TENANT_NAV_DEF.map(({ label, path, icon }) => ({
-    label,
-    icon,
-    href: `/${tenantSlug}/${path}`,
-    dot: path === "whatsapp" && !!options.whatsappNeedsAttention,
-  }));
-
-  if (options.includeOnboarding) {
-    items.unshift({ label: "Primeiros passos", icon: Rocket, href: `/${tenantSlug}/onboarding` });
-  }
-
-  return items;
+  const items = tenantNavGroups(tenantSlug, options).flatMap((g) => g.items);
+  const onboarding = options.includeOnboarding ? tenantOnboardingItem(tenantSlug) : null;
+  return onboarding ? [onboarding, ...items] : items;
 }
 
-/** Itens da sidebar do admin da plataforma (docs/arquitetura.md §9, "Plataforma"). */
-export const adminNavItems: NavItem[] = [
-  { label: "Empresas", href: "/admin/empresas", icon: Building2 },
-  { label: "Planos", href: "/admin/planos", icon: Layers },
-  { label: "Cobrança", href: "/admin/cobranca", icon: Receipt },
-  { label: "Configurações da plataforma", href: "/admin/configuracoes", icon: Settings },
-  { label: "Saúde", href: "/admin/saude", icon: Activity },
+/** Grupos da sidebar do admin da plataforma (docs/arquitetura.md §9, "Plataforma"). */
+const ADMIN_GROUPS_DEF: { id: string; label: string; items: { label: string; href: string; icon: LucideIcon }[] }[] = [
+  {
+    id: "operacao",
+    label: "Operação",
+    items: [
+      { label: "Empresas", href: "/admin/empresas", icon: Building2 },
+      { label: "Cobrança", href: "/admin/cobranca", icon: Receipt },
+    ],
+  },
+  {
+    id: "plataforma",
+    label: "Plataforma",
+    items: [
+      { label: "Planos", href: "/admin/planos", icon: Layers },
+      { label: "Configurações da plataforma", href: "/admin/configuracoes", icon: Settings },
+      { label: "Saúde", href: "/admin/saude", icon: Activity },
+    ],
+  },
 ];
+
+export const adminNavGroups: NavGroup[] = ADMIN_GROUPS_DEF;
+
+export const adminNavItems: NavItem[] = ADMIN_GROUPS_DEF.flatMap((g) => g.items);
