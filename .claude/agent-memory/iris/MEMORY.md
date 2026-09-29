@@ -13,3 +13,4 @@
 - [Testar arrastar-e-soltar (dnd-kit) na Agenda](dnd_kit_drag_testing.md) — mouse simulado, `scrollIntoViewIfNeeded`, checar resultado no banco em vez do pixel exato.
 - [Mercado Pago não tem servidor fake possível (API_BASE fixo)](mercadopago_no_fake_server.md) — RATE_LIMITED é E2E real; MISSING_DOCUMENT só em integração (gateway injetado).
 - [Achados da rodada C1 (2026-09-29)](bugs_found_log_round3.md) — nav dot invisível com grupo colapsado, `/termos` sem `revalidatePath`, pollution de dados antiga limpa.
+- [Achados da rodada 2026-09-29 (notificações + espera)](bugs_found_log_round4.md) — tour intercepta clique, loading.tsx => 200 no notFound, sync n8n exige nó Webhook, drag flaky por autoscroll, overflow 360px.

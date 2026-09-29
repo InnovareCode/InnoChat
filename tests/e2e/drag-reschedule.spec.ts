@@ -17,7 +17,11 @@ import { prisma } from "./fixtures/db";
  * verdade, saiu de onde estava" já prova o contrato; testar o pixel exato seria testar o algoritmo
  * de colisão de uma lib de terceiros, não o produto.
  */
-test.use({ storageState: OWNER_STORAGE_STATE });
+// Viewport alto de propósito: a grade da Agenda rola por dentro (`max-h: 100vh - 280px`) e o dnd-kit
+// faz AUTO-SCROLL quando o ponteiro chega perto da borda de baixo dela. Com a linha de estatísticas
+// nova acima da grade (agendamentos hoje/próximos), a linha de 10:00 caía justo nessa borda em 720px
+// de altura: a grade rolava durante o arraste e o slot-alvo fugia do ponteiro (flaky ~40%, medido).
+test.use({ storageState: OWNER_STORAGE_STATE, viewport: { width: 1280, height: 1000 } });
 
 const CLIENT_NAME = `${E2E_RUN_PREFIX} Cliente Arraste`;
 const ROW_HEIGHT_PX = 48;
@@ -57,7 +61,7 @@ async function bookAt(page: Page, professional: "Ana" | "Bruna", timeLabel: stri
 
 /** Arrasta `card` até `target`, rolando a grade (que rola por DENTRO — `overflow-auto`) para os
  * dois ficarem visíveis antes de calcular as coordenadas de mouse. */
-async function dragCardTo(page: Page, card: Locator, target: Locator, opts: { untilOver?: Locator } = {}) {
+async function dragCardTo(page: Page, card: Locator, target: Locator) {
   await target.scrollIntoViewIfNeeded();
   const from = await card.boundingBox();
   const to = await target.boundingBox();
@@ -68,10 +72,6 @@ async function dragCardTo(page: Page, card: Locator, target: Locator, opts: { un
   // PointerSensor sem já sair de cima do card, senão o dnd-kit nunca registra a ativação).
   await page.mouse.move(from.x + from.width / 2 + 12, from.y + from.height / 2 + 12, { steps: 5 });
   await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 });
-  // Soltar antes de o dnd-kit registrar a última colisão (`isOver` -> `bg-primary/15` no slot)
-  // faz o `over` ficar num slot do caminho (ou nulo) — flaky ~30% no teste "outra profissional".
-  // Quando o teste sabe qual coluna é o alvo, espera o destaque aparecer antes do mouse.up.
-  if (opts.untilOver) await expect(opts.untilOver.first()).toBeVisible();
   await page.mouse.up();
 }
 
@@ -193,8 +193,7 @@ test.describe("Arrastar para remarcar (Agenda, visão Dia)", () => {
     const card = page.getByRole("button").filter({ hasText: name });
     await expect(card).toBeVisible();
     const brunaSlot = page.getByRole("button", { name: /Novo agendamento com Bruna às 10:00/ });
-    const brunaSlotUnderDrag = page.getByRole("button", { name: /Novo agendamento com Bruna/ }).and(page.locator('[class*="bg-primary/15"]'));
-    await dragCardTo(page, card, brunaSlot, { untilOver: brunaSlotUnderDrag });
+    await dragCardTo(page, card, brunaSlot);
 
     await expect(page.getByText("Não é possível mudar de profissional arrastando").first()).toBeVisible();
     // Continua com Ana, no mesmo horário (fonte de verdade: banco) — e o slot da Bruna às 10:00

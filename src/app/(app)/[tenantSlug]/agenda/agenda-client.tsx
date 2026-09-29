@@ -943,9 +943,9 @@ function DayView({
           const bands = bandsForProfessional(prof.id);
           return (
             <Card key={prof.id}>
-              <div className="flex items-center justify-between border-b border-border p-4">
-                <div>
-                  <p className="font-display text-sm font-bold text-text">{prof.name}</p>
+              <div className="flex items-center justify-between gap-3 border-b border-border p-4">
+                <div className="min-w-0">
+                  <p className="font-display text-sm font-bold text-text [overflow-wrap:anywhere]">{prof.name}</p>
                   <p className="text-xs tabular-nums text-text-secondary">{workingHoursSummary(todaysHours)}</p>
                   {!isOffToday && bands.length > 0 ? (
                     <p className="mt-0.5 text-xs font-medium text-warning">
@@ -957,6 +957,7 @@ function DayView({
                   <Button
                     variant="ghost"
                     size="sm"
+                    className="shrink-0"
                     onClick={() => onSlotClick(prof.id, slotToISO(Math.max(0, (nowMin ?? startMin) - startMin)))}
                   >
                     <Plus className="h-3.5 w-3.5" aria-hidden="true" />
