@@ -40,7 +40,7 @@ export type UpcomingAppointmentItem = {
 
 export type TimelineItem = {
   id: string;
-  action: "CREATED" | "CANCELED" | "RESCHEDULED" | "COMPLETED" | "NO_SHOW";
+  action: "CREATED" | "CANCELED" | "RESCHEDULED" | "COMPLETED" | "NO_SHOW" | "REOPENED";
   authorType: "CONTACT" | "USER" | "SYSTEM";
   authorLabel: string;
   note: string | null;

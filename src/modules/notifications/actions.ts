@@ -2,7 +2,8 @@
 
 import { z } from "zod";
 import { requireTenantMember } from "@/lib/auth/guards";
-import { runAction, type Result } from "@/lib/result";
+import { logger } from "@/lib/logger";
+import { err, runAction, type Result } from "@/lib/result";
 import {
   getAppointmentTimeline,
   getUpcomingAppointments,
@@ -71,13 +72,29 @@ export async function getUpcomingAppointmentsAction(input: {
   });
 }
 
+/**
+ * Histórico do agendamento. Falha INESPERADA (bug, banco) não vira tela de erro do Next: é
+ * registrada no log (só ids e o tipo/mensagem técnica do erro, nunca dados do cliente) e devolvida
+ * como `Result` de erro `TIMELINE_UNAVAILABLE`, para a UI mostrar a mensagem sem perder o painel.
+ */
 export async function getAppointmentTimelineAction(input: {
   tenantSlug: string;
   appointmentId: string;
 }): Promise<Result<{ items: TimelineItem[] }>> {
-  return runAction(async () => {
-    const data = z.object({ tenantSlug: tenantSlugSchema, appointmentId: z.string().min(1).max(120) }).parse(input);
-    const ctx = await requireTenantMember(data.tenantSlug);
-    return getAppointmentTimeline(ctx, data.appointmentId);
-  });
+  try {
+    return await runAction(async () => {
+      const data = z.object({ tenantSlug: tenantSlugSchema, appointmentId: z.string().min(1).max(120) }).parse(input);
+      const ctx = await requireTenantMember(data.tenantSlug);
+      return getAppointmentTimeline(ctx, data.appointmentId);
+    });
+  } catch (error) {
+    const e = error instanceof Error ? error : new Error(String(error));
+    logger.error("getAppointmentTimelineAction falhou", {
+      appointmentId: typeof input?.appointmentId === "string" ? input.appointmentId.slice(0, 120) : null,
+      errorName: e.name,
+      errorCode: (e as { code?: unknown }).code ?? null,
+      errorMessage: e.message.slice(0, 500),
+    });
+    return err("TIMELINE_UNAVAILABLE", "Não foi possível carregar o histórico agora.");
+  }
 }

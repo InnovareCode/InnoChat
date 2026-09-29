@@ -73,9 +73,17 @@ export function appointmentBody(p: { contactName: string; serviceName: string; p
   return [p.contactName, p.serviceName, `com ${p.professionalName}`, formatWhen(p.startsAt, p.timezone)].join(" • ");
 }
 
-export function timelineLabel(action: EventAction, authorType: EventAuthorType): string {
+/** Ação de um evento na linha do tempo. REOPENED existe só aqui: não gera notificação. */
+export type TimelineAction = EventAction | "REOPENED";
+
+/**
+ * Rótulo pt-BR da linha do tempo. `authorName` (nome curto do membro da equipe, quando resolvido)
+ * só entra nos eventos de encerramento: "Atendimento concluído por ana".
+ */
+export function timelineLabel(action: TimelineAction, authorType: EventAuthorType, authorName?: string | null): string {
   const who = authorType === "CONTACT" ? "Cliente" : null;
   const via = authorType === "CONTACT" ? " pelo WhatsApp" : authorType === "USER" ? " pelo painel" : " pelo sistema";
+  const by = authorType === "USER" && authorName ? ` por ${authorName}` : "";
   switch (action) {
     case "CREATED":
       return who ? `Cliente agendou${via}` : `Agendado${via}`;
@@ -84,9 +92,11 @@ export function timelineLabel(action: EventAction, authorType: EventAuthorType):
     case "CANCELED":
       return who ? `Cliente cancelou${via}` : `Cancelado${via}`;
     case "COMPLETED":
-      return "Atendimento concluído";
+      return `Atendimento concluído${by}`;
     case "NO_SHOW":
-      return "Cliente não compareceu";
+      return by ? `Cliente faltou — marcado${by}` : "Cliente faltou";
+    case "REOPENED":
+      return `Atendimento reaberto${by}`;
   }
 }
 

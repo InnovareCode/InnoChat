@@ -466,6 +466,8 @@ enum AppointmentEventAction {
   RESCHEDULED
   COMPLETED
   NO_SHOW
+  // Desfez COMPLETED/NO_SHOW (voltou para SCHEDULED). Não gera notificação.
+  REOPENED
 }
 
 // Trilha imutável: só INSERT pela aplicação.

@@ -113,6 +113,7 @@ async function loadEventItems(
   const rows = await getPrisma().appointmentEvent.findMany({
     where: {
       tenantId: ctx.tenant.id,
+      action: { not: "REOPENED" }, // reabrir é só histórico do agendamento, não vira notificação
       createdAt: {
         gte: range.windowStart,
         ...(range.after ? { gt: range.after } : {}),
@@ -291,7 +292,7 @@ async function countUnread(
 ): Promise<{ unreadCount: number; readKeys: Set<string> }> {
   const floor = new Date(Math.max(extra.windowStart.getTime(), extra.readAllAt?.getTime() ?? 0));
   const events = await getPrisma().appointmentEvent.findMany({
-    where: { tenantId: ctx.tenant.id, createdAt: { gt: floor } },
+    where: { tenantId: ctx.tenant.id, action: { not: "REOPENED" }, createdAt: { gt: floor } },
     orderBy: { createdAt: "desc" },
     take: EVENT_CAP,
     select: { id: true, createdAt: true },
@@ -481,6 +482,8 @@ export async function getAppointmentTimeline(ctx: TenantContext, appointmentId: 
     where: { appointmentId: appointment.id },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: 200,
+    // Colunas explícitas: a linha do tempo não depende de `tenantId` (nulo em eventos legados).
+    select: { id: true, action: true, authorType: true, authorId: true, note: true, createdAt: true },
   });
 
   const userIds = [...new Set(events.filter((e) => e.authorType === "USER" && e.authorId).map((e) => e.authorId as string))];
@@ -506,7 +509,11 @@ export async function getAppointmentTimeline(ctx: TenantContext, appointmentId: 
             : "Sistema",
       note: e.note,
       createdAt: e.createdAt.toISOString(),
-      label: timelineLabel(e.action, e.authorType),
+      label: timelineLabel(
+        e.action,
+        e.authorType,
+        e.authorType === "USER" && e.authorId ? userLabel.get(e.authorId) : null,
+      ),
     })),
   };
 }

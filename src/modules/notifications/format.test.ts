@@ -32,4 +32,12 @@ describe("notifications/format", () => {
     expect(minutesUntil(new Date("2026-10-01T10:30:10Z"), now)).toBe(31);
     expect(minutesUntil(new Date("2026-10-01T09:00:00Z"), now)).toBe(0);
   });
+
+  it("rótulos de encerramento e reabertura (com e sem o nome do membro)", () => {
+    expect(timelineLabel("COMPLETED", "USER", "Ana")).toBe("Atendimento concluído por Ana");
+    expect(timelineLabel("NO_SHOW", "USER", "Ana")).toBe("Cliente faltou — marcado por Ana");
+    expect(timelineLabel("REOPENED", "USER", "Ana")).toBe("Atendimento reaberto por Ana");
+    expect(timelineLabel("COMPLETED", "SYSTEM")).toBe("Atendimento concluído");
+    expect(timelineLabel("NO_SHOW", "USER", null)).toBe("Cliente faltou");
+  });
 });

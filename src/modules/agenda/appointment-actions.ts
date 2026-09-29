@@ -4,7 +4,15 @@ import { z } from "zod";
 import { requireTenantMember } from "@/lib/auth/guards";
 import { runAction, type Result } from "@/lib/result";
 import { assertTenantCanWrite } from "@/modules/billing/service";
-import { cancelAppointment, createAppointmentManual, listAppointments, rescheduleAppointment } from "./appointments";
+import {
+  cancelAppointment,
+  createAppointmentManual,
+  finishAppointment,
+  listAppointments,
+  reopenAppointment,
+  rescheduleAppointment,
+  type AppointmentView,
+} from "./appointments";
 
 const listSchema = z.object({
   from: z.coerce.date(),
@@ -59,5 +67,38 @@ export async function rescheduleAppointmentAction(tenantSlug: string, appointmen
     await assertTenantCanWrite(tenant.id);
     const data = rescheduleSchema.parse(input);
     return rescheduleAppointment(tenant.id, appointmentId, data.startsAt, user.id);
+  });
+}
+
+const appointmentRefSchema = z.object({ tenantSlug: z.string().min(1).max(100), appointmentId: z.string().min(1).max(120) });
+
+/**
+ * Concluir / cliente faltou / reabrir — OWNER e STAFF (qualquer membro), bloqueados com a conta
+ * suspensa. Recebem um objeto `{ tenantSlug, appointmentId }` e devolvem o agendamento atualizado.
+ */
+export async function completeAppointmentAction(input: { tenantSlug: string; appointmentId: string }): Promise<Result<AppointmentView>> {
+  return runAction(async () => {
+    const data = appointmentRefSchema.parse(input);
+    const { tenant, user } = await requireTenantMember(data.tenantSlug);
+    await assertTenantCanWrite(tenant.id);
+    return finishAppointment(tenant.id, data.appointmentId, user.id, "COMPLETED");
+  });
+}
+
+export async function markNoShowAppointmentAction(input: { tenantSlug: string; appointmentId: string }): Promise<Result<AppointmentView>> {
+  return runAction(async () => {
+    const data = appointmentRefSchema.parse(input);
+    const { tenant, user } = await requireTenantMember(data.tenantSlug);
+    await assertTenantCanWrite(tenant.id);
+    return finishAppointment(tenant.id, data.appointmentId, user.id, "NO_SHOW");
+  });
+}
+
+export async function reopenAppointmentAction(input: { tenantSlug: string; appointmentId: string }): Promise<Result<AppointmentView>> {
+  return runAction(async () => {
+    const data = appointmentRefSchema.parse(input);
+    const { tenant, user } = await requireTenantMember(data.tenantSlug);
+    await assertTenantCanWrite(tenant.id);
+    return reopenAppointment(tenant.id, data.appointmentId, user.id);
   });
 }

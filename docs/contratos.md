@@ -212,6 +212,12 @@ a Fase 7 precisa adicionar essa checagem antes de liberar o cadastro público.
   `input: { startsAt }`. Erros: `NOT_FOUND`, `INVALID_STATE` (não está `SCHEDULED`), `TOO_LATE`,
   `RULE_VIOLATION`, `SLOT_TAKEN`.
 
+- **Encerramento do atendimento** (2026-09-29) — `completeAppointmentAction`, `markNoShowAppointmentAction`, `reopenAppointmentAction`: todas `(input: { tenantSlug, appointmentId }) → Result<AppointmentView>`. `AppointmentView` = a linha do agendamento (mesmo formato que cancelar/remarcar devolvem), com `status`, `startsAt`/`endsAt` (Date; a UI mostra "Concluir"/"Cliente faltou" só quando `status === "SCHEDULED"` e `startsAt <= agora`) e `updatedAt`. OWNER e STAFF; `assertTenantCanWrite` (conta suspensa → `TENANT_SUSPENDED`).
+  - `complete`/`markNoShow`: só de `SCHEDULED` **e** só depois do início. Erros: `APPOINTMENT_NOT_STARTED` (atendimento futuro; mensagem legível), `INVALID_STATE` (cancelado, ou já no outro encerramento), `NOT_FOUND` (inclusive agendamento de outra empresa), `INVALID_PAYLOAD`. Repetir a mesma ação é idempotente (sem 2º evento).
+  - `reopen`: `COMPLETED`/`NO_SHOW` → `SCHEDULED` com evento `REOPENED`. Erros: `INVALID_STATE` (cancelado), `SLOT_TAKEN` (outro agendamento do mesmo profissional ocupou o horário — a constraint EXCLUDE recusa), `NOT_FOUND`. Já `SCHEDULED` = idempotente.
+  - Grava `AppointmentEvent` (`COMPLETED`/`NO_SHOW`/`REOPENED`, `authorType: USER`, `authorId` = membro) na MESMA transação de um `updateMany` condicional (status + início no WHERE) — sem corrida com cancelamento/remarcação. Notificações: `APPOINTMENT_COMPLETED` / `APPOINTMENT_NO_SHOW` (kinds já existentes); `REOPENED` não notifica. A "taxa de faltas" do Início (`noShowRatePercent`) já lia `NO_SHOW`: passa a refletir o dado real.
+  - Migration aditiva `20260930300000_appointment_event_reopened` (`ALTER TYPE ... ADD VALUE 'REOPENED'`).
+
 ### `src/core/agenda` (funções puras, sem I/O — docs/arquitetura.md §5, §10)
 
 Usadas pelos módulos acima e reaproveitáveis pela API interna do bot (Fase 4):
@@ -1758,7 +1764,7 @@ Não há restrição de profissional por STAFF no produto: STAFF vê todos os ev
 - `pollNotificationsAction({ tenantSlug, since })` → `{ unreadCount; fresh }`. `fresh` = criadas depois de `since` (ISO), no máximo 10, mais novas primeiro. Custo: 1 leitura da Membership, 1 consulta indexada de eventos, 4 leituras pequenas das fontes derivadas, 1 de `NotificationRead`. `unreadCount` considera até 200 eventos da janela.
 - `markNotificationsReadAction({ tenantSlug, ids?, all? })` → `{ unreadCount }`. `ids` (≤100) são os `id` das notificações; sem `ids` nem `all` ou id malformado → `INVALID_PAYLOAD`. Idempotente.
 - `getUpcomingAppointmentsAction({ tenantSlug })` → `{ items }` — até 5 agendamentos SCHEDULED de hoje (fuso da empresa) a partir de agora, com `minutesUntil`.
-- `getAppointmentTimelineAction({ tenantSlug, appointmentId })` → `{ items }` cronológico (antigo→novo) com `label` pt-BR ("Cliente agendou pelo WhatsApp", "Remarcado pelo painel"…). `authorLabel`: nome do contato / parte local do e-mail do membro / "Sistema". Agendamento de outra empresa → `NOT_FOUND`.
+- `getAppointmentTimelineAction({ tenantSlug, appointmentId })` → `{ items }` cronológico (antigo→novo) com `label` pt-BR ("Cliente agendou pelo WhatsApp", "Remarcado pelo painel"…). `authorLabel`: nome do contato / parte local do e-mail do membro / "Sistema". Agendamento de outra empresa → `NOT_FOUND`. `action` inclui `REOPENED` (só na timeline; nunca vira notificação). Rótulos novos: "Atendimento concluído por ana", "Cliente faltou — marcado por ana", "Atendimento reaberto por ana" (o "por ..." só aparece quando o membro é resolvido). Falha inesperada NÃO lança mais: é logada (`logger.error`, só `appointmentId` + tipo/mensagem técnica do erro) e devolve `{ ok:false, error:{ code:"TIMELINE_UNAVAILABLE", message:"Não foi possível carregar o histórico agora." } }`.
 - Campo extra aditivo em `AppNotification`: `byMe?: boolean` (a ação foi do próprio usuário — a UI pode não exibir toast).
 
 Nota: nenhuma rota do produto grava hoje `AppointmentEvent` de `COMPLETED`/`NO_SHOW` (não existe ação de "concluir"/"faltou"); o kind já é suportado assim que houver.

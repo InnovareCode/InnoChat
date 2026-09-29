@@ -356,3 +356,93 @@ export async function rescheduleAppointment(
     throw error;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Encerramento do atendimento: concluir / cliente faltou / reabrir
+// ---------------------------------------------------------------------------
+
+/** O que a UI recebe de volta: a linha do agendamento (mesmo formato de cancelar/remarcar). `startsAt`/`endsAt` são Date. */
+export type AppointmentView = NonNullable<Awaited<ReturnType<typeof loadOwnedAppointment>>>;
+
+type FinishOutcome = "COMPLETED" | "NO_SHOW";
+
+const FINISH_LABEL: Record<FinishOutcome, string> = {
+  COMPLETED: "concluir",
+  NO_SHOW: "marcar falta em",
+};
+
+/**
+ * Conclui (`COMPLETED`) ou marca falta (`NO_SHOW`) — SÓ a partir de `SCHEDULED` e SÓ depois do
+ * horário de início. A troca é uma atualização CONDICIONAL (`updateMany` com status + início na
+ * cláusula WHERE) dentro da mesma transação que grava o evento: se um cancelamento/remarcação
+ * ganhar a corrida, `count === 0`, nada é gravado e o erro devolvido reflete o estado real.
+ * Repetir a mesma ação num agendamento que já está no estado-alvo é idempotente (duplo clique).
+ */
+export async function finishAppointment(tenantId: string, appointmentId: string, actorId: string, outcome: FinishOutcome) {
+  const appointment = await loadOwnedAppointment(tenantId, appointmentId);
+  if (appointment.status === outcome) return appointment;
+
+  const now = new Date();
+  const assertStartedAndOpen = (current: { status: string; startsAt: Date }) => {
+    if (current.status !== "SCHEDULED") {
+      throw new DomainError("INVALID_STATE", `Só é possível ${FINISH_LABEL[outcome]} um agendamento em aberto.`);
+    }
+    if (current.startsAt.getTime() > now.getTime()) {
+      throw new DomainError("APPOINTMENT_NOT_STARTED", "O atendimento ainda não começou. Só dá para concluir ou marcar falta a partir do horário de início.");
+    }
+  };
+  assertStartedAndOpen(appointment);
+
+  const prisma = getPrisma();
+  return prisma.$transaction(async (tx) => {
+    const { count } = await tx.appointment.updateMany({
+      where: { id: appointmentId, tenantId, status: "SCHEDULED", startsAt: { lte: now } },
+      data: { status: outcome },
+    });
+    if (count === 0) {
+      // Perdeu a corrida (cancelado/remarcado/já finalizado entre a leitura e a escrita).
+      const fresh = await tx.appointment.findFirst({ where: { id: appointmentId, tenantId } });
+      if (!fresh) throw new DomainError("NOT_FOUND", "Agendamento não encontrado.");
+      if (fresh.status === outcome) return fresh;
+      assertStartedAndOpen(fresh);
+      throw new DomainError("INVALID_STATE", "O agendamento mudou enquanto você agia. Recarregue e tente de novo.");
+    }
+    await tx.appointmentEvent.create({ data: { appointmentId, action: outcome, authorType: "USER", authorId: actorId } });
+    return tx.appointment.findFirstOrThrow({ where: { id: appointmentId, tenantId } });
+  });
+}
+
+/**
+ * Desfaz um engano: `COMPLETED`/`NO_SHOW` → `SCHEDULED`, com evento `REOPENED`. Se o horário foi
+ * ocupado por outro agendamento do mesmo profissional nesse meio-tempo, a constraint EXCLUDE
+ * recusa e vira `SLOT_TAKEN`. Já `SCHEDULED` = idempotente; `CANCELED` = `INVALID_STATE`.
+ */
+export async function reopenAppointment(tenantId: string, appointmentId: string, actorId: string) {
+  const appointment = await loadOwnedAppointment(tenantId, appointmentId);
+  if (appointment.status === "SCHEDULED") return appointment;
+  if (appointment.status === "CANCELED") {
+    throw new DomainError("INVALID_STATE", "Um agendamento cancelado não pode ser reaberto.");
+  }
+
+  try {
+    return await getPrisma().$transaction(async (tx) => {
+      const { count } = await tx.appointment.updateMany({
+        where: { id: appointmentId, tenantId, status: { in: ["COMPLETED", "NO_SHOW"] } },
+        data: { status: "SCHEDULED" },
+      });
+      if (count === 0) {
+        const fresh = await tx.appointment.findFirst({ where: { id: appointmentId, tenantId } });
+        if (!fresh) throw new DomainError("NOT_FOUND", "Agendamento não encontrado.");
+        if (fresh.status === "SCHEDULED") return fresh;
+        throw new DomainError("INVALID_STATE", "Um agendamento cancelado não pode ser reaberto.");
+      }
+      await tx.appointmentEvent.create({ data: { appointmentId, action: "REOPENED", authorType: "USER", authorId: actorId } });
+      return tx.appointment.findFirstOrThrow({ where: { id: appointmentId, tenantId } });
+    });
+  } catch (error) {
+    if (isExclusionViolation(error)) {
+      throw new DomainError("SLOT_TAKEN", "Outro agendamento ocupou este horário. Não dá para reabrir este atendimento.", { alternatives: [] });
+    }
+    throw error;
+  }
+}
