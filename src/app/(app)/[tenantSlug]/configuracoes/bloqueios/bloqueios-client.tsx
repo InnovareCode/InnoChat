@@ -140,6 +140,7 @@ export function BloqueiosClient({
       {exceptions.length === 0 ? (
         <EmptyState
           icon={CalendarOff}
+          variant="highlight"
           title="Nenhum bloqueio ou feriado cadastrado"
           description="Cadastre feriados e fechamentos que afetam todos os profissionais de uma vez, como um recesso de fim de ano."
           action={
@@ -149,14 +150,17 @@ export function BloqueiosClient({
           }
         />
       ) : (
-        <Card>
+        <Card className="rounded-hero">
           <CardHeader>
             <CardTitle>Períodos cadastrados</CardTitle>
             <CardDescription>Ordenados do mais próximo para o mais distante.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {exceptions.map((exc) => (
-              <div key={exc.id} className="flex items-center justify-between gap-3 rounded-card border border-border p-3">
+              <div
+                key={exc.id}
+                className="flex items-center justify-between gap-3 rounded-card border border-border p-3 transition-colors duration-150 hover:border-primary/20 hover:bg-primary/[0.03]"
+              >
                 <div>
                   <div className="flex items-center gap-2">
                     <Badge variant={exc.type === "HOLIDAY" ? "warning" : "neutral"}>{TYPE_LABEL[exc.type]}</Badge>

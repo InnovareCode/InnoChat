@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { RotateCcw } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import { CheckCheck, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { STAGGER_DELAY_S } from "@/components/lib/motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -100,11 +102,31 @@ const PREVIEW_SAMPLE_VARS: Record<(typeof BOT_TEXT_VARIABLES)[number], string> =
   preco: "R$ 80,00",
 };
 
-function WhatsAppBubble({ text }: { text: string }) {
+/** Prévia caprichada em balão de WhatsApp (docs/design/screens/premium/onda2): fundo com o
+ * padrão de papel de parede sutil do WhatsApp Web, cabeçalho com nome do bot, e o balão com
+ * "cauda", horário e duplo check — para o dono reconhecer de cara o que o cliente vai ver. */
+function WhatsAppBubble({ text, tenantName }: { text: string; tenantName?: string }) {
   return (
-    <div className="rounded-card bg-[#111b21] p-4">
-      <div className="max-w-[85%] rounded-lg rounded-tl-none bg-[#202c33] px-3 py-2 text-sm text-[#e9edef] shadow-sm">
-        <p className="whitespace-pre-wrap">{text || " "}</p>
+    <div className="overflow-hidden rounded-hero border border-[#0b141a] bg-[#0b141a] shadow-card">
+      <div className="flex items-center gap-2.5 bg-[#202c33] px-3 py-2.5">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00a884] text-xs font-semibold text-white">
+          {(tenantName ?? "IC").slice(0, 2).toUpperCase()}
+        </span>
+        <div>
+          <p className="text-sm font-medium text-[#e9edef]">{tenantName ?? "Assistente"}</p>
+          <p className="text-[11px] text-[#8696a0]">via WhatsApp Business</p>
+        </div>
+      </div>
+      <div
+        className="min-h-[120px] p-4 [background-image:radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.04)_1px,transparent_0)] [background-size:16px_16px]"
+      >
+        <div className="relative max-w-[85%] rounded-lg rounded-tl-none bg-[#202c33] px-3 py-2 text-sm text-[#e9edef] shadow-sm">
+          <p className="whitespace-pre-wrap">{text || " "}</p>
+          <span className="mt-1 flex items-center justify-end gap-1 text-[10px] text-[#8696a0]">
+            14:32
+            <CheckCheck className="h-3 w-3 text-[#53bdeb]" aria-hidden="true" />
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -112,6 +134,7 @@ function WhatsAppBubble({ text }: { text: string }) {
 
 export function MensagensBotClient({ tenantSlug, initialTexts }: { tenantSlug: string; initialTexts: BotTextRow[] }) {
   const { notify } = useToast();
+  const reduceMotion = useReducedMotion();
   const [texts, setTexts] = useState<Map<BotTextKeyLiteral, BotTextRow>>(
     new Map(initialTexts.map((row) => [row.key, row])),
   );
@@ -155,46 +178,53 @@ export function MensagensBotClient({ tenantSlug, initialTexts }: { tenantSlug: s
       <PageHeader title="Mensagens do bot" description="Edite os textos que o bot envia no WhatsApp, por etapa da conversa." />
 
       <div className="flex flex-col gap-6">
-        {GROUPS.map((group) => (
-          <Card key={group.label}>
-            <CardHeader>
-              <CardTitle>{group.label}</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col divide-y divide-border p-0">
-              {group.keys.map((key) => {
-                const row = texts.get(key);
-                if (!row) return null;
-                return (
-                  <div key={key} className="flex items-center justify-between gap-4 p-5">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-text">{KEY_DESCRIPTION[key]}</p>
-                        <Badge variant={row.isDefault ? "neutral" : "primary"}>
-                          {row.isDefault ? "Padrão" : "Personalizado"}
-                        </Badge>
+        {GROUPS.map((group, groupIndex) => (
+          <motion.div
+            key={group.label}
+            initial={reduceMotion ? undefined : { opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, delay: groupIndex * STAGGER_DELAY_S, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <Card className="rounded-hero transition-[border-color,box-shadow] duration-200 hover:border-primary/20 hover:shadow-card-hover">
+              <CardHeader>
+                <CardTitle>{group.label}</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col divide-y divide-border p-0">
+                {group.keys.map((key) => {
+                  const row = texts.get(key);
+                  if (!row) return null;
+                  return (
+                    <div key={key} className="flex items-center justify-between gap-4 p-5">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-text">{KEY_DESCRIPTION[key]}</p>
+                          <Badge variant={row.isDefault ? "neutral" : "primary"}>
+                            {row.isDefault ? "Padrão" : "Personalizado"}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 truncate text-sm text-text-secondary">{row.text}</p>
                       </div>
-                      <p className="mt-1 truncate text-sm text-text-secondary">{row.text}</p>
-                    </div>
-                    <div className="flex shrink-0 gap-1">
-                      {!row.isDefault ? (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label={`Restaurar padrão de ${KEY_DESCRIPTION[key]}`}
-                          onClick={() => setConfirmReset(key)}
-                        >
-                          <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                      <div className="flex shrink-0 gap-1">
+                        {!row.isDefault ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Restaurar padrão de ${KEY_DESCRIPTION[key]}`}
+                            onClick={() => setConfirmReset(key)}
+                          >
+                            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        ) : null}
+                        <Button variant="secondary" size="sm" onClick={() => setEditingKey(key)}>
+                          Editar
                         </Button>
-                      ) : null}
-                      <Button variant="secondary" size="sm" onClick={() => setEditingKey(key)}>
-                        Editar
-                      </Button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          </motion.div>
         ))}
       </div>
 

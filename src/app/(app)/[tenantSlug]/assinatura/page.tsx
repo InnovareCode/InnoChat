@@ -15,7 +15,10 @@ export default async function AssinaturaPage({
 }) {
   const { tenantSlug } = await params;
 
-  const tenant = await getPrisma().tenant.findUnique({ where: { slug: tenantSlug }, select: { id: true, timezone: true } });
+  const tenant = await getPrisma().tenant.findUnique({
+    where: { slug: tenantSlug },
+    select: { id: true, timezone: true, document: true },
+  });
   if (!tenant) {
     notFound();
   }
@@ -80,5 +83,13 @@ export default async function AssinaturaPage({
       : null,
   };
 
-  return <AssinaturaClient tenantSlug={tenantSlug} snapshot={snapshot} plans={plans} isOwner={membership?.role === "OWNER"} />;
+  return (
+    <AssinaturaClient
+      tenantSlug={tenantSlug}
+      snapshot={snapshot}
+      plans={plans}
+      isOwner={membership?.role === "OWNER"}
+      hasDocument={!!tenant.document}
+    />
+  );
 }

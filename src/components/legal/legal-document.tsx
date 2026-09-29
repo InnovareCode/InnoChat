@@ -92,7 +92,7 @@ function Block({ block, level }: { block: LegalBlock; level: 3 | 4 }) {
 export function LegalDocument({ title, intro, sections, related }: LegalDocumentProps) {
   return (
     <div className="min-h-screen bg-bg">
-      <header className="border-b border-border bg-surface">
+      <header className="sticky top-0 z-10 border-b border-border bg-surface/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-[calc(70ch+3rem)] items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <Link href="/" className="font-display text-lg font-bold text-text">
             InnoChat
@@ -132,7 +132,7 @@ export function LegalDocument({ title, intro, sections, related }: LegalDocument
           ))}
         </div>
 
-        <nav aria-labelledby="sumario" className="mt-8 rounded-card border border-border bg-surface p-5 shadow-card">
+        <nav aria-labelledby="sumario" className="mt-8 rounded-hero border border-border bg-surface p-5 shadow-card">
           <h2 id="sumario" className="font-display text-base font-bold text-text">
             Sumário
           </h2>

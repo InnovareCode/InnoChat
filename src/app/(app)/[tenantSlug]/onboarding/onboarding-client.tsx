@@ -37,18 +37,18 @@ const STEPS = [
 
 function StepIndicator({ current }: { current: number }) {
   return (
-    <ol className="mb-6 flex flex-wrap gap-2" aria-label="Etapas da configuração">
+    <ol className="mb-6 flex flex-wrap items-center gap-2" aria-label="Etapas da configuração">
       {STEPS.map((step, index) => {
         const stepNumber = index + 1;
         const active = stepNumber === current;
         const done = stepNumber < current;
         return (
-          <li key={step.label}>
+          <li key={step.label} className="flex items-center gap-2">
             <span
               aria-current={active ? "step" : undefined}
               className={cn(
-                "flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium",
-                active && "border-primary bg-primary/10 text-primary",
+                "flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-[transform,box-shadow] duration-200 motion-reduce:transition-none",
+                active && "border-primary bg-primary/10 text-primary shadow-card-hover",
                 done && "border-success/30 bg-success-bg text-success",
                 !active && !done && "border-border text-text-secondary",
               )}
@@ -56,6 +56,9 @@ function StepIndicator({ current }: { current: number }) {
               {done ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <step.icon className="h-3.5 w-3.5" aria-hidden="true" />}
               {stepNumber}. {step.label}
             </span>
+            {index < STEPS.length - 1 ? (
+              <span className={cn("h-px w-4 sm:w-6", done ? "bg-success/40" : "bg-border")} aria-hidden="true" />
+            ) : null}
           </li>
         );
       })}
@@ -148,7 +151,7 @@ export function OnboardingClient({
       <StepIndicator current={step} />
 
       {step === 1 ? (
-        <Card>
+        <Card className="rounded-hero">
           <CardHeader>
             <CardTitle>Cadastre seus serviços</CardTitle>
             <CardDescription>O que sua empresa oferece — corte de cabelo, consulta, sessão, etc.</CardDescription>
@@ -208,7 +211,7 @@ export function OnboardingClient({
       ) : null}
 
       {step === 2 ? (
-        <Card>
+        <Card className="rounded-hero">
           <CardHeader>
             <CardTitle>Profissionais e expediente</CardTitle>
             <CardDescription>Quem atende. Já deixamos um expediente padrão (seg. a sex., 9h às 18h) — ajuste depois.</CardDescription>
@@ -259,7 +262,7 @@ export function OnboardingClient({
       ) : null}
 
       {step === 3 ? (
-        <Card>
+        <Card className="rounded-hero">
           <CardHeader>
             <CardTitle>Conectar WhatsApp</CardTitle>
             <CardDescription>O número que o bot vai usar para atender seus clientes.</CardDescription>
@@ -287,7 +290,7 @@ export function OnboardingClient({
       ) : null}
 
       {step === 4 ? (
-        <Card>
+        <Card className="rounded-hero">
           <CardHeader>
             <CardTitle>Tudo pronto para testar</CardTitle>
             <CardDescription>Você já pode criar um agendamento manual para ver como funciona.</CardDescription>

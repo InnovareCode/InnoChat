@@ -1,12 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, Users2, MessageCircle } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -117,40 +115,52 @@ export function AdminPlanosClient({ initialPlans }: { initialPlans: PlanRow[] })
         </Alert>
       ) : null}
 
-      <Card>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableHeadCell>Plano</TableHeadCell>
-              <TableHeadCell>Preço</TableHeadCell>
-              <TableHeadCell>Números de WhatsApp</TableHeadCell>
-              <TableHeadCell>Profissionais</TableHeadCell>
-              <TableHeadCell>Status</TableHeadCell>
-              <TableHeadCell className="text-right">Ações</TableHeadCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {plans.map((plan) => (
-              <TableRow key={plan.id}>
-                <TableCell className="font-medium">{plan.name}</TableCell>
-                <TableCell>
-                  {plan.priceCents > 0 ? formatBRL(plan.priceCents) : <span className="text-text-secondary">A definir</span>}
-                </TableCell>
-                <TableCell>{plan.maxWhatsappNumbers}</TableCell>
-                <TableCell>{plan.maxProfessionals === null ? "Ilimitado" : plan.maxProfessionals}</TableCell>
-                <TableCell>
-                  <Badge variant={plan.active ? "success" : "neutral"}>{plan.active ? "Ativo" : "Inativo"}</Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" aria-label={`Editar ${plan.name}`} onClick={() => openEdit(plan)}>
-                    <Pencil className="h-4 w-4" aria-hidden="true" />
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {plans.map((plan) => (
+          <div
+            key={plan.id}
+            className="group relative flex flex-col rounded-hero border border-border bg-surface p-5 transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-hover motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-display text-base font-bold text-text">{plan.name}</p>
+                <p className="text-xs text-text-secondary">{plan.code}</p>
+              </div>
+              <Badge variant={plan.active ? "success" : "neutral"}>{plan.active ? "Ativo" : "Inativo"}</Badge>
+            </div>
+
+            <p className="mt-3 font-display text-3xl font-black tabular-nums text-text">
+              {plan.priceCents > 0 ? (
+                formatBRL(plan.priceCents)
+              ) : (
+                <span className="text-lg font-bold text-text-secondary">A definir</span>
+              )}
+              {plan.priceCents > 0 ? <span className="text-sm font-medium text-text-secondary">/mês</span> : null}
+            </p>
+
+            <ul className="mt-4 flex flex-col gap-2 text-sm text-text-secondary">
+              <li className="flex items-center gap-2">
+                <MessageCircle className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                {plan.maxWhatsappNumbers} número(s) de WhatsApp
+              </li>
+              <li className="flex items-center gap-2">
+                <Users2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                {plan.maxProfessionals === null ? "Profissionais ilimitados" : `Até ${plan.maxProfessionals} profissional(is)`}
+              </li>
+            </ul>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mt-5 w-full transition-transform duration-200 group-hover:scale-[1.02] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+              onClick={() => openEdit(plan)}
+            >
+              <Pencil className="h-4 w-4" aria-hidden="true" />
+              Editar plano
+            </Button>
+          </div>
+        ))}
+      </div>
 
       <Dialog open={!!editing} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent>

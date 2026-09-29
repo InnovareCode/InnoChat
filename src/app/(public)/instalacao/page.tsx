@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { hasPlatformAdmin } from "@/modules/platform/install";
+import { PublicSplitLayout } from "@/components/public/public-split-layout";
 import { InstalacaoForm } from "./instalacao-form";
 
 export const metadata: Metadata = { title: "Instalação — InnoChat" };
@@ -23,13 +24,8 @@ export default async function InstalacaoPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <div className="w-full max-w-md">
-        <div className="mb-6 text-center">
-          <span className="font-display text-lg font-bold text-text">InnoChat</span>
-        </div>
-        <InstalacaoForm />
-      </div>
-    </main>
+    <PublicSplitLayout formMaxWidth="max-w-md">
+      <InstalacaoForm />
+    </PublicSplitLayout>
   );
 }

@@ -25,7 +25,7 @@ export default async function AparenciaPage({
         title="Aparência"
         description="O tema escolhido vale para toda a equipe desta empresa."
       />
-      <Card>
+      <Card className="rounded-hero">
         <CardContent>
           <AparenciaForm tenantSlug={tenantSlug} currentTheme={tenant.theme} />
         </CardContent>

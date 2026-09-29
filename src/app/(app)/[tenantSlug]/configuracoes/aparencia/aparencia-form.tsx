@@ -53,9 +53,11 @@ export function AparenciaForm({ tenantSlug, currentTheme }: { tenantSlug: string
             <label
               key={theme.value}
               className={cn(
-                "flex cursor-pointer flex-col gap-3 rounded-card border p-4",
+                "group flex cursor-pointer flex-col gap-3 rounded-hero border p-4 transition-[border-color,box-shadow,transform] duration-200 motion-reduce:transition-none",
                 "focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-primary",
-                active ? "border-primary ring-1 ring-primary" : "border-border hover:border-text-secondary",
+                active
+                  ? "border-primary ring-1 ring-primary shadow-card-hover"
+                  : "border-border hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-hover motion-reduce:hover:translate-y-0",
               )}
             >
               <input

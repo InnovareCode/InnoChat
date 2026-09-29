@@ -19,7 +19,7 @@ export function ConviteForm({ token }: { token: string | null }) {
 
   if (!token) {
     return (
-      <Card>
+      <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>Link incompleto</CardTitle>
           <CardDescription>Este convite está sem o código necessário. Peça um novo convite a quem te convidou.</CardDescription>
@@ -59,7 +59,7 @@ export function ConviteForm({ token }: { token: string | null }) {
   }
 
   return (
-    <Card>
+    <Card className="rounded-hero">
       <CardHeader>
         <CardTitle>Aceitar convite</CardTitle>
         <CardDescription>Defina sua senha para entrar no painel da empresa que te convidou.</CardDescription>

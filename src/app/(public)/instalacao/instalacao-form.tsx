@@ -66,7 +66,7 @@ export function InstalacaoForm() {
   }
 
   return (
-    <Card>
+    <Card className="rounded-hero">
       <CardHeader>
         <CardTitle>Instalar o InnoChat</CardTitle>
         <CardDescription>

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Check, CheckCircle2, Copy, KeyRound, Loader2, Power, PowerOff, RefreshCw, XCircle } from "lucide-react";
+import { cn } from "@/components/lib/cn";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -94,16 +95,30 @@ function CopyField({ label, value, hint }: { label: string; value: string | null
   );
 }
 
-function ChecklistBadge({ label, ready }: { label: string; ready: boolean }) {
+/** Card de status do checklist (docs/design/screens/premium/onda2) — em vez do rótulo com
+ * ícone solto de antes, cada item vira um cartão pequeno com selo tingido de sucesso/pendência,
+ * escaneável num único olhar. */
+function StatusCard({ label, ready }: { label: string; ready: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-sm">
-      {ready ? (
-        <CheckCircle2 className="h-4 w-4 text-success" aria-hidden="true" />
-      ) : (
-        <XCircle className="h-4 w-4 text-text-secondary" aria-hidden="true" />
+    <div
+      className={cn(
+        "flex items-center gap-3 rounded-hero border p-4 transition-colors duration-150",
+        ready ? "border-success/25 bg-success-bg/60" : "border-border bg-bg",
       )}
-      <span className={ready ? "text-text" : "text-text-secondary"}>{label}</span>
-    </span>
+    >
+      <div
+        className={cn(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
+          ready ? "bg-success/15 text-success" : "bg-text-secondary/10 text-text-secondary",
+        )}
+      >
+        {ready ? <CheckCircle2 className="h-4.5 w-4.5" aria-hidden="true" /> : <XCircle className="h-4.5 w-4.5" aria-hidden="true" />}
+      </div>
+      <div>
+        <p className={cn("text-sm font-semibold", ready ? "text-text" : "text-text-secondary")}>{label}</p>
+        <p className="text-xs text-text-secondary">{ready ? "Configurado" : "Pendente"}</p>
+      </div>
+    </div>
   );
 }
 
@@ -283,16 +298,14 @@ export function AdminConfiguracoesClient({ initialSettings }: { initialSettings:
 
       {error ? <Alert variant="danger">{error}</Alert> : null}
 
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-4">
-          <ChecklistBadge label="Evolution" ready={evolutionReady} />
-          <ChecklistBadge label="n8n" ready={n8nReady} />
-          <ChecklistBadge label="SMTP" ready={smtpReady} />
-          <ChecklistBadge label="Mercado Pago" ready={mpReady} />
-        </CardContent>
-      </Card>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatusCard label="Evolution" ready={evolutionReady} />
+        <StatusCard label="n8n" ready={n8nReady} />
+        <StatusCard label="SMTP" ready={smtpReady} />
+        <StatusCard label="Mercado Pago" ready={mpReady} />
+      </div>
 
-      <Card>
+      <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>URLs detectadas</CardTitle>
           <CardDescription>Detectadas automaticamente pelo servidor — não são digitadas aqui.</CardDescription>
@@ -315,7 +328,7 @@ export function AdminConfiguracoesClient({ initialSettings }: { initialSettings:
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>Evolution API</CardTitle>
           <CardDescription>Usada para conectar os números de WhatsApp das empresas.</CardDescription>
@@ -370,7 +383,7 @@ export function AdminConfiguracoesClient({ initialSettings }: { initialSettings:
         </form>
       </Card>
 
-      <Card>
+      <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>n8n</CardTitle>
           <CardDescription>Orquestra as conversas do bot no WhatsApp.</CardDescription>
@@ -436,7 +449,7 @@ export function AdminConfiguracoesClient({ initialSettings }: { initialSettings:
         </form>
       </Card>
 
-      <Card>
+      <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>Bot no n8n</CardTitle>
           <CardDescription>
@@ -473,7 +486,7 @@ export function AdminConfiguracoesClient({ initialSettings }: { initialSettings:
         </CardFooter>
       </Card>
 
-      <Card>
+      <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>Mercado Pago</CardTitle>
           <CardDescription>Usado para gerar o Pix das faturas e validar o webhook de pagamento.</CardDescription>
@@ -536,7 +549,7 @@ export function AdminConfiguracoesClient({ initialSettings }: { initialSettings:
         </form>
       </Card>
 
-      <Card>
+      <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>E-mail transacional (SMTP)</CardTitle>
           <CardDescription>Usado para lembretes e notificações por e-mail.</CardDescription>
@@ -615,7 +628,7 @@ export function AdminConfiguracoesClient({ initialSettings }: { initialSettings:
         </form>
       </Card>
 
-      <Card>
+      <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>Segredo da API interna (n8n → painel)</CardTitle>
           <CardDescription>

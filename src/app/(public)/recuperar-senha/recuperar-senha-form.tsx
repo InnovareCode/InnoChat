@@ -36,7 +36,7 @@ export function RecuperarSenhaForm() {
 
   if (done) {
     return (
-      <Card>
+      <Card className="rounded-hero">
         <CardContent className="pt-5">
           <EmptyState
             icon={MailCheck}
@@ -54,7 +54,7 @@ export function RecuperarSenhaForm() {
   }
 
   return (
-    <Card>
+    <Card className="rounded-hero">
       <CardHeader>
         <CardTitle>Recuperar senha</CardTitle>
         <CardDescription>Informe o e-mail da sua conta para receber um link de redefinição.</CardDescription>

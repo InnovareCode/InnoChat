@@ -1,9 +1,12 @@
-import Link from "next/link";
+import { notFound } from "next/navigation";
 import { Palette, Building2, Clock, Users2, CalendarOff } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { Card, CardContent } from "@/components/ui/card";
+import { getPrisma } from "@/lib/db/prisma";
+import { auth } from "@/lib/auth";
+import { ConfiguracoesGrid, type ConfigSection } from "./configuracoes-grid";
+import { EmpresaDocumentForm } from "./empresa-document-form";
 
-const SECTIONS = [
+const SECTIONS: ConfigSection[] = [
   {
     href: "aparencia",
     icon: Palette,
@@ -48,30 +51,33 @@ export default async function ConfiguracoesPage({
 }) {
   const { tenantSlug } = await params;
 
+  const tenant = await getPrisma().tenant.findUnique({
+    where: { slug: tenantSlug },
+    select: { id: true, document: true },
+  });
+  if (!tenant) {
+    notFound();
+  }
+
+  const session = await auth();
+  const membership = session?.user?.id
+    ? await getPrisma().membership.findFirst({
+        where: { userId: session.user.id, tenantId: tenant.id },
+        select: { role: true },
+      })
+    : null;
+
   return (
-    <div>
+    <div className="flex flex-col gap-6">
       <PageHeader title="Configurações" description="Empresa, regras de agenda e do bot, equipe." />
-      <div className="grid gap-4 sm:grid-cols-2">
-        {SECTIONS.map((section) => (
-          <Card key={section.href} className={!section.ready ? "opacity-60" : undefined}>
-            <CardContent>
-              <section.icon className="h-5 w-5 text-primary" aria-hidden="true" />
-              <p className="mt-3 font-display text-sm font-bold text-text">{section.title}</p>
-              <p className="mt-1 text-sm text-text-secondary">{section.description}</p>
-              {section.ready ? (
-                <Link
-                  href={`/${tenantSlug}/configuracoes/${section.href}`}
-                  className="mt-3 inline-block text-sm font-medium text-primary hover:underline"
-                >
-                  Abrir
-                </Link>
-              ) : (
-                <p className="mt-3 text-xs text-text-secondary">Chega em uma próxima fase.</p>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+
+      <EmpresaDocumentForm
+        tenantSlug={tenantSlug}
+        currentDocument={tenant.document}
+        isOwner={membership?.role === "OWNER"}
+      />
+
+      <ConfiguracoesGrid tenantSlug={tenantSlug} sections={SECTIONS} />
     </div>
   );
 }

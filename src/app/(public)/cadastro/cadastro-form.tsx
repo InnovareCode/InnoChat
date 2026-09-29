@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
 import { slugify, validateSlug, type SlugValidationError } from "@/core/signup/slug";
+import { normalizeDocumentDigits, validateCpfCnpj } from "@/core/billing/document";
+import { maskCpfCnpj } from "@/components/lib/document-mask";
 import { signUpAction } from "@/modules/signup/actions";
 import { TERMS_VERSION } from "@/lib/legal";
 
@@ -26,6 +28,7 @@ type FormState = {
   slugTouched: boolean;
   segment: string;
   ownerName: string;
+  document: string;
   email: string;
   password: string;
   confirmPassword: string;
@@ -38,6 +41,7 @@ const EMPTY_FORM: FormState = {
   slugTouched: false,
   segment: "",
   ownerName: "",
+  document: "",
   email: "",
   password: "",
   confirmPassword: "",
@@ -48,6 +52,7 @@ export function CadastroForm() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const [termsOutdated, setTermsOutdated] = useState(false);
   const [done, setDone] = useState<{ email: string } | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -71,6 +76,7 @@ export function CadastroForm() {
     if (slugValidation) errors.slug = SLUG_ERROR_MESSAGE[slugValidation];
     if (!form.slug) errors.slug = "Escolha um endereço para a empresa.";
     if (form.ownerName.trim().length < 2) errors.ownerName = "Informe seu nome.";
+    if (!validateCpfCnpj(form.document).valid) errors.document = "Informe um CPF ou CNPJ válido.";
     if (!form.email.includes("@")) errors.email = "Informe um e-mail válido.";
     if (form.password.length < 8) errors.password = "A senha precisa ter pelo menos 8 caracteres.";
     if (form.password !== form.confirmPassword) errors.confirmPassword = "As senhas não são iguais.";
@@ -82,6 +88,7 @@ export function CadastroForm() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
+    setTermsOutdated(false);
     if (!validateClientSide()) return;
 
     startTransition(async () => {
@@ -90,6 +97,9 @@ export function CadastroForm() {
         slug: form.slug,
         segment: form.segment.trim() || undefined,
         ownerName: form.ownerName.trim(),
+        // `document` ainda não está no contrato de `signUpAction` (a Vega está adicionando) —
+        // manda de qualquer forma: quando o servidor aceitar, funciona sem mudança nenhuma aqui.
+        document: normalizeDocumentDigits(form.document),
         email: form.email.trim(),
         password: form.password,
         termsVersion: TERMS_VERSION,
@@ -109,6 +119,14 @@ export function CadastroForm() {
           setFieldErrors((prev) => ({ ...prev, slug: "Endereço inválido. Ajuste e tente de novo." }));
           return;
         }
+        if (result.error.code === "INVALID_DOCUMENT") {
+          setFieldErrors((prev) => ({ ...prev, document: "Informe um CPF ou CNPJ válido." }));
+          return;
+        }
+        if (result.error.code === "TERMS_VERSION_OUTDATED") {
+          setTermsOutdated(true);
+          return;
+        }
         setFormError(result.error.message);
         return;
       }
@@ -119,7 +137,7 @@ export function CadastroForm() {
 
   if (done) {
     return (
-      <Card>
+      <Card className="rounded-hero">
         <CardContent className="pt-5">
           <EmptyState
             icon={MailCheck}
@@ -137,13 +155,23 @@ export function CadastroForm() {
   }
 
   return (
-    <Card>
+    <Card className="rounded-hero">
       <CardHeader>
         <CardTitle>Criar conta</CardTitle>
-        <CardDescription>1 dia de teste grátis. Sem cartão de crédito para começar.</CardDescription>
+        <CardDescription>3 dias de teste grátis. Sem cartão de crédito para começar.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+          {termsOutdated ? (
+            <Alert variant="warning" title="Os termos foram atualizados">
+              <div className="flex flex-col gap-2">
+                <span>A página que você abriu ficou com uma versão antiga dos termos. Recarregue e confirme de novo.</span>
+                <Button type="button" variant="secondary" size="sm" className="w-fit" onClick={() => window.location.reload()}>
+                  Recarregar página
+                </Button>
+              </div>
+            </Alert>
+          ) : null}
           {formError ? <Alert variant="danger">{formError}</Alert> : null}
 
           <Field label="Nome da empresa" htmlFor="companyName" required error={fieldErrors.companyName}>
@@ -201,6 +229,27 @@ export function CadastroForm() {
                 onChange={(e) => setForm((f) => ({ ...f, ownerName: e.target.value }))}
                 maxLength={120}
                 invalid={!!fieldErrors.ownerName}
+              />
+            )}
+          </Field>
+
+          <Field
+            label="CPF ou CNPJ"
+            htmlFor="document"
+            required
+            error={fieldErrors.document}
+            hint={!fieldErrors.document ? "Usado para gerar a cobrança Pix da assinatura." : undefined}
+          >
+            {(fieldProps) => (
+              <Input
+                {...fieldProps}
+                name="document"
+                inputMode="numeric"
+                autoComplete="off"
+                value={maskCpfCnpj(form.document)}
+                onChange={(e) => setForm((f) => ({ ...f, document: normalizeDocumentDigits(e.target.value) }))}
+                maxLength={18}
+                invalid={!!fieldErrors.document}
               />
             )}
           </Field>

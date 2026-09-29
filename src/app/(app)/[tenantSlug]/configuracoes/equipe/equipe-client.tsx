@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { UserPlus } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
@@ -84,7 +85,7 @@ export function EquipeClient({
         <Alert variant="info">Só o dono da empresa pode convidar novos membros.</Alert>
       ) : null}
 
-      <Card>
+      <Card className="rounded-hero">
         <Table>
           <TableHead>
             <TableRow>
@@ -97,8 +98,13 @@ export function EquipeClient({
             {members.map((member) => (
               <TableRow key={member.id}>
                 <TableCell className="font-medium">
-                  {member.email}
-                  {member.isCurrentUser ? <span className="ml-2 text-xs text-text-secondary">(você)</span> : null}
+                  <div className="flex items-center gap-2.5">
+                    <Avatar id={member.id} name={member.email} size="sm" />
+                    <span>
+                      {member.email}
+                      {member.isCurrentUser ? <span className="ml-2 text-xs text-text-secondary">(você)</span> : null}
+                    </span>
+                  </div>
                 </TableCell>
                 <TableCell>
                   <Badge variant={member.role === "OWNER" ? "primary" : "neutral"}>

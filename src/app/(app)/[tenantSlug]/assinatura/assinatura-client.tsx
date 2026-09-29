@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
-import { ArrowDown, ArrowUp, Check, Copy } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Copy, Sparkles } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { Alert } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
+import { cn } from "@/components/lib/cn";
 import { formatDateTimeLabel } from "@/components/lib/format-date";
 import { changePlanAction, type PlanListItem } from "@/modules/billing/actions";
 
@@ -68,7 +70,17 @@ function useStatusPolling(shouldPoll: boolean, intervalMs = 15_000) {
   }, [shouldPoll, intervalMs, router]);
 }
 
-function PixCard({ invoice, timezone }: { invoice: NonNullable<BillingSnapshot["invoice"]>; timezone: string }) {
+function PixCard({
+  invoice,
+  timezone,
+  tenantSlug,
+  hasDocument,
+}: {
+  invoice: NonNullable<BillingSnapshot["invoice"]>;
+  timezone: string;
+  tenantSlug: string;
+  hasDocument: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const canvasRequestId = useRef(0);
@@ -99,14 +111,14 @@ function PixCard({ invoice, timezone }: { invoice: NonNullable<BillingSnapshot["
   }
 
   return (
-    <Card>
+    <Card className="rounded-hero-lg border-primary/20 bg-gradient-to-br from-primary/5 to-transparent shadow-card-hover">
       <CardHeader>
         <CardTitle>Fatura em aberto</CardTitle>
         <CardDescription>
           {formatBRL(invoice.amountCents)} — vencimento em {formatDateTimeLabel(invoice.dueAt, timezone)}
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+      <CardContent className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
         {invoice.pixCopyPaste ? (
           <>
             {qrDataUrl ? (
@@ -116,10 +128,10 @@ function PixCard({ invoice, timezone }: { invoice: NonNullable<BillingSnapshot["
                 alt="QR code Pix para pagamento da fatura"
                 width={180}
                 height={180}
-                className="shrink-0 rounded-card border border-border"
+                className="shrink-0 rounded-hero border border-border bg-surface p-2 shadow-card"
               />
             ) : (
-              <div className="flex h-[180px] w-[180px] shrink-0 items-center justify-center rounded-card border border-dashed border-border text-xs text-text-secondary">
+              <div className="flex h-[180px] w-[180px] shrink-0 items-center justify-center rounded-hero border border-dashed border-border text-xs text-text-secondary">
                 Gerando QR…
               </div>
             )}
@@ -128,7 +140,7 @@ function PixCard({ invoice, timezone }: { invoice: NonNullable<BillingSnapshot["
               <p className="mt-1 text-sm text-text-secondary">
                 Escaneie o QR code ou copie o código Pix abaixo e cole na opção &ldquo;Pix Copia e Cola&rdquo;.
               </p>
-              <div className="mt-3 flex items-center gap-2 rounded-card border border-border bg-bg p-3">
+              <div className="mt-3 flex items-center gap-2 rounded-card border border-border bg-surface p-3">
                 <code className="flex-1 overflow-x-auto whitespace-nowrap text-xs text-text">{invoice.pixCopyPaste}</code>
                 <Button type="button" variant="ghost" size="icon" aria-label="Copiar código Pix" onClick={copyCode}>
                   {copied ? <Check className="h-4 w-4 text-success" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
@@ -143,8 +155,16 @@ function PixCard({ invoice, timezone }: { invoice: NonNullable<BillingSnapshot["
               ) : null}
             </div>
           </>
+        ) : !hasDocument ? (
+          <Alert variant="warning" title="Cadastre o CPF/CNPJ da empresa" className="w-full">
+            O Mercado Pago exige o CPF ou CNPJ da empresa para gerar o Pix desta fatura.{" "}
+            <Link href={`/${tenantSlug}/configuracoes`} className="font-medium underline">
+              Cadastrar em Configurações
+            </Link>
+            .
+          </Alert>
         ) : (
-          <Alert variant="info">
+          <Alert variant="info" className="w-full">
             O Pix desta fatura ainda está sendo gerado. Atualizamos esta tela automaticamente — se demorar, volte em
             alguns minutos.
           </Alert>
@@ -213,68 +233,97 @@ function PlanosCard({
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Planos disponíveis</CardTitle>
-          <CardDescription>
+      <div>
+        <div className="mb-4">
+          <h2 className="font-display text-lg font-bold text-text">Planos disponíveis</h2>
+          <p className="mt-1 text-sm text-text-secondary">
             {isOwner
               ? "Upgrade entra em vigor imediatamente. Downgrade só é aplicado se o uso atual couber no plano novo, e vale a partir do próximo ciclo."
               : "Só o proprietário da empresa pode trocar de plano."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {snapshot.pendingPlanId && snapshot.pendingPlanName ? (
-            <Alert variant="info">
-              Mudança para o plano <strong>{snapshot.pendingPlanName}</strong> agendada para o próximo ciclo.
-            </Alert>
-          ) : null}
-          {plans.length === 0 ? (
-            <Alert variant="info">
-              Os planos ainda estão sendo definidos. Seu acesso continua normal.
-            </Alert>
-          ) : null}
-          {plans.map((plan) => {
-            const isCurrent = plan.id === snapshot.planId;
-            const isPendingTarget = plan.id === snapshot.pendingPlanId;
-            const isUpgrade = plan.sortOrder >= snapshot.planSortOrder;
-            return (
-              <div
-                key={plan.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border p-3"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-text">{plan.name}</p>
-                    {isCurrent ? <Badge variant="primary">Plano atual</Badge> : null}
-                    {isPendingTarget ? <Badge variant="warning">Agendado</Badge> : null}
-                  </div>
-                  <p className="mt-1 text-sm text-text-secondary">
-                    {plan.priceCents > 0 ? formatBRL(plan.priceCents) : "Grátis"} por mês ·{" "}
-                    {plan.maxProfessionals === null ? "Profissionais ilimitados" : `Até ${plan.maxProfessionals} profissional(is)`} ·{" "}
-                    Até {plan.maxWhatsappNumbers} número(s) de WhatsApp
+          </p>
+        </div>
+
+        {snapshot.pendingPlanId && snapshot.pendingPlanName ? (
+          <Alert variant="info" className="mb-4">
+            Mudança para o plano <strong>{snapshot.pendingPlanName}</strong> agendada para o próximo ciclo.
+          </Alert>
+        ) : null}
+        {plans.length === 0 ? (
+          <Alert variant="info">Os planos ainda estão sendo definidos. Seu acesso continua normal.</Alert>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {plans.map((plan) => {
+              const isCurrent = plan.id === snapshot.planId;
+              const isPendingTarget = plan.id === snapshot.pendingPlanId;
+              const isUpgrade = plan.sortOrder >= snapshot.planSortOrder;
+              return (
+                <div
+                  key={plan.id}
+                  className={cn(
+                    "group relative flex flex-col rounded-hero border p-5 transition-[transform,box-shadow,border-color] duration-200 motion-reduce:transition-none",
+                    isCurrent
+                      ? "border-primary bg-primary/5 shadow-card-hover"
+                      : "border-border bg-surface hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-card-hover motion-reduce:hover:translate-y-0",
+                  )}
+                >
+                  {isCurrent ? (
+                    <span className="absolute -top-3 left-5 inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-0.5 text-xs font-medium text-white">
+                      <Sparkles className="h-3 w-3" aria-hidden="true" />
+                      Plano atual
+                    </span>
+                  ) : null}
+                  {isPendingTarget ? (
+                    <Badge variant="warning" className="absolute -top-3 left-5">
+                      Agendado
+                    </Badge>
+                  ) : null}
+
+                  <p className="font-display text-base font-bold text-text">{plan.name}</p>
+                  <p className="mt-2 font-display text-3xl font-black tabular-nums text-text">
+                    {plan.priceCents > 0 ? formatBRL(plan.priceCents) : "Grátis"}
+                    {plan.priceCents > 0 ? <span className="text-sm font-medium text-text-secondary">/mês</span> : null}
                   </p>
-                </div>
-                {isCurrent || isPendingTarget ? null : (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => requestChange(plan)}
-                    disabled={!canChangePlan || isPending}
-                    title={!isOwner ? "Só o proprietário pode trocar de plano." : undefined}
-                  >
-                    {isUpgrade ? (
-                      <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+
+                  <ul className="mt-4 flex flex-col gap-2 text-sm text-text-secondary">
+                    <li className="flex items-center gap-2">
+                      <Check className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+                      {plan.maxProfessionals === null ? "Profissionais ilimitados" : `Até ${plan.maxProfessionals} profissional(is)`}
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+                      Até {plan.maxWhatsappNumbers} número(s) de WhatsApp
+                    </li>
+                  </ul>
+
+                  <div className="mt-5">
+                    {isCurrent || isPendingTarget ? (
+                      <Button variant="secondary" size="sm" disabled className="w-full">
+                        {isCurrent ? "Plano atual" : "Troca agendada"}
+                      </Button>
                     ) : (
-                      <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+                      <Button
+                        variant={isUpgrade ? "primary" : "secondary"}
+                        size="sm"
+                        className="w-full"
+                        onClick={() => requestChange(plan)}
+                        disabled={!canChangePlan || isPending}
+                        title={!isOwner ? "Só o proprietário pode trocar de plano." : undefined}
+                      >
+                        {isUpgrade ? (
+                          <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+                        ) : (
+                          <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+                        )}
+                        {isUpgrade ? "Fazer upgrade" : "Fazer downgrade"}
+                      </Button>
                     )}
-                    {isUpgrade ? "Fazer upgrade" : "Fazer downgrade"}
-                  </Button>
-                )}
-              </div>
-            );
-          })}
-        </CardContent>
-      </Card>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <Dialog open={!!pendingPlanTarget} onOpenChange={(open) => !open && setPendingPlanTarget(null)}>
         <DialogContent>
@@ -323,11 +372,13 @@ export function AssinaturaClient({
   snapshot,
   plans,
   isOwner,
+  hasDocument,
 }: {
   tenantSlug: string;
   snapshot: BillingSnapshot;
   plans: PlanListItem[];
   isOwner: boolean;
+  hasDocument: boolean;
 }) {
   const stillWaitingPayment = snapshot.invoice !== null && !snapshot.invoice.paidAt;
   useStatusPolling(stillWaitingPayment);
@@ -336,7 +387,7 @@ export function AssinaturaClient({
     <div className="flex flex-col gap-6">
       <PageHeader title="Assinatura" description="Plano atual, status e fatura em aberto." />
 
-      <Card>
+      <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>{snapshot.planName}</CardTitle>
           <CardDescription>
@@ -375,7 +426,9 @@ export function AssinaturaClient({
         ) : null}
       </Card>
 
-      {snapshot.invoice ? <PixCard invoice={snapshot.invoice} timezone={snapshot.timezone} /> : null}
+      {snapshot.invoice ? (
+        <PixCard invoice={snapshot.invoice} timezone={snapshot.timezone} tenantSlug={tenantSlug} hasDocument={hasDocument} />
+      ) : null}
 
       <PlanosCard tenantSlug={tenantSlug} snapshot={snapshot} plans={plans} isOwner={isOwner} />
     </div>

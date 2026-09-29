@@ -19,7 +19,7 @@ export function RedefinirSenhaForm({ token }: { token: string | null }) {
 
   if (!token) {
     return (
-      <Card>
+      <Card className="rounded-hero">
         <CardHeader>
           <CardTitle>Link incompleto</CardTitle>
           <CardDescription>Este link de redefinição está sem o código necessário.</CardDescription>
@@ -59,7 +59,7 @@ export function RedefinirSenhaForm({ token }: { token: string | null }) {
   }
 
   return (
-    <Card>
+    <Card className="rounded-hero">
       <CardHeader>
         <CardTitle>Redefinir senha</CardTitle>
         <CardDescription>Escolha uma nova senha para sua conta.</CardDescription>

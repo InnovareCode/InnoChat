@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Ban, RotateCcw, Timer } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
+import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
@@ -139,7 +140,7 @@ export function AdminEmpresasClient({
     <div>
       <PageHeader title="Empresas" description="Status da assinatura, limites e trial de cada empresa." />
 
-      <Card>
+      <Card className="rounded-hero">
         <Table>
           <TableHead>
             <TableRow>
@@ -154,8 +155,13 @@ export function AdminEmpresasClient({
             {items.map((company) => (
               <TableRow key={company.tenantId}>
                 <TableCell>
-                  <p className="font-medium text-text">{company.name}</p>
-                  <p className="text-xs text-text-secondary">/{company.slug}</p>
+                  <div className="flex items-center gap-2.5">
+                    <Avatar id={company.tenantId} name={company.name} size="sm" />
+                    <div>
+                      <p className="font-medium text-text">{company.name}</p>
+                      <p className="text-xs text-text-secondary">/{company.slug}</p>
+                    </div>
+                  </div>
                 </TableCell>
                 <TableCell>{company.planCode}</TableCell>
                 <TableCell>
