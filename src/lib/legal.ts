@@ -13,10 +13,10 @@ import { DomainError } from "@/lib/errors";
  *
  * Formato da versão: data ISO (`AAAA-MM-DD`) do dia em que a redação entra em vigor.
  */
-export const TERMS_VERSION = "2026-09-28";
+export const TERMS_VERSION = "2026-09-29";
 
 /** Data de vigência por extenso, para exibição. Mantenha em sincronia com `TERMS_VERSION`. */
-export const LEGAL_EFFECTIVE_DATE = "28 de setembro de 2026";
+export const LEGAL_EFFECTIVE_DATE = "29 de setembro de 2026";
 
 /** Aviso exibido no topo das duas páginas enquanto o texto não passa por revisão jurídica. */
 export const LEGAL_DRAFT_NOTICE =

@@ -4,6 +4,7 @@ import { isUniqueViolation } from "@/lib/db/prisma-errors";
 import type { InboundIgnoreReason } from "@/lib/db/types";
 import { normalizeEvolutionMessage, resolveSenderIdentity, digitsFromJid, type NormalizedMessage } from "@/core/bot/evolution-normalize";
 import { getMergedBotTexts } from "@/modules/bot-texts/service";
+import { logChatMessage } from "@/modules/conversations/log";
 import { isTenantBotAllowed } from "./subscription-gate";
 import type { InternalApiContext } from "./internal-auth";
 
@@ -132,6 +133,31 @@ export async function claimMessage(ctx: InternalApiContext, rawPayload: unknown)
   // `unsupported` acima), mas o TypeScript não propaga esse estreitamento para dentro de uma
   // `function` aninhada — capturar o campo primitivo evita o erro sem precisar de asserção.
   const providerMessageId = normalized.providerMessageId;
+
+  // Histórico de conversas (90 dias): grava TODA mensagem de texto/mídia do cliente que passou
+  // pela trava — inclusive as que o bot vai ignorar (pausado, modo humano, assinatura suspensa) —
+  // e as que a própria empresa digitou no celular (fromMe que não é eco do bot). Dedup por
+  // providerMessageId; falha aqui nunca derruba o claim (`logChatMessage` não lança).
+  const chatBody = normalized.content.type === "text" ? normalized.content.text : normalized.content.label;
+  if (!normalized.fromMe) {
+    await logChatMessage({
+      tenantId: ctx.tenantId,
+      whatsappInstanceId: ctx.instance.id,
+      contactId: contact.id,
+      direction: "INBOUND",
+      body: chatBody,
+      providerMessageId,
+    });
+  } else if (!isRecentOutboundEcho(locked.recentOutbound, normalized.content, now)) {
+    await logChatMessage({
+      tenantId: ctx.tenantId,
+      whatsappInstanceId: ctx.instance.id,
+      contactId: contact.id,
+      direction: "OUTBOUND",
+      body: chatBody,
+      providerMessageId,
+    });
+  }
 
   async function finishIgnore(reason: InboundIgnoreReason): Promise<ClaimResult> {
     try {

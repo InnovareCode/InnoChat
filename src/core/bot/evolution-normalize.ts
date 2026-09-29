@@ -12,7 +12,20 @@
  *     date_time, apikey }
  */
 
-export type NormalizedMessageContent = { type: "text"; text: string } | { type: "media" };
+/** `label` = marcador de exibição para o histórico ("[imagem]"...) — nunca o binário nem a legenda. */
+export type NormalizedMessageContent = { type: "text"; text: string } | { type: "media"; label: string };
+
+const MEDIA_LABELS: Record<string, string> = {
+  imageMessage: "[imagem]",
+  audioMessage: "[áudio]",
+  videoMessage: "[vídeo]",
+  documentMessage: "[documento]",
+  documentWithCaptionMessage: "[documento]",
+  stickerMessage: "[figurinha]",
+  ptvMessage: "[vídeo]",
+  contactMessage: "[contato]",
+  locationMessage: "[localização]",
+};
 
 export type NormalizedMessage = {
   kind: "message";
@@ -54,7 +67,7 @@ function normalizeTimestamp(value: unknown): number {
 }
 
 function extractContent(message: unknown): NormalizedMessageContent {
-  if (!isRecord(message)) return { type: "media" };
+  if (!isRecord(message)) return { type: "media", label: "[mídia]" };
   if (typeof message.conversation === "string" && message.conversation.length > 0) {
     return { type: "text", text: message.conversation };
   }
@@ -64,7 +77,8 @@ function extractContent(message: unknown): NormalizedMessageContent {
   }
   // Qualquer outro tipo (imageMessage, videoMessage, audioMessage, documentMessage,
   // stickerMessage, ...) vira "media" — o n8n responde com o texto ONLY_TEXT (§2 regra 6).
-  return { type: "media" };
+  const known = Object.keys(MEDIA_LABELS).find((k) => k in message);
+  return { type: "media", label: known ? MEDIA_LABELS[known] : "[mídia]" };
 }
 
 /**

@@ -20,6 +20,9 @@ import { recordMaintenanceTickRun } from "@/modules/platform/health-service";
  *    dado pessoal. Processado em lotes (`ANONYMIZE_BATCH_LIMIT` por chamada) — a próxima
  *    execução horária continua de onde parou; nunca uma varredura ilimitada numa chamada só.
  *
+ * 3. **Purga `ChatMessage`** (histórico de conversas) com mais de 90 dias, em lotes; a anonimização
+ *    de contato acima apaga as mensagens do contato. Falha isolada por try/catch.
+ *
  * Idempotente por desenho: rodar 2x seguidas não tem efeito adicional (`InboundEvent` antigo já
  * foi apagado; `Contact` já anonimizado é reconhecido pelo prefixo `anon:` em `waJid` e pulado).
  */
@@ -28,10 +31,14 @@ const INBOUND_EVENT_RETENTION_DAYS = 30;
 const CANCELED_ANONYMIZATION_DAYS = 90;
 const ANONYMIZE_BATCH_LIMIT = 500;
 const ANON_WAJID_PREFIX = "anon:";
+const CHAT_MESSAGE_RETENTION_DAYS = 90;
+const CHAT_PURGE_BATCH = 5000;
+const CHAT_PURGE_MAX_BATCHES = 20;
 
 export type MaintenanceTickSummary = {
   inboundEventsPurged: number;
   contactsAnonymized: number;
+  chatMessagesPurged: number;
 };
 
 export async function runMaintenanceTick(now: Date = new Date()): Promise<MaintenanceTickSummary> {
@@ -52,6 +59,8 @@ export async function runMaintenanceTick(now: Date = new Date()): Promise<Mainte
 
   let contactsAnonymized = 0;
   for (const contact of contactsToAnonymize) {
+    // LGPD: o histórico de conversas do contato é apagado junto com a anonimização.
+    await prisma.chatMessage.deleteMany({ where: { contactId: contact.id } });
     await prisma.contact.update({
       where: { id: contact.id },
       data: {
@@ -68,12 +77,37 @@ export async function runMaintenanceTick(now: Date = new Date()): Promise<Mainte
     contactsAnonymized += 1;
   }
 
+  // Retenção do histórico de conversas (90 dias, política de privacidade). Em lotes (findMany +
+  // deleteMany por id, no máximo CHAT_PURGE_MAX_BATCHES por chamada — o tick seguinte continua) e
+  // isolado: falha aqui não impede o restante do tick.
+  let chatMessagesPurged = 0;
+  try {
+    const chatCutoff = new Date(now.getTime() - CHAT_MESSAGE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    for (let i = 0; i < CHAT_PURGE_MAX_BATCHES; i += 1) {
+      const batch = await prisma.chatMessage.findMany({
+        where: { createdAt: { lt: chatCutoff } },
+        select: { id: true },
+        take: CHAT_PURGE_BATCH,
+      });
+      if (batch.length === 0) break;
+      const deleted = await prisma.chatMessage.deleteMany({ where: { id: { in: batch.map((m) => m.id) } } });
+      chatMessagesPurged += deleted.count;
+      if (batch.length < CHAT_PURGE_BATCH) break;
+    }
+  } catch (error) {
+    logger.warn("maintenance.chat_messages_purge_failed", {
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   // Leituras individuais de notificação: a janela da central é de 30 dias, então marcas mais
   // antigas que isso nunca mais são consultadas. Não entra no summary (contrato do tick estável).
   // Roda DEPOIS da anonimização (LGPD) e com falha isolada: uma limpeza cosmética nunca pode
   // impedir a anonimização daquele tick (revisão do Órion, 2026-09-30).
   try {
-    await prisma.notificationRead.deleteMany({ where: { readAt: { lt: new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000) } } });
+    const readsCutoff = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000);
+    await prisma.notificationRead.deleteMany({ where: { readAt: { lt: readsCutoff } } });
+    await prisma.platformNotificationRead.deleteMany({ where: { readAt: { lt: readsCutoff } } });
   } catch (error) {
     logger.warn("maintenance.notification_reads_purge_failed", {
       errorMessage: error instanceof Error ? error.message : String(error),
@@ -83,6 +117,7 @@ export async function runMaintenanceTick(now: Date = new Date()): Promise<Mainte
   const summary: MaintenanceTickSummary = {
     inboundEventsPurged: purged.count,
     contactsAnonymized,
+    chatMessagesPurged,
   };
   logger.info("maintenance.tick.completed", { ...summary });
 

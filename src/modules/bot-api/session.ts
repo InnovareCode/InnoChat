@@ -1,6 +1,7 @@
 import { getPrisma } from "@/lib/db/prisma";
 import { DomainError } from "@/lib/errors";
 import { notFound, type InternalApiContext } from "./internal-auth";
+import { logOutboundTexts } from "@/modules/conversations/log";
 import { appendRecentOutbound } from "./claim";
 
 /**
@@ -60,6 +61,16 @@ export async function updateSession(ctx: InternalApiContext, sessionId: string, 
       recentOutbound,
       humanUntil,
     },
+  });
+
+  // Histórico de conversas: o n8n salva a sessão ANTES de enviar (LOCK_LOST já abortou acima, então
+  // nada é registrado para mensagem que não vai sair). Serve também a instância sandbox — o desvio
+  // para /sandbox/outbox acontece depois deste PUT, então o log já cobre a saída de teste.
+  await logOutboundTexts({
+    tenantId: ctx.tenantId,
+    whatsappInstanceId: ctx.instance.id,
+    contactId: session.contactId,
+    texts: input.outbound,
   });
 
   return { version: updated.version };

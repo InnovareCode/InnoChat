@@ -2,7 +2,7 @@
 
 > Documento-modelo elaborado para o InnoChat; recomenda-se revisão por advogado antes da publicação definitiva.
 
-**Vigência:** 28 de setembro de 2026 · **Versão:** 2026-09-28
+**Vigência:** 29 de setembro de 2026 · **Versão:** 2026-09-29
 
 Esta Política explica quais dados pessoais o InnoChat trata, para quê, com quem são compartilhados, por quanto tempo são guardados e como você pode exercer seus direitos, de acordo com a Lei Geral de Proteção de Dados Pessoais (Lei nº 13.709/2018, "LGPD").
 
@@ -70,7 +70,7 @@ A LGPD distingue quem decide sobre o tratamento (controlador) de quem trata os d
 - **Anotações:** observações que a Empresa escreve no painel sobre o cliente.
 - **Estado do atendimento:** a etapa do menu em que a conversa está, as escolhas ainda em andamento e se o atendimento automático está pausado para aquele cliente. Esses dados são temporários e servem só para o bot continuar a conversa.
 
-**O InnoChat não guarda o conteúdo das conversas.** O texto de cada mensagem é lido no momento para o bot responder e não fica armazenado em histórico. Guardamos apenas **metadados técnicos da mensagem** (identificador, horário e resultado do processamento), que são apagados automaticamente após **30 dias**.
+**O InnoChat guarda o histórico das conversas do WhatsApp por 90 dias.** O texto das mensagens trocadas entre o cliente e o número da Empresa (as do cliente e as respostas do bot ou da própria Empresa) fica armazenado para dar suporte ao atendimento, e a Empresa pode consultá-lo no painel. Mensagens de imagem, áudio, vídeo e documentos **não são guardadas**: fica apenas um marcador como [imagem]. Passados **90 dias** as mensagens são apagadas automaticamente; elas também são apagadas quando a Empresa exclui ou anonimiza o cliente. Guardamos ainda **metadados técnicos da mensagem** (identificador, horário e resultado do processamento), apagados após **30 dias**.
 
 ### Visitantes das páginas públicas
 
@@ -134,6 +134,7 @@ Em conexões seguras, esses nomes podem aparecer com o prefixo `__Secure-` ou `_
 
 - **Dados da conta:** enquanto a conta existir. Depois do encerramento, dados de cobrança e os necessários para cumprir obrigações legais ou para defesa em processos são mantidos pelos prazos previstos em lei.
 - **Registros de acesso:** pelo prazo exigido pelo Marco Civil da Internet (Lei nº 12.965/2014, art. 15).
+- **Histórico de conversas do WhatsApp (texto das mensagens):** 90 dias, para suporte ao atendimento; apagado antes se a Empresa excluir ou anonimizar o cliente.
 - **Metadados técnicos de mensagens:** 30 dias.
 - **Registros de execuções com erro na automação:** até 7 dias.
 - **Links enviados por e-mail:** verificação de e-mail, 48 horas; redefinição de senha, 1 hora; convite de equipe, 7 dias. Todos são de uso único.

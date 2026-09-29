@@ -1,0 +1,371 @@
+import { getPrisma } from "@/lib/db/prisma";
+import { DomainError } from "@/lib/errors";
+import { GRACE_DAYS } from "@/core/billing";
+import type { AdminNotification } from "./types";
+
+/**
+ * Central de notificações do ADMIN da plataforma — mesmo desenho da central do tenant
+ * (`src/modules/notifications/service.ts`): DERIVADA do estado existente, sem tabela Notification.
+ *
+ * - Janela de 30 dias (exceto TICK_LATE, que vale enquanto o tick estiver atrasado).
+ * - Ids estáveis (`<tipo>:<chave>`): a leitura individual (`PlatformNotificationRead`) sobrevive
+ *   a recargas; "marcar todas" = `User.platformNotificationsReadAllAt` (tudo com createdAt <= ele).
+ * - Poll barato: 1 leitura do usuário + 1 consulta pequena e limitada por fonte (SOURCE_CAP),
+ *   já filtrada por data/estado a partir de `max(janela, min(since, readAllAt))`, + 1 leitura de
+ *   reads. Sem N+1 (tenant vem por select aninhado).
+ * - createdAt de cada tipo vem de um instante REAL do estado (paidAt, disconnectedAt, ...); para
+ *   suspensão (sem coluna própria) é `currentPeriodEnd + GRACE_DAYS`, estável até o próximo pagamento.
+ */
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WINDOW_MS = 30 * DAY_MS;
+const PAGE_SIZE = 20;
+const POLL_MAX = 10;
+const SOURCE_CAP = 100;
+const TRIAL_WARN_MS = DAY_MS;
+// Mesma regra da tela Saúde (`health-service.ts`): billing 2h, maintenance 26h.
+const BILLING_TICK_STALE_MS = 2 * 60 * 60 * 1000;
+const MAINTENANCE_TICK_STALE_MS = 26 * 60 * 60 * 1000;
+const KEY_PATTERN = /^(signup|pay|susp|cancel|trial|wa|mpwh|tick):[A-Za-z0-9_:.-]{1,100}$/;
+
+type Item = Omit<AdminNotification, "read">;
+
+const brl = (cents: number) => (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+function windowStartOf(now: Date): Date {
+  return new Date(now.getTime() - WINDOW_MS);
+}
+
+/** Todas as fontes com createdAt >= `from`. Cada uma é limitada por SOURCE_CAP. */
+async function loadItems(now: Date, from: Date): Promise<Item[]> {
+  const prisma = getPrisma();
+  const trialLimit = new Date(now.getTime() + TRIAL_WARN_MS);
+  const graceMs = GRACE_DAYS * DAY_MS;
+  const tenantSel = { select: { id: true, name: true, slug: true } } as const;
+
+  const [signups, payments, suspended, canceled, trials, instances, settings] = await Promise.all([
+    prisma.tenant.findMany({
+      where: { createdAt: { gte: from } },
+      orderBy: { createdAt: "desc" },
+      take: SOURCE_CAP,
+      select: { id: true, name: true, slug: true, createdAt: true },
+    }),
+    prisma.invoice.findMany({
+      where: { status: "PAID", paidAt: { gte: from } },
+      orderBy: { paidAt: "desc" },
+      take: SOURCE_CAP,
+      select: { id: true, paidAt: true, amountCents: true, subscription: { select: { tenant: tenantSel } } },
+    }),
+    prisma.subscription.findMany({
+      where: { status: "SUSPENDED", currentPeriodEnd: { gte: new Date(from.getTime() - graceMs) } },
+      take: SOURCE_CAP,
+      select: { id: true, currentPeriodEnd: true, tenant: tenantSel },
+    }),
+    prisma.subscription.findMany({
+      where: { status: "CANCELED", canceledAt: { gte: from } },
+      orderBy: { canceledAt: "desc" },
+      take: SOURCE_CAP,
+      select: { id: true, canceledAt: true, tenant: tenantSel },
+    }),
+    prisma.subscription.findMany({
+      where: { status: "TRIALING", trialEndsAt: { gt: now, lte: trialLimit } },
+      take: SOURCE_CAP,
+      select: { id: true, trialEndsAt: true, tenant: tenantSel },
+    }),
+    prisma.whatsappInstance.findMany({
+      where: { deletedAt: null, sandbox: false, status: "DISCONNECTED", disconnectedAt: { gte: from } },
+      orderBy: { disconnectedAt: "desc" },
+      take: SOURCE_CAP,
+      select: { id: true, label: true, disconnectedAt: true, tenant: tenantSel },
+    }),
+    prisma.platformSettings.findUnique({
+      where: { id: 1 },
+      select: {
+        lastMpWebhookRejectedAt: true,
+        lastMpWebhookRejection: true,
+        lastBillingTickAt: true,
+        lastMaintenanceTickAt: true,
+      },
+    }),
+  ]);
+
+  const items: Item[] = [];
+
+  for (const t of signups) {
+    items.push({
+      id: `signup:${t.id}`,
+      kind: "TENANT_SIGNED_UP",
+      severity: "info",
+      title: "Nova empresa cadastrada",
+      body: `${t.name} criou uma conta e começou o período de teste.`,
+      href: "/admin/empresas",
+      createdAt: t.createdAt.toISOString(),
+      tenant: { id: t.id, name: t.name, slug: t.slug },
+    });
+  }
+
+  for (const inv of payments) {
+    if (!inv.paidAt) continue;
+    const tenant = inv.subscription.tenant;
+    items.push({
+      id: `pay:${inv.id}`,
+      kind: "PAYMENT_RECEIVED",
+      severity: "success",
+      title: "Pagamento recebido",
+      body: `${tenant.name} pagou ${brl(inv.amountCents)}.`,
+      href: "/admin/cobranca",
+      createdAt: inv.paidAt.toISOString(),
+      tenant,
+    });
+  }
+
+  for (const s of suspended) {
+    const at = Math.min(s.currentPeriodEnd.getTime() + graceMs, now.getTime());
+    if (at < from.getTime()) continue;
+    items.push({
+      id: `susp:${s.id}:${s.currentPeriodEnd.getTime()}`,
+      kind: "TENANT_SUSPENDED",
+      severity: "warning",
+      title: "Empresa suspensa",
+      body: `${s.tenant.name} foi suspensa por falta de pagamento.`,
+      href: "/admin/empresas",
+      createdAt: new Date(at).toISOString(),
+      tenant: s.tenant,
+    });
+  }
+
+  for (const c of canceled) {
+    if (!c.canceledAt) continue;
+    items.push({
+      id: `cancel:${c.id}:${c.canceledAt.getTime()}`,
+      kind: "TENANT_CANCELED",
+      severity: "danger",
+      title: "Empresa cancelada",
+      body: `A assinatura de ${c.tenant.name} foi cancelada.`,
+      href: "/admin/empresas",
+      createdAt: c.canceledAt.toISOString(),
+      tenant: c.tenant,
+    });
+  }
+
+  for (const tr of trials) {
+    if (!tr.trialEndsAt) continue;
+    items.push({
+      id: `trial:${tr.id}`,
+      kind: "TRIAL_ENDING",
+      severity: "warning",
+      title: "Teste termina em breve",
+      body: `O período de teste de ${tr.tenant.name} termina em menos de 24 horas.`,
+      href: "/admin/empresas",
+      createdAt: new Date(tr.trialEndsAt.getTime() - TRIAL_WARN_MS).toISOString(),
+      tenant: tr.tenant,
+    });
+  }
+
+  for (const i of instances) {
+    if (!i.disconnectedAt) continue;
+    items.push({
+      id: `wa:${i.id}:${i.disconnectedAt.getTime()}`,
+      kind: "WHATSAPP_DISCONNECTED",
+      severity: "danger",
+      title: "WhatsApp desconectado",
+      body: `O número "${i.label}" de ${i.tenant.name} caiu e o bot parou de responder.`,
+      href: "/admin/saude",
+      createdAt: i.disconnectedAt.toISOString(),
+      tenant: i.tenant,
+    });
+  }
+
+  if (settings?.lastMpWebhookRejectedAt && settings.lastMpWebhookRejectedAt >= from) {
+    const rejection = settings.lastMpWebhookRejection;
+    const rawReason = rejection && typeof rejection === "object" ? (rejection as Record<string, unknown>).reason : null;
+    const reason = typeof rawReason === "string" ? rawReason.slice(0, 200) : null;
+    items.push({
+      id: `mpwh:${settings.lastMpWebhookRejectedAt.getTime()}`,
+      kind: "MP_WEBHOOK_REJECTED",
+      severity: "danger",
+      title: "Webhook do Mercado Pago rejeitado",
+      body: `${reason ? `Motivo: ${reason}. ` : ""}Pagamentos Pix podem não estar sendo baixados automaticamente.`,
+      href: "/admin/saude",
+      createdAt: settings.lastMpWebhookRejectedAt.toISOString(),
+    });
+  }
+
+  // Ticks atrasados: fora da janela de 30 dias de propósito — enquanto o job estiver parado o
+  // alerta continua valendo. createdAt = instante em que ficou atrasado (última execução + limite).
+  const ticks = [
+    { job: "billing", label: "billing/tick", at: settings?.lastBillingTickAt ?? null, stale: BILLING_TICK_STALE_MS, hours: 2 },
+    { job: "maintenance", label: "maintenance/tick", at: settings?.lastMaintenanceTickAt ?? null, stale: MAINTENANCE_TICK_STALE_MS, hours: 26 },
+  ];
+  for (const t of ticks) {
+    const late = !t.at || now.getTime() - t.at.getTime() > t.stale;
+    if (!late) continue;
+    let since: Date;
+    if (t.at) {
+      since = new Date(t.at.getTime() + t.stale);
+    } else {
+      // Nunca rodou: ancora na empresa mais antiga (sem empresa, não há o que alertar).
+      const first = await prisma.tenant.findFirst({ orderBy: { createdAt: "asc" }, select: { createdAt: true } });
+      if (!first) continue;
+      since = new Date(first.createdAt.getTime() + t.stale);
+      if (since > now) continue;
+    }
+    items.push({
+      id: `tick:${t.job}:${t.at ? t.at.getTime() : "never"}`,
+      kind: "TICK_LATE",
+      severity: "warning",
+      title: `${t.label} atrasado`,
+      body: t.at ? `O ${t.label} não roda há mais de ${t.hours}h. Confira o cron no n8n.` : `O ${t.label} nunca rodou. Confira o cron no n8n.`,
+      href: "/admin/saude",
+      createdAt: since.toISOString(),
+    });
+  }
+
+  return items;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Estado de leitura (por usuário)
+// ---------------------------------------------------------------------------------------------
+
+async function loadReadAllAt(userId: string): Promise<Date | null> {
+  const u = await getPrisma().user.findUnique({ where: { id: userId }, select: { platformNotificationsReadAllAt: true } });
+  return u?.platformNotificationsReadAllAt ?? null;
+}
+
+async function loadReadKeys(userId: string, keys: string[]): Promise<Set<string>> {
+  if (keys.length === 0) return new Set();
+  const rows = await getPrisma().platformNotificationRead.findMany({
+    where: { userId, notificationKey: { in: keys } },
+    select: { notificationKey: true },
+  });
+  return new Set(rows.map((r) => r.notificationKey));
+}
+
+function isRead(item: { id: string; createdAt: string }, readAllAt: Date | null, readKeys: Set<string>): boolean {
+  if (readKeys.has(item.id)) return true;
+  return readAllAt !== null && new Date(item.createdAt).getTime() <= readAllAt.getTime();
+}
+
+function compareDesc(a: { createdAt: string; id: string }, b: { createdAt: string; id: string }): number {
+  if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
+  return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+}
+
+function encodeCursor(item: { createdAt: string; id: string }): string {
+  return Buffer.from(`${item.createdAt}|${item.id}`).toString("base64url");
+}
+
+function decodeCursor(cursor: string): { createdAt: string; id: string } {
+  try {
+    const [createdAt, ...rest] = Buffer.from(cursor, "base64url").toString("utf8").split("|");
+    const id = rest.join("|");
+    if (!createdAt || !id || Number.isNaN(new Date(createdAt).getTime())) throw new Error("bad");
+    return { createdAt: new Date(createdAt).toISOString(), id };
+  } catch {
+    throw new DomainError("INVALID_CURSOR", "Cursor inválido.");
+  }
+}
+
+/** Não lidas entre `items` (que devem cobrir, no mínimo, tudo depois de readAllAt). */
+async function countUnread(
+  userId: string,
+  items: Item[],
+  readAllAt: Date | null,
+): Promise<{ unreadCount: number; readKeys: Set<string> }> {
+  const candidates = items.filter((i) => readAllAt === null || new Date(i.createdAt).getTime() > readAllAt.getTime());
+  const readKeys = await loadReadKeys(
+    userId,
+    candidates.map((c) => c.id),
+  );
+  return { unreadCount: candidates.filter((c) => !readKeys.has(c.id)).length, readKeys };
+}
+
+// ---------------------------------------------------------------------------------------------
+// API do módulo
+// ---------------------------------------------------------------------------------------------
+
+export async function listPlatformNotifications(
+  userId: string,
+  cursor?: string,
+): Promise<{ items: AdminNotification[]; unreadCount: number; nextCursor: string | null }> {
+  const now = new Date();
+  const cur = cursor ? decodeCursor(cursor) : null;
+  const [readAllAt, all] = await Promise.all([loadReadAllAt(userId), loadItems(now, windowStartOf(now))]);
+
+  const sorted = [...all].sort(compareDesc);
+  const merged = cur ? sorted.filter((i) => compareDesc(i, cur) > 0) : sorted;
+  const page = merged.slice(0, PAGE_SIZE);
+  const hasMore = merged.length > PAGE_SIZE;
+
+  const { unreadCount } = await countUnread(userId, all, readAllAt);
+  const pageKeys = await loadReadKeys(
+    userId,
+    page.map((p) => p.id),
+  );
+
+  return {
+    items: page.map((i) => ({ ...i, read: isRead(i, readAllAt, pageKeys) })),
+    unreadCount,
+    nextCursor: hasMore ? encodeCursor(page[page.length - 1]) : null,
+  };
+}
+
+export async function pollPlatformNotifications(
+  userId: string,
+  since: Date,
+): Promise<{ unreadCount: number; fresh: AdminNotification[] }> {
+  const now = new Date();
+  const windowStart = windowStartOf(now);
+  const readAllAt = await loadReadAllAt(userId);
+  // Só precisa do que é mais novo que o menor entre `since` e `readAllAt` (não lidas e novidades).
+  const lower = readAllAt ? Math.min(readAllAt.getTime(), since.getTime()) : windowStart.getTime();
+  const from = new Date(Math.max(windowStart.getTime(), lower));
+
+  const items = await loadItems(now, from);
+  const { unreadCount, readKeys } = await countUnread(userId, items, readAllAt);
+
+  const fresh = items
+    .filter((i) => new Date(i.createdAt).getTime() > since.getTime())
+    .sort(compareDesc)
+    .slice(0, POLL_MAX);
+  const extra = await loadReadKeys(
+    userId,
+    fresh.map((f) => f.id).filter((id) => !readKeys.has(id)),
+  );
+  const allRead = new Set([...readKeys, ...extra]);
+
+  return { unreadCount, fresh: fresh.map((i) => ({ ...i, read: isRead(i, readAllAt, allRead) })) };
+}
+
+export async function markPlatformNotificationsRead(
+  userId: string,
+  input: { ids?: string[]; all?: boolean },
+): Promise<{ unreadCount: number }> {
+  const ids = [...new Set(input.ids ?? [])];
+  if (!input.all && ids.length === 0) {
+    throw new DomainError("INVALID_PAYLOAD", "Informe ids ou all=true.");
+  }
+  if (ids.some((id) => !KEY_PATTERN.test(id))) {
+    throw new DomainError("INVALID_PAYLOAD", "Identificador de notificação inválido.");
+  }
+
+  const prisma = getPrisma();
+  if (input.all) {
+    const readAt = new Date();
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { platformNotificationsReadAllAt: readAt } }),
+      prisma.platformNotificationRead.deleteMany({ where: { userId, readAt: { lte: readAt } } }),
+    ]);
+  } else {
+    await prisma.platformNotificationRead.createMany({
+      data: ids.map((notificationKey) => ({ userId, notificationKey })),
+      skipDuplicates: true,
+    });
+  }
+
+  const now = new Date();
+  const [readAllAt, items] = await Promise.all([loadReadAllAt(userId), loadItems(now, windowStartOf(now))]);
+  const { unreadCount } = await countUnread(userId, items, readAllAt);
+  return { unreadCount };
+}

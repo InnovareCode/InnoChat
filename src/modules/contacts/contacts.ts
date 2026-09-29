@@ -340,6 +340,10 @@ export async function setContactBotPaused(
 export async function deleteContact(tenantId: string, id: string): Promise<{ mode: "deleted" | "anonymized" }> {
   const contact = await loadOwnedContact(tenantId, id);
 
+  // LGPD: o histórico de conversas do cliente some em qualquer dos dois caminhos (o cascade do
+  // banco já cobriria a exclusão, mas na anonimização a linha do contato permanece).
+  await forTenant(tenantId).chatMessage.deleteMany({ where: { contactId: id } });
+
   const appointmentsCount = await forTenant(tenantId).appointment.count({ where: { contactId: id } });
   if (appointmentsCount === 0) {
     await forTenant(tenantId).contact.delete({ where: { id } });

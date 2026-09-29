@@ -2,7 +2,7 @@
 
 > Documento-modelo elaborado para o InnoChat; recomenda-se revisão por advogado antes da publicação definitiva.
 
-**Vigência:** 28 de setembro de 2026 · **Versão:** 2026-09-28
+**Vigência:** 29 de setembro de 2026 · **Versão:** 2026-09-29
 
 Estes Termos de Uso explicam as regras para contratar e usar o InnoChat. Leia com atenção: ao criar uma conta, você declara que leu, entendeu e aceita estes Termos e a [Política de Privacidade](/privacidade).
 
@@ -64,7 +64,7 @@ O aceite é registrado no cadastro, com a versão destes Termos e a data e hora 
 
 O InnoChat oferece, conforme o Plano contratado: cadastro de serviços, profissionais, expedientes e bloqueios; agenda com visão por dia e por profissional; Bot de agendamento pelo WhatsApp com textos editáveis; gestão de Clientes Finais, com pausa do Bot por cliente e exportação em planilha (CSV); e gestão da assinatura.
 
-O Bot responde apenas a quem enviou mensagem para o número da Empresa. As mensagens continuam chegando normalmente ao celular da Empresa, que pode assumir a conversa a qualquer momento. **O InnoChat não armazena o conteúdo das conversas** (veja a Política de Privacidade).
+O Bot responde apenas a quem enviou mensagem para o número da Empresa. As mensagens continuam chegando normalmente ao celular da Empresa, que pode assumir a conversa a qualquer momento. **O InnoChat guarda o texto das conversas por 90 dias, para suporte ao atendimento** (veja a Política de Privacidade).
 
 Os limites de cada Plano (números de WhatsApp, profissionais e outros) são verificados pelo sistema. Podemos melhorar, alterar ou descontinuar funcionalidades ao longo do tempo. Se uma mudança reduzir de forma relevante uma funcionalidade essencial do Plano contratado, avisaremos com antecedência razoável.
 

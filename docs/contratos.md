@@ -1153,7 +1153,7 @@ Adicionada tolerância de 10 min no `ts` (contra replay de um header capturado) 
 `POST /api/internal/v1/maintenance/tick` — MESMA autenticação do `billing/tick`
 (`Authorization: Bearer <INTERNAL_API_SECRET>`, sem `X-InnoChat-Instance`). Chamado
 periodicamente pelo `innochat-cron` (fora deste repo — **sem workflow novo no n8n**, o Atlas
-pluga a chamada). Resposta 200: `{ inboundEventsPurged, contactsAnonymized }`
+pluga a chamada). Resposta 200: `{ inboundEventsPurged, contactsAnonymized, chatMessagesPurged }`
 (`MaintenanceTickSummary`).
 
 - Purga `InboundEvent` com `createdAt` > 30 dias (`docs/arquitetura.md` §11).
@@ -1789,3 +1789,43 @@ Motivo: a baixa dependia só do webhook do MP; webhook perdido/rejeitado deixava
 **Diagnóstico do webhook** (`webhook-diagnostics.ts`): `lastMpWebhookResult = { outcome: processed|already_processed|ignored|rejected, reason?, environment, type }`; `lastMpWebhookRejection = { reason, environment, type }` com `reason` em `missing_signature | malformed_signature | bad_signature | stale_timestamp | no_secret_for_env | wrong_environment_secret | ignored_type | missing_data_id`. `wrong_environment_secret` = assinatura válida com a chave do OUTRO ambiente. Escrita de rejeição com throttle de 2s (endpoint público); log estruturado `billing.webhook.rejected` sempre. `PlatformHealth.mercadoPagoWebhook = { lastReceivedAt, lastOutcome, lastRejectedAt, lastRejectionReason, activeEnvironment }`, exibido em Admin → Saúde (`data-testid="saude-webhook-mp"`), com alerta quando o último foi rejeitado.
 
 Testes: `tests/integration/billing-reconcile.integration.test.ts`, `src/modules/billing/mercadopago.test.ts` (`explainMercadoPagoSignature`).
+
+## Histórico de conversas do WhatsApp (2026-09-29, pedido do dono)
+
+Model `ChatMessage` (`direction` INBOUND/OUTBOUND, `body`, `providerMessageId?`, `@@unique([tenantId, providerMessageId])`); acesso via `forTenant().chatMessage`. **Retenção: 90 dias** (política de privacidade e Termos atualizados; `TERMS_VERSION` agora `2026-09-29`).
+
+### Gravação (`src/modules/conversations/log.ts`) — nunca derruba o fluxo do bot
+- **Entrada (INBOUND):** em `claimMessage`, logo depois de adquirir a trava e ANTES das checagens de ignorar — grava toda mensagem do cliente, inclusive as que o bot vai ignorar (`BOT_PAUSED`, `HUMAN_MODE`, `TENANT_SUSPENDED`, `STALE`). Texto = o texto; mídia = placeholder (`[imagem]`, `[áudio]`, `[vídeo]`, `[documento]`, `[figurinha]`, `[contato]`, `[localização]`, `[mídia]`), sem binário nem legenda (`NormalizedMessageContent.media` ganhou `label`; o `message` devolvido ao n8n segue `{ type: "media" }`). Dedup por `providerMessageId` (P2002 absorvido; o `InboundEvent` já barra a maioria antes). `busy` não grava (o n8n reenvia e grava na tentativa seguinte).
+- **`fromMe` que NÃO é eco do bot** (a empresa digitou no celular) vira OUTBOUND, com `providerMessageId`. Eco do bot (`FROM_ME_ECHO`) não é gravado (a saída do bot já entrou pelo PUT abaixo).
+- **Saída do bot (OUTBOUND) — SEM mudança no n8n.** Escolhida a opção (b): `PUT /sessions/{id}` já recebe `outbound: string[]` (o texto exato enviado; o nó "Montar mensagem" põe `save.outbound = [message]`) e é chamado ANTES tanto do nó "Enviar pela Evolution" quanto do desvio "Sandbox? → /sandbox/outbox". `updateSession` grava uma linha por texto, na ordem (`createdAt` +1ms por item), depois de validar a trava: `LOCK_LOST` não grava nada (a mensagem não sai). Por que (b) e não (a)/(c): (a) exigiria mexer no n8n e adicionaria um ponto novo de falha/latência/`continueOnFail`; (c) chega sem o texto normalizado e não distingue eco. Trade-off aceito: o registro acontece na gravação da sessão, antes do envio — se a Evolution falhar depois, a mensagem consta como enviada (mesma premissa que o `recentOutbound`/eco já usa). **Sandbox** também é coberto por este mesmo PUT; por isso `/sandbox/outbox` NÃO grava (duplicaria).
+- **Não existe** o endpoint `POST /messages/outbound` (não foi necessário).
+
+### Leitura — `getConversationAction` (`src/modules/conversations/actions.ts`)
+`getConversationAction({ tenantSlug, contactId, cursor? })` → `Result<{ items: Array<{ id, direction: "INBOUND"|"OUTBOUND", body, createdAt: string(ISO), instanceLabel: string|null }>, nextCursor: string|null }>`. `requireTenantMember` (OWNER e STAFF), sem `assertTenantCanWrite`. Página de 50: dentro da página as **mais antigas em cima e as mais novas embaixo**; `nextCursor` (opaco) aponta para a mais antiga carregada, e a página seguinte traz as anteriores. Erros: `NOT_FOUND` (cliente de outra empresa/inexistente, ou não é membro), `INVALID_CURSOR`, `UNAUTHENTICATED`. Cliente anonimizado/excluído devolve lista vazia/NOT_FOUND (mensagens apagadas).
+
+### Retenção / LGPD
+- `maintenance/tick`: apaga `ChatMessage` com mais de 90 dias em lotes de 5000 (até 20 lotes por chamada), isolado por try/catch (falha só gera `logger.warn`). Summary ganhou `chatMessagesPurged` (aditivo). Também purga `PlatformNotificationRead` com mais de 45 dias.
+- Anonimização de contato de empresa cancelada há > 90 dias e `deleteContact` (tela Clientes, modos "deleted" e "anonymized") **apagam as mensagens do contato**.
+- Logs: nunca o texto da mensagem (`logger.warn` só com ids/tipo do erro).
+
+## Central de notificações do admin da plataforma (2026-09-29)
+
+`src/modules/platform-notifications/{actions,service,types}.ts` — mesmo desenho da central do tenant: **derivada** do estado (sem tabela), janela de 30 dias, ids estáveis, leitura por usuário (`PlatformNotificationRead` para uma; `User.platformNotificationsReadAllAt` para "todas": tudo com `createdAt <=`). Todas as actions começam com `requirePlatformAdmin` (sem sessão → `UNAUTHENTICATED`; não-admin → `FORBIDDEN`).
+
+- `listPlatformNotificationsAction({ cursor? })` → `{ items: AdminNotification[] (20/página, mais novas primeiro), unreadCount, nextCursor }`
+- `pollPlatformNotificationsAction({ since })` → `{ unreadCount, fresh: AdminNotification[] (só createdAt > since, máx. 10) }`
+- `markPlatformNotificationsReadAction({ ids?, all? })` → `{ unreadCount }` (idempotente; sem ids/all → `INVALID_PAYLOAD`; ids devem casar `^(signup|pay|susp|cancel|trial|wa|mpwh|tick):...`).
+- `AdminNotification = { id, kind, severity: "info"|"success"|"warning"|"danger", title, body, href: string|null, createdAt: string, read: boolean, tenant?: { id, name, slug } }`
+
+| kind | severity | origem / id | href |
+|---|---|---|---|
+| `TENANT_SIGNED_UP` | info | `Tenant.createdAt` · `signup:<tenantId>` | `/admin/empresas` |
+| `PAYMENT_RECEIVED` | success | `Invoice PAID`, `paidAt`, corpo com o valor · `pay:<invoiceId>` | `/admin/cobranca` |
+| `TENANT_SUSPENDED` | warning | assinatura `SUSPENDED`; `createdAt = currentPeriodEnd + GRACE_DAYS` (não há coluna de suspensão) · `susp:<subId>:<periodEndMs>` | `/admin/empresas` |
+| `TENANT_CANCELED` | danger | `Subscription.canceledAt` · `cancel:<subId>:<ms>` | `/admin/empresas` |
+| `TRIAL_ENDING` | warning | `TRIALING` com `trialEndsAt` em ≤ 24h · `trial:<subId>` | `/admin/empresas` |
+| `WHATSAPP_DISCONNECTED` | danger | instância real (não sandbox/removida) com `disconnectedAt` · `wa:<instId>:<ms>` | `/admin/saude` |
+| `MP_WEBHOOK_REJECTED` | danger | `PlatformSettings.lastMpWebhookRejectedAt` (+ motivo) · `mpwh:<ms>` | `/admin/saude` |
+| `TICK_LATE` | warning | billing > 2h / maintenance > 26h (regra da Saúde); fora da janela de 30 dias (vale enquanto atrasado); nunca rodou ancora na empresa mais antiga · `tick:<job>:<lastRunMs\|never>` | `/admin/saude` |
+
+Poll barato: 1 leitura do usuário + 1 consulta pequena por fonte (cap 100, filtrada por `max(janela, min(since, readAllAt))`) + 1 leitura de reads; sem N+1. Testes: `tests/integration/platform-notifications.integration.test.ts`, `tests/integration/conversations.integration.test.ts`.
