@@ -20,6 +20,14 @@ export type WebhookRejectionReason =
 
 export type WebhookOutcome = "processed" | "already_processed" | "ignored" | "rejected";
 
+/** `type` vem de quem chama a rota pública: só valores conhecidos vão para log/banco; o resto vira "other". */
+const KNOWN_WEBHOOK_TYPES = new Set(["payment", "merchant_order", "plan", "subscription", "subscription_preapproval", "subscription_authorized_payment", "point_integration_wh", "topic_merchant_order_wh", "topic_claims_integration_wh", "delivery", "shipments", "stop_delivery_op_wh"]);
+
+export function sanitizeWebhookType(type: string | null | undefined): string | null {
+  if (!type) return null;
+  return KNOWN_WEBHOOK_TYPES.has(type) ? type : "other";
+}
+
 export type WebhookDiagnosticsInfo = { environment: MercadoPagoEnv; type?: string | null };
 
 /** Rejeições vêm de endpoint público: no máximo 1 escrita a cada 2s (evita amplificação de escrita no banco). */

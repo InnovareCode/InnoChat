@@ -28,6 +28,7 @@ export function createMockMercadoPagoGateway() {
         status: "pending",
         dateApproved: null,
         externalReference: input.externalReference,
+        transactionAmountCents: input.amountCents,
         copyPaste: `00020126mock-pix-${paymentId}`,
       });
       return {
@@ -47,6 +48,12 @@ export function createMockMercadoPagoGateway() {
 
   return {
     gateway,
+    /** Sobrescreve campos do pagamento (ex.: `externalReference: null`, `transactionAmountCents`) para testar divergências. */
+    tamper(paymentId: string, patch: Partial<MercadoPagoPayment>) {
+      const payment = payments.get(paymentId);
+      if (!payment) throw new Error(`mock: pagamento ${paymentId} não existe`);
+      Object.assign(payment, patch);
+    },
     /** Força um status (rejected/cancelled/pending...) — o que `getPayment` reconsulta. */
     setStatus(paymentId: string, status: string) {
       const payment = payments.get(paymentId);

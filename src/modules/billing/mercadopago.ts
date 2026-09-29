@@ -25,6 +25,8 @@ export type MercadoPagoPayment = {
   status: MercadoPagoPaymentStatus;
   dateApproved: Date | null;
   externalReference: string | null;
+  /** Valor pago em centavos (`transaction_amount` do MP); `null` se a resposta não trouxe. */
+  transactionAmountCents: number | null;
 };
 
 export type CreatePixPaymentInput = {
@@ -276,6 +278,7 @@ export function createMercadoPagoGateway(accessToken: string, environment?: Merc
         status: string;
         date_approved: string | null;
         external_reference: string | null;
+        transaction_amount?: number | null;
       };
 
       return {
@@ -283,6 +286,7 @@ export function createMercadoPagoGateway(accessToken: string, environment?: Merc
         status: json.status,
         dateApproved: json.date_approved ? new Date(json.date_approved) : null,
         externalReference: json.external_reference,
+        transactionAmountCents: typeof json.transaction_amount === "number" ? Math.round(json.transaction_amount * 100) : null,
       };
     },
   };

@@ -212,6 +212,8 @@ export function AdminCobrancaClient({
               ? "Access token do ambiente desta fatura não está salvo."
               : outcome.code === "PAYMENT_MISMATCH"
                 ? "O pagamento consultado pertence a outra fatura."
+                : outcome.code === "AMOUNT_MISMATCH"
+                  ? "O valor pago não confere com o da fatura. Não foi baixada."
                 : "Serviço indisponível ou credencial recusada. Veja Admin → Saúde.",
         });
       } else if (outcome.status === "voided_invoice_paid") {

@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 import { getActiveMercadoPagoCredentials, getMercadoPagoCredentials, type MercadoPagoEnv } from "@/modules/platform/mercadopago-config";
 import { applyInvoicePayment } from "./service";
 import { explainMercadoPagoSignature, getMercadoPagoGateway, type MercadoPagoGateway } from "./mercadopago";
-import { recordWebhookReceived, recordWebhookRejected, type WebhookRejectionReason } from "./webhook-diagnostics";
+import { recordWebhookReceived, recordWebhookRejected, sanitizeWebhookType, type WebhookRejectionReason } from "./webhook-diagnostics";
 
 /**
  * `POST /api/webhooks/mercadopago` (docs/arquitetura.md §7.1, §6.10). Segue o mesmo formato de
@@ -63,20 +63,21 @@ export async function handleMercadoPagoWebhook(params: {
 }): Promise<{ status: "processed" | "ignored" | "already_processed" }> {
   const prisma = getPrisma();
 
-  // Segredo do ambiente ATIVO (produção ou teste). Fail-closed: ausente ou que não decifra => rejeita.
-  const { webhookSecret, environment } = await getActiveMercadoPagoCredentials();
-  const info = { environment, type: params.type ?? null };
-
+  // Rota pública: sem data.id só loga (nada de escrita no banco antes de autenticar).
   if (!params.dataId) {
-    await recordWebhookReceived("ignored", info, "missing_data_id");
+    logger.info("billing.webhook.missing_data_id");
     throw new WebhookIgnored("Notificação sem data.id — nada a processar.");
   }
+
+  // Segredo do ambiente ATIVO (produção ou teste). Fail-closed: ausente ou que não decifra => rejeita.
+  const { webhookSecret, environment } = await getActiveMercadoPagoCredentials();
+  const info = { environment, type: sanitizeWebhookType(params.type) };
 
   if (!webhookSecret) {
     // Sem segredo configurado (ou ilegível): não dá para validar a assinatura com segurança.
     // Rejeitar é mais seguro que aceitar sem checagem.
     await recordWebhookRejected("no_secret_for_env", info);
-    throw new WebhookAuthError("Mercado Pago não configurado.", "no_secret_for_env");
+    throw new WebhookAuthError("Assinatura inválida.", "no_secret_for_env");
   }
 
   const signatureFailure = explainMercadoPagoSignature({
@@ -100,7 +101,7 @@ export async function handleMercadoPagoWebhook(params: {
   }
 
   if (params.type && params.type !== "payment") {
-    logger.info("billing.webhook.irrelevant_type", { type: params.type });
+    logger.info("billing.webhook.irrelevant_type", { type: info.type });
     await recordWebhookReceived("ignored", info, "ignored_type");
     return { status: "ignored" };
   }
@@ -163,6 +164,26 @@ export async function handleMercadoPagoWebhook(params: {
     await prisma.providerEvent.update({
       where: { provider_providerEventId: { provider: "mercadopago", providerEventId } },
       data: { processedAt: new Date() },
+    });
+    await recordWebhookReceived("ignored", info);
+    return { status: "ignored" };
+  }
+
+  // Valor pago tem que bater com a fatura (fail-closed: valor ausente também não baixa).
+  const invoiceForAmount = await prisma.invoice.findUnique({ where: { id: payment.externalReference }, select: { amountCents: true } });
+  if (invoiceForAmount && payment.transactionAmountCents !== invoiceForAmount.amountCents) {
+    logger.warn("billing.webhook.amount_mismatch", {
+      invoiceId: payment.externalReference,
+      providerEventId,
+      paidCents: payment.transactionAmountCents,
+      expectedCents: invoiceForAmount.amountCents,
+    });
+    await prisma.providerEvent.update({
+      where: { provider_providerEventId: { provider: "mercadopago", providerEventId } },
+      data: {
+        processedAt: new Date(),
+        payload: { status: payment.status, externalReference: payment.externalReference, amountMismatch: true },
+      },
     });
     await recordWebhookReceived("ignored", info);
     return { status: "ignored" };

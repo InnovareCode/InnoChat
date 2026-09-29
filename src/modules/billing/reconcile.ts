@@ -30,7 +30,7 @@ export type ReconcileOutcome =
   | { status: "throttled" }
   | { status: "no_payment" }
   | { status: "not_open" }
-  | { status: "error"; code: "NOT_CONFIGURED" | "MP_UNAVAILABLE" | "PAYMENT_MISMATCH" };
+  | { status: "error"; code: "NOT_CONFIGURED" | "MP_UNAVAILABLE" | "PAYMENT_MISMATCH" | "AMOUNT_MISMATCH" };
 
 /** Estados do MP que encerram o pagamento sem dinheiro — nunca dão baixa. */
 const FAILED_MP_STATUSES = new Set(["rejected", "cancelled", "expired", "refunded", "charged_back"]);
@@ -116,8 +116,8 @@ export async function reconcileInvoicePayment(invoiceId: string, options: Reconc
     return { status: "error", code: sawUnavailable || !sawNotConfigured ? "MP_UNAVAILABLE" : "NOT_CONFIGURED" };
   }
 
-  if (payment.externalReference && payment.externalReference !== invoice.id) {
-    // O pagamento consultado pertence a OUTRA fatura — nunca baixa esta.
+  if (payment.externalReference !== invoice.id) {
+    // Referência ausente (null) ou de OUTRA fatura — nunca baixa esta (igualdade estrita, fail-closed).
     logger.warn("billing.reconcile.external_reference_mismatch", { invoiceId: invoice.id, source: options.source });
     return { status: "error", code: "PAYMENT_MISMATCH" };
   }
@@ -133,6 +133,16 @@ export async function reconcileInvoicePayment(invoiceId: string, options: Reconc
       return { status: "payment_failed", mpStatus: payment.status };
     }
     return { status: "pending", mpStatus: payment.status };
+  }
+
+  if (payment.transactionAmountCents !== invoice.amountCents) {
+    logger.warn("billing.reconcile.amount_mismatch", {
+      invoiceId: invoice.id,
+      paidCents: payment.transactionAmountCents,
+      expectedCents: invoice.amountCents,
+      source: options.source,
+    });
+    return { status: "error", code: "AMOUNT_MISMATCH" };
   }
 
   const applied = await applyInvoicePayment(invoice.id, payment.dateApproved ?? now);

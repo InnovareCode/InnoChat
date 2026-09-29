@@ -15,7 +15,7 @@ vi.mock("@/lib/email", async () => {
 
 const { reconcileInvoicePayment } = await import("@/modules/billing/reconcile");
 const { handleMercadoPagoWebhook, WebhookAuthError } = await import("@/modules/billing/webhook");
-const { resetWebhookDiagnosticsThrottle } = await import("@/modules/billing/webhook-diagnostics");
+const { resetWebhookDiagnosticsThrottle, sanitizeWebhookType } = await import("@/modules/billing/webhook-diagnostics");
 const { createMockMercadoPagoGateway } = await import("@/modules/billing/mercadopago.mock");
 const { runBillingTick } = await import("@/modules/billing/tick");
 const { tryAttachPix } = await import("@/modules/billing/service");
@@ -129,6 +129,28 @@ describe("reconcileInvoicePayment", () => {
     const result = await reconcileInvoicePayment(a.invoice.id, { source: "tick", gateway: shared.gateway, minIntervalMs: 0 });
     expect(result).toEqual({ status: "error", code: "PAYMENT_MISMATCH" });
     expect((await prisma.invoice.findUniqueOrThrow({ where: { id: a.invoice.id } })).status).toBe("OPEN");
+  });
+
+  it("approved com externalReference null NÃO baixa (fail-closed) e não grava mpEnvironment", async () => {
+    const t = await makeOpenInvoiceWithPix("null-ref", { mpEnvironment: null });
+    t.mock.approve(t.paymentId);
+    t.mock.tamper(t.paymentId, { externalReference: null });
+    const result = await reconcileInvoicePayment(t.invoice.id, { source: "tick", gateway: t.mock.gateway, minIntervalMs: 0 });
+    expect(result).toEqual({ status: "error", code: "PAYMENT_MISMATCH" });
+    const after = await prisma.invoice.findUniqueOrThrow({ where: { id: t.invoice.id } });
+    expect(after.status).toBe("OPEN");
+    expect(after.mpEnvironment).toBeNull();
+  });
+
+  it("valor pago diferente do da fatura NÃO baixa (conciliação e webhook)", async () => {
+    const t = await makeOpenInvoiceWithPix("amount");
+    t.mock.approve(t.paymentId);
+    t.mock.tamper(t.paymentId, { transactionAmountCents: 100 });
+    const result = await reconcileInvoicePayment(t.invoice.id, { source: "tick", gateway: t.mock.gateway, minIntervalMs: 0 });
+    expect(result).toEqual({ status: "error", code: "AMOUNT_MISMATCH" });
+    const viaWebhook = await handleMercadoPagoWebhook({ ...sign(PROD_SECRET, t.paymentId), dataId: t.paymentId, type: "payment", gateway: t.mock.gateway });
+    expect(viaWebhook.status).toBe("ignored");
+    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: t.invoice.id } })).status).toBe("OPEN");
   });
 
   it("idempotente e race-safe com webhook + conciliações concorrentes (1 baixa, 1 mês)", async () => {
@@ -252,6 +274,25 @@ describe("diagnóstico do webhook", () => {
     await setActiveEnvironment("PRODUCTION", { prod: null });
     await expectRejection("no_secret_for_env", { ...sign(PROD_SECRET, id), dataId: id, type: "payment" });
     await setActiveEnvironment("PRODUCTION");
+  });
+
+  it("type do atacante vira allowlist/\"other\" e 401 não revela 'não configurado'", async () => {
+    expect(sanitizeWebhookType("payment")).toBe("payment");
+    expect(sanitizeWebhookType("x".repeat(5000) + "\n\u0000")).toBe("other");
+    expect(sanitizeWebhookType(null)).toBeNull();
+    await setActiveEnvironment("PRODUCTION", { prod: null });
+    resetWebhookDiagnosticsThrottle();
+    await expect(handleMercadoPagoWebhook({ ...sign(PROD_SECRET, "999003"), dataId: "999003", type: "evil\ntype" })).rejects.toThrow("Assinatura inválida.");
+    const row = await prisma.platformSettings.findUniqueOrThrow({ where: { id: 1 } });
+    expect((row.lastMpWebhookRejection as { type: string }).type).toBe("other");
+    await setActiveEnvironment("PRODUCTION");
+  });
+
+  it("notificação sem data.id só loga: não escreve em platform_settings", async () => {
+    const before = await prisma.platformSettings.findUniqueOrThrow({ where: { id: 1 }, select: { lastMpWebhookAt: true } });
+    await expect(handleMercadoPagoWebhook({ xSignature: null, xRequestId: null, dataId: null, type: "payment" })).rejects.toThrow();
+    const after = await prisma.platformSettings.findUniqueOrThrow({ where: { id: 1 }, select: { lastMpWebhookAt: true } });
+    expect(after.lastMpWebhookAt?.getTime()).toBe(before.lastMpWebhookAt?.getTime());
   });
 
   it("grava último recebido (ignorado e aceito) e expõe em Admin → Saúde", async () => {
