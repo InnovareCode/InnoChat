@@ -21,6 +21,12 @@ multiempresa para clínicas, salões e qualquer negócio de serviços com horár
   Em andamento: workflow n8n (Fase 5), exceções na Agenda (Lyra). Próximo: Íris (QA E2E com Playwright), Órion (revisão), Fase 3 (QR) e deploy dependem das credenciais do dono.
   Pendências técnicas: validar assinatura do webhook MP contra a doc oficial/sandbox real; fixtures da Evolution ainda não capturadas do servidor real.
 
+- 2026-09-28 (madrugada): no GitHub (InnovareCode/InnoChat, main). Prontos: painel completo (catálogo, agenda, agendamentos, temas,
+  cadastro/cobrança Pix, mensagens do bot, admin com testar conexão + sync n8n, instalação única), API do bot, workflow n8n (remarcar incluso),
+  E2E 25 + integração 81. Em andamento: Fase 3 WhatsApp/QR (Vega), QA telas novas (Íris), deploy/guia Easypanel (Vulcano).
+  Falta: tela WhatsApp com QR (Lyra, após Vega), revisão Órion, publicar no Easypanel (dono), prova ponta a ponta com Evolution real.
+  Decisão pendente do dono: texto "Confirma a remarcação?" próprio?
+
 ## Concluído
 - Repositório git iniciado; projeto registrado no Painel de Tarefas (PM-AVAN, slug `innochat`).
 
