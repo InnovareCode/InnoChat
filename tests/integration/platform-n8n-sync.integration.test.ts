@@ -174,7 +174,7 @@ function createFakeN8nServer(options: FakeServerOptions) {
     if (activationMatch && method === "POST") {
       const [, id, route] = activationMatch as unknown as [string, string, "publish" | "unpublish" | "activate" | "deactivate"];
       const isNewRoute = route === "publish" || route === "unpublish";
-      if (isNewRoute && !options.supportsPublish) return jsonResponse(404, {}); // instância antiga: publish/unpublish não existem
+      if (isNewRoute && !options.supportsPublish) return jsonResponse(405, { message: "POST method not allowed" }); // instância antiga (visto em produção: 405, não 404)
       activateCalls.push({ id, route });
       const wf = workflows.get(id);
       if (wf) wf.active = route === "publish" || route === "activate";

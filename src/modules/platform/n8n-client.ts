@@ -154,7 +154,9 @@ export function createN8nClient(baseUrl: string, apiKey: string): N8nClient {
   /** Tenta `primaryPath`; se a instância responder 404 (rota não existe nesta versão), tenta `fallbackPath`. */
   async function postWithFallback(primaryPath: string, fallbackPath: string): Promise<void> {
     const response = await rawRequest(primaryPath, { method: "POST" });
-    if (response.status === 404) {
+    // 404 (rota inexistente) ou 405 ("POST method not allowed", visto no n8n do primeiro deploy
+    // real em 2026-09-29): a instância não tem a rota nova, então usa a antiga.
+    if (response.status === 404 || response.status === 405) {
       const fallback = await rawRequest(fallbackPath, { method: "POST" });
       if (!fallback.ok && fallback.status !== 204) {
         const body = await fallback.text().catch(() => "");
