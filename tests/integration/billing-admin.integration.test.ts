@@ -18,9 +18,10 @@ const {
   listDelinquentCompanies,
   listInvoicesAdmin,
   markInvoicePaidManually,
+  reactivateCompanyManually,
   regeneratePixForInvoiceAdmin,
 } = await import("@/modules/billing/admin-service");
-const { findOwnInvoiceOrThrow, regeneratePixForInvoice } = await import("@/modules/billing/service");
+const { applyInvoicePayment, findOwnInvoiceOrThrow, regeneratePixForInvoice } = await import("@/modules/billing/service");
 const { createMockMercadoPagoGateway } = await import("@/modules/billing/mercadopago.mock");
 
 const prisma = getPrisma();
@@ -55,6 +56,9 @@ async function makeTenantWithSubscriptionAndInvoice(params: {
   invoiceStatus?: "OPEN" | "PAID" | "EXPIRED" | "VOID";
   dueAt?: Date;
   paidAt?: Date | null;
+  /** Padrão: já pagou (`now`) salvo TRIALING. Passe `null` para simular teste não convertido. */
+  firstPaidAt?: Date | null;
+  isTrialConversion?: boolean;
 }) {
   const slug = `it-admin-${params.label}-${Date.now()}-${randomUUID().slice(0, 6)}`;
   const tenant = await prisma.tenant.create({
@@ -76,6 +80,7 @@ async function makeTenantWithSubscriptionAndInvoice(params: {
       planId: plan.id,
       status: params.subscriptionStatus ?? "ACTIVE",
       currentPeriodEnd,
+      firstPaidAt: params.firstPaidAt !== undefined ? params.firstPaidAt : params.subscriptionStatus === "TRIALING" ? null : now,
     },
   });
 
@@ -88,6 +93,7 @@ async function makeTenantWithSubscriptionAndInvoice(params: {
       dueAt: params.dueAt ?? currentPeriodEnd,
       status: params.invoiceStatus ?? "OPEN",
       paidAt: params.paidAt ?? null,
+      isTrialConversion: params.isTrialConversion ?? false,
     },
   });
 
@@ -139,6 +145,134 @@ describe("billingMonthlyTotals", () => {
     expect(totals.openCents).toBeGreaterThanOrEqual(plan.priceCents);
     expect(totals.overdueCents).toBeGreaterThanOrEqual(plan.priceCents);
     expect(totals.mrrCents).toBeGreaterThanOrEqual(plan.priceCents);
+  });
+});
+
+describe("Teste não convertido no Admin → Cobrança (decisão do dono, 2026-09-29)", () => {
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  it("fatura de teste OPEN vai para trialCents e NÃO soma em openCents nem overdueCents (antes ou depois de vencer)", async () => {
+    const now = new Date();
+    const before = await billingMonthlyTotals(now);
+    const { plan } = await makeTenantWithSubscriptionAndInvoice({
+      label: "trial-future",
+      subscriptionStatus: "TRIALING",
+      invoiceStatus: "OPEN",
+      isTrialConversion: true,
+      dueAt: addMonths(now, 1),
+    });
+    await makeTenantWithSubscriptionAndInvoice({
+      label: "trial-overdue",
+      subscriptionStatus: "SUSPENDED",
+      firstPaidAt: null,
+      invoiceStatus: "OPEN",
+      isTrialConversion: true,
+      dueAt: new Date(now.getTime() - 2 * DAY_MS),
+    });
+    const after = await billingMonthlyTotals(now);
+
+    expect(after.trialCents - before.trialCents).toBe(plan.priceCents * 2);
+    expect(after.trialCount - before.trialCount).toBe(2);
+    expect(after.openCents).toBe(before.openCents);
+    expect(after.overdueCents).toBe(before.overdueCents);
+    expect(after.mrrCents).toBe(before.mrrCents);
+  });
+
+  it("fatura de teste VOID de conta CANCELED não entra em nenhum total", async () => {
+    const now = new Date();
+    const before = await billingMonthlyTotals(now);
+    await makeTenantWithSubscriptionAndInvoice({
+      label: "trial-void",
+      subscriptionStatus: "CANCELED",
+      firstPaidAt: null,
+      invoiceStatus: "VOID",
+      isTrialConversion: true,
+      dueAt: new Date(now.getTime() - 20 * DAY_MS),
+    });
+    const after = await billingMonthlyTotals(now);
+    expect(after).toEqual(before);
+  });
+
+  it("lista de faturas identifica a de teste (kind TRIAL) e a anulada aparece com status VOID", async () => {
+    const { invoice } = await makeTenantWithSubscriptionAndInvoice({
+      label: "trial-kind",
+      subscriptionStatus: "CANCELED",
+      firstPaidAt: null,
+      invoiceStatus: "VOID",
+      isTrialConversion: true,
+    });
+    const { invoice: regular } = await makeTenantWithSubscriptionAndInvoice({ label: "regular-kind", invoiceStatus: "OPEN" });
+
+    const voids = await listInvoicesAdmin({ status: "VOID", limit: 100 });
+    expect(voids.items.find((i) => i.id === invoice.id)).toMatchObject({ kind: "TRIAL", status: "VOID" });
+    const opens = await listInvoicesAdmin({ status: "OPEN", limit: 100 });
+    expect(opens.items.find((i) => i.id === regular.id)?.kind).toBe("REGULAR");
+  });
+
+  it("empresa que nunca pagou (teste não convertido) NÃO aparece como inadimplente; ex-pagante sim", async () => {
+    const { tenant: trialTenant } = await makeTenantWithSubscriptionAndInvoice({
+      label: "delinq-trial",
+      subscriptionStatus: "SUSPENDED",
+      firstPaidAt: null,
+      currentPeriodEnd: new Date(Date.now() - 3 * DAY_MS),
+      isTrialConversion: true,
+    });
+    const { tenant: payingTenant } = await makeTenantWithSubscriptionAndInvoice({
+      label: "delinq-paying",
+      subscriptionStatus: "PAST_DUE",
+      currentPeriodEnd: new Date(Date.now() - 12 * 60 * 60 * 1000),
+    });
+    const delinquents = await listDelinquentCompanies(new Date());
+    expect(delinquents.some((d) => d.tenantId === trialTenant.id)).toBe(false);
+    expect(delinquents.some((d) => d.tenantId === payingTenant.id)).toBe(true);
+  });
+
+  it("pagamento de fatura VOID não reativa: applyInvoicePayment devolve voided e nada muda; baixa manual recusa", async () => {
+    const { subscription, invoice } = await makeTenantWithSubscriptionAndInvoice({
+      label: "void-late-payment",
+      subscriptionStatus: "CANCELED",
+      firstPaidAt: null,
+      invoiceStatus: "VOID",
+      isTrialConversion: true,
+    });
+    const result = await applyInvoicePayment(invoice.id, new Date());
+    expect(result).toEqual({ alreadyProcessed: false, voided: true });
+
+    const invoiceAfter = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    const subAfter = await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } });
+    expect(invoiceAfter.status).toBe("VOID");
+    expect(invoiceAfter.paidAt).toBeNull();
+    expect(subAfter.status).toBe("CANCELED");
+    expect(subAfter.firstPaidAt).toBeNull();
+
+    await expect(markInvoicePaidManually(invoice.id, "admin-x", "cliente pagou")).rejects.toMatchObject({ code: "INVALID_STATE" });
+  });
+
+  it("pagamento da fatura de teste com a conta SUSPENDED reativa e grava firstPaidAt (dentro dos 7 dias)", async () => {
+    const { subscription, invoice } = await makeTenantWithSubscriptionAndInvoice({
+      label: "trial-late-paid",
+      subscriptionStatus: "SUSPENDED",
+      firstPaidAt: null,
+      currentPeriodEnd: new Date(Date.now() - 3 * DAY_MS),
+      isTrialConversion: true,
+    });
+    const paidAt = new Date();
+    await applyInvoicePayment(invoice.id, paidAt);
+
+    const subAfter = await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } });
+    expect(subAfter.status).toBe("ACTIVE");
+    expect(subAfter.firstPaidAt?.getTime()).toBe(paidAt.getTime());
+  });
+
+  it("reativação manual anula a fatura de teste OPEN (não fica em 'Em teste' para sempre)", async () => {
+    const { tenant, invoice } = await makeTenantWithSubscriptionAndInvoice({
+      label: "reactivate-voids",
+      subscriptionStatus: "SUSPENDED",
+      firstPaidAt: null,
+      isTrialConversion: true,
+    });
+    await reactivateCompanyManually(tenant.id);
+    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).status).toBe("VOID");
   });
 });
 

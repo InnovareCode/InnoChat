@@ -80,6 +80,8 @@ describe("signUp — cadastro público completo", () => {
 
     const invoice = await prisma.invoice.findFirstOrThrow({ where: { subscriptionId: subscription.id } });
     expect(invoice.status).toBe("OPEN");
+    expect(invoice.isTrialConversion).toBe(true);
+    expect(subscription.firstPaidAt).toBeNull();
     expect(invoice.amountCents).toBe(subscription.plan.priceCents);
     expect(invoice.dueAt.getTime()).toBe(subscription.trialEndsAt!.getTime());
     // Com `Tenant.document` já preenchido no cadastro, o Pix da primeira fatura sai de fato

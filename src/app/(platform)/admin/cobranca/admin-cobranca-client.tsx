@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { AlertTriangle, Banknote, Check, Clock, QrCode, ReceiptText, TrendingUp } from "lucide-react";
+import { AlertTriangle, Banknote, Check, Clock, FlaskConical, QrCode, ReceiptText, TrendingUp } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
@@ -213,10 +213,11 @@ export function AdminCobrancaClient({
     <div className="flex flex-col gap-6">
       <PageHeader title="Cobrança" description="Faturas de todas as empresas, totais do mês e inadimplência." />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatBlock icon={<Banknote aria-hidden="true" />} label="Recebido no mês" value={formatCentsBRL(totals.receivedCents)} tone="success" />
         <StatBlock icon={<ReceiptText aria-hidden="true" />} label="Em aberto" value={formatCentsBRL(totals.openCents)} tone="warning" />
         <StatBlock icon={<AlertTriangle aria-hidden="true" />} label="Vencido" value={formatCentsBRL(totals.overdueCents)} tone="danger" />
+        <StatBlock icon={<FlaskConical aria-hidden="true" />} label="Em teste" value={formatCentsBRL(totals.trialCents)} tone="primary" />
         <StatBlock icon={<TrendingUp aria-hidden="true" />} label="MRR estimado" value={formatCentsBRL(totals.mrrCents)} tone="primary" />
       </div>
 
@@ -327,6 +328,7 @@ export function AdminCobrancaClient({
                   <TableCell>
                     <div className="flex items-center gap-1.5">
                       <Badge variant={STATUS_BADGE[invoice.status]}>{STATUS_LABEL[invoice.status]}</Badge>
+                      {invoice.kind === "TRIAL" && invoice.status !== "PAID" ? <Badge variant="neutral">Teste</Badge> : null}
                       {invoice.status === "OPEN" && !invoice.hasPix ? (
                         <span title="Sem Pix gerado" className="text-text-secondary">
                           <QrCode className="h-3.5 w-3.5" aria-hidden="true" />

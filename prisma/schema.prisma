@@ -682,6 +682,11 @@ model Subscription {
   // SUSPENDED (reativação/pagamento), para avisar de novo numa suspensão futura.
   suspendedEmailSentAt DateTime?
 
+  // Primeiro pagamento confirmado (decisão do dono, 2026-09-29). Nulo = nunca pagou: é o que
+  // separa "teste não convertido" (cancela 7 dias depois da suspensão) de ex-pagante (60 dias).
+  // Gravado uma vez, em `applyInvoicePayment`; nunca volta a nulo.
+  firstPaidAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -736,6 +741,11 @@ model Invoice {
   // cada fatura só tem 1 vencimento).
   dueReminderEmailSentAt DateTime?
   dueTodayEmailSentAt    DateTime?
+
+  // Fatura criada no cadastro, que cobre o trial (`signup/service.ts`). Enquanto OPEN, não é
+  // "a receber" nem "vencida" no Admin → Cobrança: é o card "Em teste". Se o cliente não assina,
+  // o `billing/tick` a anula (VOID) no cancelamento da conta.
+  isTrialConversion Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

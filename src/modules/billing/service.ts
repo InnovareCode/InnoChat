@@ -5,7 +5,7 @@ import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { sendMail, invoiceGeneratedEmail, subscriptionSuspendedEmail } from "@/lib/email";
 import { getPublicBaseUrl } from "@/lib/public-url";
-import { computeTrialEndsAt, effectiveStatus, validateCpfCnpj, type SubscriptionStatus } from "@/core/billing";
+import { CANCEL_AFTER_SUSPENDED_TRIAL_DAYS, computeTrialEndsAt, effectiveStatus, validateCpfCnpj, type SubscriptionStatus } from "@/core/billing";
 import { formatCentsBRL, formatDateBR } from "./format";
 import { getMercadoPagoGateway, MercadoPagoApiError, type MercadoPagoFailureKind, type MercadoPagoGateway } from "./mercadopago";
 
@@ -320,7 +320,7 @@ export async function findOwnInvoiceOrThrow(tenantId: string, invoiceId: string)
  * não faz nada (retorna sem erro) — é o que garante que o mesmo evento do webhook, reentregue
  * pelo Mercado Pago, nunca dá baixa duas vezes nem soma dois meses.
  */
-export async function applyInvoicePayment(invoiceId: string, paidAt: Date): Promise<{ alreadyProcessed: boolean }> {
+export async function applyInvoicePayment(invoiceId: string, paidAt: Date): Promise<{ alreadyProcessed: boolean; voided?: boolean }> {
   const prisma = getPrisma();
 
   return prisma.$transaction(async (tx) => {
@@ -333,11 +333,18 @@ export async function applyInvoicePayment(invoiceId: string, paidAt: Date): Prom
     // baixa manual, ou duplo clique no admin) leem `OPEN` ao mesmo tempo em READ COMMITTED; só
     // uma consegue o UPDATE com `status != PAID` (o Postgres serializa a linha), a outra vê
     // `count === 0` e sai sem somar um segundo mês (revisão do Órion, 2026-09-29).
+    // `VOID` (anulada no cancelamento de um teste não convertido) NUNCA é baixada aqui: pagamento
+    // tardio de fatura anulada não reativa sozinho — o chamador registra/loga e o admin decide
+    // (decisão do dono, 2026-09-29; ver docs/contratos.md).
+    if (invoice.status === "VOID") {
+      return { alreadyProcessed: false, voided: true };
+    }
     const claimed = await tx.invoice.updateMany({
-      where: { id: invoice.id, status: { not: "PAID" } },
+      where: { id: invoice.id, status: { notIn: ["PAID", "VOID"] } },
       data: { status: "PAID", paidAt },
     });
     if (claimed.count === 0) {
+      // Já `PAID` — ou anulada por uma corrida entre a leitura acima e a baixa.
       return { alreadyProcessed: true };
     }
 
@@ -357,6 +364,8 @@ export async function applyInvoicePayment(invoiceId: string, paidAt: Date): Prom
         status: "ACTIVE",
         currentPeriodEnd: nextPeriodEnd,
         trialEndsAt: null,
+        // Primeiro pagamento: passa a valer o prazo de 60 dias em SUSPENDED (não o de teste).
+        ...(subscription.firstPaidAt ? {} : { firstPaidAt: paidAt }),
         // O ciclo pago que está começando AGORA é o "próximo ciclo" do §7.2: se havia um
         // downgrade agendado (`changePlan`), é aqui que ele entra em vigor — nunca antes
         // (upgrade já aplicou na hora, em `changePlan`; downgrade espera o pagamento que abre
@@ -467,10 +476,18 @@ export async function sendInvoiceGeneratedEmail(params: {
   });
 }
 
-export async function sendSubscriptionSuspendedEmail(params: { toEmail: string; tenantName: string; tenantSlug: string }) {
+export async function sendSubscriptionSuspendedEmail(params: {
+  toEmail: string;
+  tenantName: string;
+  tenantSlug: string;
+  /** `true` para quem nunca pagou: e-mail de "seu teste terminou", não de atraso. */
+  trialNotConverted?: boolean;
+}) {
   const { subject, html, text } = subscriptionSuspendedEmail({
     tenantName: params.tenantName,
     billingUrl: await billingUrlFor(params.tenantSlug),
+    trialNotConverted: params.trialNotConverted,
+    cancelInDays: params.trialNotConverted ? CANCEL_AFTER_SUSPENDED_TRIAL_DAYS : undefined,
   });
   await sendMail({ to: params.toEmail, subject, html, text }).catch((error) => {
     logger.error("billing.email.suspended.failed", { errorMessage: error instanceof Error ? error.message : String(error) });

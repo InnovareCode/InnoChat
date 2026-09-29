@@ -10,6 +10,12 @@ export const GRACE_DAYS = 1;
 /** Tempo em SUSPENDED antes de virar CANCELED (§7.4). */
 export const CANCEL_AFTER_SUSPENDED_DAYS = 60;
 
+/**
+ * Tempo em SUSPENDED antes de virar CANCELED para quem NUNCA pagou (teste não convertido —
+ * decisão do dono, 2026-09-29). Quem já foi pagante continua com `CANCEL_AFTER_SUSPENDED_DAYS`.
+ */
+export const CANCEL_AFTER_SUSPENDED_TRIAL_DAYS = 7;
+
 /** Trial (decisão do dono, 2026-09-29 — trocou de 1 para 3 dias; carência continua em 1 dia, ver `GRACE_DAYS`): 3 dias a partir do cadastro. */
 export const TRIAL_DAYS = 3;
 
@@ -32,7 +38,8 @@ export function computeTrialEndsAt(signupAt: Date): Date {
  *   resultado: se o pagamento já moveu `currentPeriodEnd` para o futuro, o efetivo já é
  *   `ACTIVE`, mesmo antes do próximo `tick` persistir isso.
  * - Depois do vencimento: `GRACE_DAYS` de carência (`PAST_DUE`), depois `SUSPENDED`, depois
- *   `CANCELED` após `CANCEL_AFTER_SUSPENDED_DAYS` em `SUSPENDED`.
+ *   `CANCELED` após `CANCEL_AFTER_SUSPENDED_DAYS` em `SUSPENDED` (ou
+ *   `CANCEL_AFTER_SUSPENDED_TRIAL_DAYS` se nunca pagou: `firstPaidAt === null`).
  */
 export function effectiveStatus(subscription: SubscriptionSnapshot, now: Date): SubscriptionStatus {
   if (subscription.status === "CANCELED") {
@@ -51,7 +58,10 @@ export function effectiveStatus(subscription: SubscriptionSnapshot, now: Date): 
     return "PAST_DUE";
   }
 
-  const cancelAt = addDays(graceEnd, CANCEL_AFTER_SUSPENDED_DAYS);
+  // `firstPaidAt === null` (explícito) = nunca pagou. `undefined` (snapshot sem o campo) mantém
+  // o prazo longo: na dúvida, nunca cancelar mais cedo do que o combinado.
+  const neverPaid = subscription.firstPaidAt === null;
+  const cancelAt = addDays(graceEnd, neverPaid ? CANCEL_AFTER_SUSPENDED_TRIAL_DAYS : CANCEL_AFTER_SUSPENDED_DAYS);
   if (now < cancelAt) {
     return "SUSPENDED";
   }

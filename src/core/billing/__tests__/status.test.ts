@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CANCEL_AFTER_SUSPENDED_DAYS,
+  CANCEL_AFTER_SUSPENDED_TRIAL_DAYS,
   computeNextPeriodEnd,
   computeTrialEndsAt,
   effectiveStatus,
@@ -57,6 +58,43 @@ describe("effectiveStatus — trial (§7.4)", () => {
     const graceEnd = new Date(trialEndsAt.getTime() + GRACE_DAYS * DAY);
     const cancelAt = new Date(graceEnd.getTime() + CANCEL_AFTER_SUSPENDED_DAYS * DAY);
     expect(effectiveStatus(base, new Date(cancelAt.getTime() - 1))).toBe("SUSPENDED");
+  });
+});
+
+describe("effectiveStatus — teste não convertido (nunca pagou: firstPaidAt === null)", () => {
+  const trialEndsAt = new Date("2026-09-29T10:00:00.000Z");
+  const neverPaid = { status: "TRIALING" as const, trialEndsAt, currentPeriodEnd: trialEndsAt, firstPaidAt: null };
+  const cancelAt = new Date(trialEndsAt.getTime() + (GRACE_DAYS + CANCEL_AFTER_SUSPENDED_TRIAL_DAYS) * DAY);
+
+  it("a constante é 7 dias", () => {
+    expect(CANCEL_AFTER_SUSPENDED_TRIAL_DAYS).toBe(7);
+  });
+
+  it("ainda SUSPENDED no último instante antes de graceEnd + 7 dias", () => {
+    expect(effectiveStatus(neverPaid, new Date(cancelAt.getTime() - 1))).toBe("SUSPENDED");
+  });
+
+  it("CANCELED exatamente em graceEnd + 7 dias", () => {
+    expect(effectiveStatus(neverPaid, cancelAt)).toBe("CANCELED");
+  });
+
+  it("a carência de 1 dia continua igual (PAST_DUE → SUSPENDED)", () => {
+    expect(effectiveStatus(neverPaid, new Date(trialEndsAt.getTime() + HOUR))).toBe("PAST_DUE");
+    expect(effectiveStatus(neverPaid, new Date(trialEndsAt.getTime() + GRACE_DAYS * DAY + HOUR))).toBe("SUSPENDED");
+  });
+
+  it("assinatura que já pagou (firstPaidAt preenchido) mantém os 60 dias", () => {
+    const paidBefore = { ...neverPaid, status: "SUSPENDED" as const, firstPaidAt: new Date("2026-08-01T00:00:00.000Z") };
+    expect(effectiveStatus(paidBefore, cancelAt)).toBe("SUSPENDED");
+    const cancel60 = new Date(trialEndsAt.getTime() + (GRACE_DAYS + CANCEL_AFTER_SUSPENDED_DAYS) * DAY);
+    expect(effectiveStatus(paidBefore, new Date(cancel60.getTime() - 1))).toBe("SUSPENDED");
+    expect(effectiveStatus(paidBefore, cancel60)).toBe("CANCELED");
+  });
+
+  it("firstPaidAt ausente no snapshot (desconhecido) não cancela mais cedo", () => {
+    const { firstPaidAt: _omit, ...unknown } = neverPaid;
+    void _omit;
+    expect(effectiveStatus(unknown, cancelAt)).toBe("SUSPENDED");
   });
 });
 

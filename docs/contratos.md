@@ -722,7 +722,12 @@ sem telas (a Lyra consome o contrato abaixo).
   demanda (§7.4). `CANCELED` é terminal. Regras: `TRIALING` até `trialEndsAt`; depois disso (ou
   depois de `currentPeriodEnd`, para quem já não está mais em trial), 1 dia de carência
   (`GRACE_DAYS`) → `PAST_DUE`, depois `SUSPENDED`, depois de 60 dias em `SUSPENDED`
-  (`CANCEL_AFTER_SUSPENDED_DAYS`) → `CANCELED`. Testes: `src/core/billing/__tests__/status.test.ts`.
+  (`CANCEL_AFTER_SUSPENDED_DAYS`) → `CANCELED`. **Teste não convertido** (decisão do dono,
+  2026-09-29): o snapshot aceita `firstPaidAt?: Date | null`; com `firstPaidAt === null` (nunca
+  pagou) o cancelamento vem `CANCEL_AFTER_SUSPENDED_TRIAL_DAYS = 7` dias depois de `SUSPENDED`
+  (isto é, 1 dia de carência + 7 = 8 dias após o fim do teste). Quem já pagou (`firstPaidAt`
+  preenchido) mantém os 60 dias; campo ausente (`undefined`) também mantém 60 (nunca cancela
+  mais cedo na dúvida). Testes: `src/core/billing/__tests__/status.test.ts`.
 - `computeTrialEndsAt(signupAt): Date` — `+3 dias` (`TRIAL_DAYS`; decisão do dono, 2026-09-29 —
   era `+1 dia` até 2026-09-28).
 - `computeNextPeriodEnd({ currentPeriodEnd, wasSuspended, paidAt }): Date` — `+1 mês` a partir de
@@ -1555,9 +1560,15 @@ empresas, §9) — guardado por `requirePlatformAdmin()`.
   `fromDate`/`toDate` filtram por `dueAt` (vencimento), não por criação. Um único `findMany`
   com `include` (join) resolve `tenantName`/`tenantSlug` — sem N+1. Cada item:
   `{ id, tenantId, tenantName, tenantSlug, amountCents, status, periodStart, periodEnd, dueAt,
-  paidAt, hasPix: boolean, createdAt }` (`hasPix` = tem `pixCopyPaste`; nunca devolve o Pix em
-  si nesta listagem).
-- `billingMonthlyTotalsAction(): Result<{ receivedCents, openCents, overdueCents, mrrCents }>` —
+  paidAt, hasPix: boolean, createdAt, kind: "TRIAL" | "REGULAR" }` (`hasPix` = tem `pixCopyPaste`;
+  nunca devolve o Pix em si nesta listagem). `kind: "TRIAL"` = fatura criada no cadastro
+  (`Invoice.isTrialConversion`) — a UI mostra o badge "Teste" (quando não paga); status `VOID`
+  aparece como "Anulada" no filtro e na lista.
+- `billingMonthlyTotalsAction(): Result<{ receivedCents, openCents, overdueCents, trialCents,
+  trialCount, mrrCents }>` — **`openCents` e `overdueCents` EXCLUEM a fatura de teste**
+  (`isTrialConversion`); ela vai para `trialCents`/`trialCount` (faturas `OPEN` de teste de conta
+  não `CANCELED` — card "Em teste"). `VOID` nunca entra em total nenhum. Regra do dono
+  (2026-09-29): teste não é valor a receber nem inadimplência. Detalhes dos demais campos:
   `receivedCents` (faturas `PAID` com `paidAt` no mês de hoje), `openCents` (faturas `OPEN` com
   `dueAt >= agora`, estado atual — não escopado ao mês), `overdueCents` (faturas `OPEN` com
   `dueAt < agora`, sempre em tempo real, direto da tabela — não espera o próximo `billing/tick`
@@ -1565,7 +1576,8 @@ empresas, §9) — guardado por `requirePlatformAdmin()`.
   `status = ACTIVE` persistido). 4 agregações (`aggregate`/`groupBy`), nenhum loop somando em
   memória.
 - `listDelinquentCompaniesAction(): Result<DelinquentCompany[]>` — empresas `PAST_DUE`/
-  `SUSPENDED` (status persistido — a reconciliação com o efetivo acontece no próximo
+  `SUSPENDED` **que já pagaram alguma vez** (`firstPaidAt` não nulo; teste não convertido não é
+  inadimplente) (status persistido — a reconciliação com o efetivo acontece no próximo
   `billing/tick`, até 1h de atraso), com `daysOverdue` contado a partir de
   `Subscription.currentPeriodEnd`.
 - `regeneratePixForInvoiceAdminAction(invoiceId): Result<{ invoiceId, hasPix: boolean }>` —
@@ -1652,3 +1664,32 @@ de alertas no topo quando `alerts.length > 0`.
   se `getPublicLegalInfo` sem `requirePlatformAdmin` está mesmo seguro expor publicamente (são
   os MESMOS dados que já apareceriam em claro em `/termos`/`/privacidade`, mas vale o segundo
   olhar).
+
+
+---
+
+## Teste não convertido (2026-09-29, decisão do dono)
+
+Cliente em teste não é "a receber" nem inadimplente. Implementação:
+
+- **Marcadores (migration aditiva `20260929180000_trial_invoice_first_paid`):**
+  `Invoice.isTrialConversion boolean default false` (fatura criada no cadastro, `signup/service.ts`)
+  e `Subscription.firstPaidAt timestamp null` (primeiro pagamento; gravado uma vez por
+  `applyInvoicePayment`). Backfill no SQL: `firstPaidAt` = menor `paidAt` das faturas `PAID`;
+  `isTrialConversion` = primeira fatura (menor `periodStart`) de cada assinatura.
+- **Ciclo de vida:** fim do teste → 1 dia `PAST_DUE` → `SUSPENDED` → 7 dias depois `CANCELED` (só quem
+  nunca pagou; ex-pagante = 60 dias). Ao virar `CANCELED` (pelo tick, pelo dono ou pelo admin), a
+  fatura `OPEN` de teste vira `VOID` na varredura final de `reconcileStatuses` (`updateMany` com
+  guarda `status = OPEN`, idempotente, auto-curável; `BillingTickSummary.invoicesVoided`).
+- **Tick:** `generateUpcomingInvoices` pula assinatura com fatura de teste `OPEN` (evita 2ª fatura
+  no `PAST_DUE` pós-teste); Pix novo e lembretes só olham `OPEN` (nunca `VOID`). O e-mail de
+  suspensão de quem nunca pagou é "Seu teste terminou — {empresa}" (assine para continuar; conta
+  encerrada em 7 dias), não "falta de pagamento". Não existe e-mail de cancelamento (nem havia).
+- **Pagamento tardio:** fatura de teste paga com a conta `SUSPENDED` (até 7 dias) reativa normal e
+  grava `firstPaidAt`. Fatura `VOID`: `applyInvoicePayment` devolve `{ alreadyProcessed: false,
+  voided: true }` sem tocar em nada; o webhook registra o `ProviderEvent` com
+  `payload.voidedInvoicePayment = true`, loga `billing.webhook.payment_for_void_invoice` e responde
+  `ignored`; `markInvoicePaidManually` recusa (`INVALID_STATE`). **Regra proposta: o admin reativa**
+  (Admin → Empresas → Reativar) e, se o cliente pagou, estorna/confere no Mercado Pago.
+- **Reativação manual** (`reactivateCompanyManually`) anula a fatura de teste `OPEN` (a conta foi
+  liberada sem cobrança) e não preenche `firstPaidAt`.

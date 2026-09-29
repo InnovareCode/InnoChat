@@ -30,10 +30,25 @@ O InnoChat executa três tarefas automáticas, todas via workflow `innochat-cron
 - Marca faturas como `EXPIRED` se o Pix venceu sem pagamento
 - Atualiza o status da assinatura: `TRIALING` → `ACTIVE` (se pagou), `ACTIVE` → `PAST_DUE` (se venceu), `PAST_DUE` → `SUSPENDED` (após 1 dia de carência)
 - Envia e-mails de aviso (geração, 1 dia antes do vencimento, no vencimento)
+- **Teste não convertido** (nunca pagou): suspende 1 dia após o fim do teste (e-mail "Seu teste terminou") e **cancela 7 dias depois**; a fatura do teste vira `VOID` ("Anulada") e nunca conta como inadimplência. Quem já pagou alguma vez continua com 60 dias em `SUSPENDED`.
 
 **Logs:** vá em **Admin → Saúde** e veja a seção "Último tick de cobrança" — deve mostrar um timestamp recente. Se estiver estagnado, há um problema.
 
 **Quando rodar:** todo dia, 24/7 automaticamente. Se o cron falhar, `effectiveStatus()` ainda calcula status correto sob demanda, então acesso não é bloqueado — mas faturas não são geradas.
+
+**Admin → Cobrança e teste:** a fatura do cadastro aparece com o badge "Teste" e soma só no card **Em teste** (nunca em "Em aberto" nem "Vencido"; também não lista a empresa como inadimplente). Se um cliente pagar depois de a conta ser cancelada (fatura `VOID`), o webhook **não reativa sozinho**: registra o evento (`voidedInvoicePayment`), loga `billing.webhook.payment_for_void_invoice` e ignora. Ação: **Admin → Empresas → Reativar** e conferir/estornar o pagamento no Mercado Pago.
+
+**Deploy da migration `20260929180000_trial_invoice_first_paid`** (aditiva, segura com o código antigo): rode `prisma migrate deploy` ANTES do push. Enquanto o código antigo ainda atende, cadastros novos nascem sem o marcador `isTrialConversion` e pagamentos não gravam `firstPaidAt`. Depois que o deploy novo estiver no ar, reexecute o backfill (idempotente) no banco:
+
+```sql
+UPDATE "subscriptions" s SET "firstPaidAt" = p.first_paid
+FROM (SELECT "subscriptionId", MIN("paidAt") AS first_paid FROM "invoices" WHERE "status"='PAID' AND "paidAt" IS NOT NULL GROUP BY "subscriptionId") p
+WHERE p."subscriptionId" = s."id" AND s."firstPaidAt" IS NULL;
+
+UPDATE "invoices" i SET "isTrialConversion" = true
+FROM (SELECT DISTINCT ON ("subscriptionId") "id" FROM "invoices" ORDER BY "subscriptionId","periodStart" ASC) f
+WHERE f."id" = i."id" AND i."isTrialConversion" = false;
+```
 
 ### Manutenção diária (`maintenance/tick`)
 

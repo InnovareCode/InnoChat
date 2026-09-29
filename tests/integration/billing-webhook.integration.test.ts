@@ -148,6 +148,33 @@ describe("handleMercadoPagoWebhook — idempotência (§6.10)", () => {
     expect(reloadedSubscription.currentPeriodEnd.getTime()).toBe(expectedNextPeriodEnd.getTime());
   });
 
+  it("pagamento aprovado de fatura VOID (teste cancelado) NÃO reativa: evento registrado, status ignored", async () => {
+    const { tenant, subscription, invoice } = await makeSubscriptionWithOpenInvoice("void-payment");
+    cleanupTenantIds.push(tenant.id);
+    await prisma.subscription.update({ where: { id: subscription.id }, data: { status: "CANCELED", canceledAt: new Date() } });
+    await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "VOID", isTrialConversion: true } });
+    await seedWebhookSecret();
+
+    const dataId = `pay_void_${invoice.id}`;
+    const requestId = "req-void";
+    const ts = String(Math.floor(Date.now() / 1000));
+    const gateway = {
+      createPixPayment: vi.fn(),
+      getPayment: vi.fn().mockResolvedValue({ id: dataId, status: "approved", dateApproved: new Date(), externalReference: invoice.id }),
+    };
+
+    const result = await handleMercadoPagoWebhook({ xSignature: signManifest(dataId, requestId, ts), xRequestId: requestId, dataId, gateway });
+    expect(result.status).toBe("ignored");
+
+    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).status).toBe("VOID");
+    expect((await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } })).status).toBe("CANCELED");
+    const event = await prisma.providerEvent.findUniqueOrThrow({
+      where: { provider_providerEventId: { provider: "mercadopago", providerEventId: dataId } },
+    });
+    expect(event.processedAt).not.toBeNull();
+    expect(event.payload).toMatchObject({ voidedInvoicePayment: true });
+  });
+
   it("notificação com type diferente de 'payment' (ex.: merchant_order) é ignorada SEM reconsultar o gateway (conferido contra o Parque das Feiras)", async () => {
     const { tenant, invoice } = await makeSubscriptionWithOpenInvoice("merchant-order");
     cleanupTenantIds.push(tenant.id);

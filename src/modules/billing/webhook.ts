@@ -141,7 +141,22 @@ export async function handleMercadoPagoWebhook(params: {
     return { status: "ignored" };
   }
 
-  await applyInvoicePayment(payment.externalReference, payment.dateApproved ?? new Date());
+  const applied = await applyInvoicePayment(payment.externalReference, payment.dateApproved ?? new Date());
+
+  if (applied.voided) {
+    // Pagamento aprovado para fatura ANULADA (teste não convertido já cancelado): não reativa
+    // sozinho. Fica registrado no evento (auditoria) e no log para o admin decidir — reativar a
+    // empresa e/ou estornar no Mercado Pago. Nunca é tratado como erro (o MP não deve reentregar).
+    logger.warn("billing.webhook.payment_for_void_invoice", { invoiceId: payment.externalReference, providerEventId });
+    await prisma.providerEvent.update({
+      where: { provider_providerEventId: { provider: "mercadopago", providerEventId } },
+      data: {
+        processedAt: new Date(),
+        payload: { status: payment.status, externalReference: payment.externalReference, voidedInvoicePayment: true },
+      },
+    });
+    return { status: "ignored" };
+  }
 
   await prisma.providerEvent.update({
     where: { provider_providerEventId: { provider: "mercadopago", providerEventId } },

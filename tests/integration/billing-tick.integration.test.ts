@@ -170,7 +170,7 @@ describe("runBillingTick — reconciliação de status e e-mail de suspensão", 
     // currentPeriodEnd + carência já vencidos → efetivo SUSPENDED já na primeira rodada.
     const currentPeriodEnd = addDays(new Date(), -5);
     await prisma.subscription.create({
-      data: { tenantId: tenant.id, planId: plan.id, status: "ACTIVE", currentPeriodEnd },
+      data: { tenantId: tenant.id, planId: plan.id, status: "ACTIVE", currentPeriodEnd, firstPaidAt: addDays(new Date(), -40) },
     });
 
     const { gateway } = createMockMercadoPagoGateway();
@@ -193,7 +193,7 @@ describe("runBillingTick — reconciliação de status e e-mail de suspensão", 
     // Vencido há bem mais que carência (1 dia) + 60 dias em SUSPENDED → efetivo já CANCELED.
     const currentPeriodEnd = addDays(new Date(), -70);
     await prisma.subscription.create({
-      data: { tenantId: tenant.id, planId: plan.id, status: "ACTIVE", currentPeriodEnd },
+      data: { tenantId: tenant.id, planId: plan.id, status: "ACTIVE", currentPeriodEnd, firstPaidAt: addDays(new Date(), -100) },
     });
 
     const { gateway } = createMockMercadoPagoGateway();
@@ -204,6 +204,107 @@ describe("runBillingTick — reconciliação de status e e-mail de suspensão", 
     expect(reloaded.status).toBe("CANCELED");
     expect(reloaded.canceledAt).not.toBeNull();
     expect(reloaded.canceledAt!.getTime()).toBe(now.getTime());
+  });
+});
+
+describe("runBillingTick — teste não convertido (decisão do dono, 2026-09-29)", () => {
+  async function makeUnconvertedTrial(label: string, trialEndedDaysAgo: number) {
+    const { tenant } = await makeTenantWithOwner(label);
+    cleanupTenantIds.push(tenant.id);
+    const plan = await makePlan(label);
+    const trialEndsAt = addDays(new Date(), -trialEndedDaysAgo);
+    const subscription = await prisma.subscription.create({
+      data: { tenantId: tenant.id, planId: plan.id, status: "TRIALING", trialEndsAt, currentPeriodEnd: trialEndsAt },
+    });
+    const invoice = await prisma.invoice.create({
+      data: {
+        subscriptionId: subscription.id,
+        amountCents: plan.priceCents,
+        periodStart: addDays(trialEndsAt, -3),
+        periodEnd: trialEndsAt,
+        dueAt: trialEndsAt,
+        status: "OPEN",
+        isTrialConversion: true,
+      },
+    });
+    return { tenant, subscription, invoice };
+  }
+
+  it("suspensão de teste manda o e-mail 'seu teste terminou' (não 'falta de pagamento') e NÃO gera 2ª fatura", async () => {
+    const { subscription } = await makeUnconvertedTrial("trial-suspend", 3);
+    const { gateway } = createMockMercadoPagoGateway();
+    const result = await runBillingTick(new Date(), gateway);
+    expect(result.suspensionEmailsSent).toBeGreaterThanOrEqual(1);
+
+    const reloaded = await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } });
+    expect(reloaded.status).toBe("SUSPENDED");
+    expect(await prisma.invoice.count({ where: { subscriptionId: subscription.id } })).toBe(1);
+
+    expect(sentEmails.some((e) => e.to.startsWith("it-tick-trial-suspend-") && e.subject.includes("teste terminou"))).toBe(true);
+    expect(sentEmails.some((e) => e.to.startsWith("it-tick-trial-suspend-") && e.subject.includes("suspenso"))).toBe(false);
+  });
+
+  it("conta cancela 1+7 dias após o fim do teste e a fatura OPEN vira VOID; rodar de novo é idempotente", async () => {
+    const { subscription, invoice } = await makeUnconvertedTrial("trial-cancel", 9);
+    const { gateway } = createMockMercadoPagoGateway();
+    const first = await runBillingTick(new Date(), gateway);
+    expect(first.invoicesVoided).toBeGreaterThanOrEqual(1);
+
+    expect((await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } })).status).toBe("CANCELED");
+    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).status).toBe("VOID");
+
+    const second = await runBillingTick(new Date(), gateway);
+    expect(second.invoicesVoided).toBe(0);
+    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).status).toBe("VOID");
+  });
+
+  it("ainda SUSPENDED (fatura OPEN) antes de completar os 7 dias de suspensão", async () => {
+    const { subscription, invoice } = await makeUnconvertedTrial("trial-not-yet", 7);
+    const { gateway } = createMockMercadoPagoGateway();
+    await runBillingTick(new Date(), gateway);
+    expect((await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } })).status).toBe("SUSPENDED");
+    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).status).toBe("OPEN");
+  });
+
+  it("ex-pagante segue com 60 dias: 9 dias após o vencimento continua SUSPENDED e a fatura não é anulada", async () => {
+    const { tenant } = await makeTenantWithOwner("paid-before");
+    cleanupTenantIds.push(tenant.id);
+    const plan = await makePlan("paid-before");
+    const end = addDays(new Date(), -9);
+    const subscription = await prisma.subscription.create({
+      data: { tenantId: tenant.id, planId: plan.id, status: "SUSPENDED", currentPeriodEnd: end, firstPaidAt: addDays(new Date(), -60) },
+    });
+    const invoice = await prisma.invoice.create({
+      data: { subscriptionId: subscription.id, amountCents: 100, periodStart: addDays(end, -30), periodEnd: end, dueAt: end, status: "OPEN" },
+    });
+    const { gateway } = createMockMercadoPagoGateway();
+    await runBillingTick(new Date(), gateway);
+    expect((await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } })).status).toBe("SUSPENDED");
+    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).status).toBe("OPEN");
+  });
+
+  it("fatura VOID não recebe Pix novo nem lembrete de vencimento", async () => {
+    const { subscription, invoice } = await makeUnconvertedTrial("trial-void-quiet", 20);
+    await prisma.subscription.update({ where: { id: subscription.id }, data: { status: "CANCELED", canceledAt: new Date() } });
+    await prisma.invoice.update({ where: { id: invoice.id }, data: { status: "VOID" } });
+
+    const mailsBefore = sentEmails.length;
+    const { gateway } = createMockMercadoPagoGateway();
+    await runBillingTick(new Date(), gateway);
+
+    const after = await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } });
+    expect(after.status).toBe("VOID");
+    expect(after.pixCopyPaste).toBeNull();
+    expect(after.dueTodayEmailSentAt).toBeNull();
+    expect(sentEmails.slice(mailsBefore).some((e) => e.to.startsWith("it-tick-trial-void-quiet-"))).toBe(false);
+  });
+
+  it("conta cancelada pelo dono (não pelo tick) também tem a fatura de teste anulada na rodada seguinte", async () => {
+    const { subscription, invoice } = await makeUnconvertedTrial("trial-owner-cancel", 0);
+    await prisma.subscription.update({ where: { id: subscription.id }, data: { status: "CANCELED", canceledAt: new Date() } });
+    const { gateway } = createMockMercadoPagoGateway();
+    await runBillingTick(new Date(), gateway);
+    expect((await prisma.invoice.findUniqueOrThrow({ where: { id: invoice.id } })).status).toBe("VOID");
   });
 });
 

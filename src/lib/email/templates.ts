@@ -51,7 +51,19 @@ export function invoiceDueReminderEmail(params: { tenantName: string; amountReai
   );
 }
 
-export function subscriptionSuspendedEmail(params: { tenantName: string; billingUrl: string }) {
+export function subscriptionSuspendedEmail(params: { tenantName: string; billingUrl: string; trialNotConverted?: boolean; cancelInDays?: number }) {
+  if (params.trialNotConverted) {
+    const cancelNote = params.cancelInDays ? `
+
+Se a assinatura não for feita, a conta será encerrada em ${params.cancelInDays} dias.` : "";
+    return template(
+      `Seu teste terminou — ${params.tenantName}`,
+      `O período de teste de "${params.tenantName}" terminou e o atendimento automático por WhatsApp foi pausado.
+
+O painel continua acessível só para leitura (agenda e clientes). Assine para continuar usando o InnoChat:
+${params.billingUrl}${cancelNote}`,
+    );
+  }
   return template(
     `Atendimento por WhatsApp suspenso — ${params.tenantName}`,
     `O atendimento automático por WhatsApp de "${params.tenantName}" foi suspenso por falta de pagamento.\n\nO painel continua acessível só para leitura (agenda e clientes). Pague a fatura em aberto para reativar o atendimento:\n${params.billingUrl}`,

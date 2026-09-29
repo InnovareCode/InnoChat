@@ -190,6 +190,7 @@ export async function signUp(input: SignUpInput, gateway?: MercadoPagoGateway): 
         periodEnd: trialEndsAt,
         dueAt: trialEndsAt,
         status: "OPEN",
+        isTrialConversion: true, // fatura do teste: fora de "a receber"/"vencido" no Admin → Cobrança
       },
     });
 

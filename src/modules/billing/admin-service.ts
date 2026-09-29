@@ -117,10 +117,19 @@ export async function reactivateCompanyManually(tenantId: string): Promise<void>
   if (!subscription) throw new DomainError("NOT_FOUND", "Assinatura não encontrada.");
 
   const now = new Date();
-  await prisma.subscription.update({
-    where: { tenantId },
-    data: { status: "ACTIVE", currentPeriodEnd: addMonths(now, 1), trialEndsAt: null, canceledAt: null, suspendedEmailSentAt: null },
-  });
+  await prisma.$transaction([
+    prisma.subscription.update({
+      where: { tenantId },
+      data: { status: "ACTIVE", currentPeriodEnd: addMonths(now, 1), trialEndsAt: null, canceledAt: null, suspendedEmailSentAt: null },
+    }),
+    // Reativação manual = o admin liberou sem cobrar: a fatura do teste (ainda OPEN, se a conta
+    // estava só suspensa) é anulada — senão ficaria em "Em teste" para sempre e travaria a
+    // geração das próximas faturas do tick. Faturas VOID/PAID não são tocadas.
+    prisma.invoice.updateMany({
+      where: { subscription: { tenantId }, status: "OPEN", isTrialConversion: true },
+      data: { status: "VOID" },
+    }),
+  ]);
 }
 
 /** Estende o trial em `extraDays` dias — só válido enquanto ainda está em TRIALING. */
@@ -170,6 +179,8 @@ export type AdminInvoiceListItem = {
   paidAt: Date | null;
   hasPix: boolean;
   createdAt: Date;
+  /** `TRIAL` = fatura do cadastro (teste); a UI rotula "Teste". */
+  kind: "TRIAL" | "REGULAR";
 };
 
 export type ListInvoicesAdminParams = {
@@ -232,6 +243,7 @@ export async function listInvoicesAdmin(params: ListInvoicesAdminParams): Promis
       paidAt: invoice.paidAt,
       hasPix: !!invoice.pixCopyPaste,
       createdAt: invoice.createdAt,
+      kind: invoice.isTrialConversion ? "TRIAL" : "REGULAR",
     })),
     nextCursor: hasMore ? page[page.length - 1]!.id : null,
   };
@@ -241,6 +253,9 @@ export type BillingMonthlyTotals = {
   receivedCents: number;
   openCents: number;
   overdueCents: number;
+  /** Faturas de teste ainda não convertido (`OPEN`, conta não cancelada): card "Em teste". Nunca somam em `openCents`/`overdueCents`. */
+  trialCents: number;
+  trialCount: number;
   mrrCents: number;
 };
 
@@ -249,9 +264,12 @@ export type BillingMonthlyTotals = {
  * - `receivedCents`: soma de faturas `PAID` com `paidAt` dentro do mês de `now`.
  * - `openCents`: faturas `OPEN` ainda não vencidas (`dueAt >= now`) — não soma por mês, é o
  *   estado ATUAL do que está para vencer (uma fatura `OPEN` de qualquer mês entra aqui).
+ *   Exclui a fatura de teste (`isTrialConversion`) — ela vai para `trialCents`.
  * - `overdueCents`: faturas `OPEN` já vencidas (`dueAt < now`) — o que a persistência ainda não
  *   marcou `PAST_DUE`/`SUSPENDED` pode demorar até 1h (próximo `billing/tick`); esta soma é
- *   sempre em tempo real, direto da tabela.
+ *   sempre em tempo real, direto da tabela. Também exclui a fatura de teste.
+ * - `trialCents`/`trialCount`: faturas `OPEN` de teste não convertido, de conta não cancelada
+ *   (decisão do dono, 2026-09-29: teste não é "a receber" nem inadimplência).
  * - `mrrCents`: soma de `Plan.priceCents` de toda `Subscription` com `status = ACTIVE`
  *   (persistido, não efetivo — é a assinatura que JÁ está sendo cobrada mensalmente).
  *
@@ -263,18 +281,23 @@ export async function billingMonthlyTotals(now: Date = new Date()): Promise<Bill
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
-  const [received, open, overdue, activeSubscriptions] = await Promise.all([
+  const [received, open, overdue, trial, activeSubscriptions] = await Promise.all([
     prisma.invoice.aggregate({
       _sum: { amountCents: true },
       where: { status: "PAID", paidAt: { gte: monthStart, lt: monthEnd } },
     }),
     prisma.invoice.aggregate({
       _sum: { amountCents: true },
-      where: { status: "OPEN", dueAt: { gte: now } },
+      where: { status: "OPEN", isTrialConversion: false, dueAt: { gte: now } },
     }),
     prisma.invoice.aggregate({
       _sum: { amountCents: true },
-      where: { status: "OPEN", dueAt: { lt: now } },
+      where: { status: "OPEN", isTrialConversion: false, dueAt: { lt: now } },
+    }),
+    prisma.invoice.aggregate({
+      _sum: { amountCents: true },
+      _count: { _all: true },
+      where: { status: "OPEN", isTrialConversion: true, subscription: { status: { not: "CANCELED" } } },
     }),
     prisma.subscription.findMany({ where: { status: "ACTIVE" }, include: { plan: true } }),
   ]);
@@ -283,6 +306,8 @@ export async function billingMonthlyTotals(now: Date = new Date()): Promise<Bill
     receivedCents: received._sum.amountCents ?? 0,
     openCents: open._sum.amountCents ?? 0,
     overdueCents: overdue._sum.amountCents ?? 0,
+    trialCents: trial._sum.amountCents ?? 0,
+    trialCount: trial._count._all,
     mrrCents: activeSubscriptions.reduce((sum, s) => sum + s.plan.priceCents, 0),
   };
 }
@@ -296,14 +321,15 @@ export type DelinquentCompany = {
 };
 
 /**
- * Empresas com assinatura `PAST_DUE`/`SUSPENDED` (status PERSISTIDO — a reconciliação com o
+ * Empresas pagantes (já pagaram alguma vez) com assinatura `PAST_DUE`/`SUSPENDED` (status PERSISTIDO — a reconciliação com o
  * status efetivo acontece no próximo `billing/tick`, no máximo 1h de atraso). `daysOverdue`
  * conta a partir de `currentPeriodEnd` (o vencimento do ciclo que não foi pago) — mesmo campo
  * que `effectiveStatus` usa para decidir a transição de status.
  */
 export async function listDelinquentCompanies(now: Date = new Date()): Promise<DelinquentCompany[]> {
   const subscriptions = await getPrisma().subscription.findMany({
-    where: { status: { in: ["PAST_DUE", "SUSPENDED"] } },
+    // `firstPaidAt` não nulo: quem nunca pagou é teste não convertido, não inadimplente.
+    where: { status: { in: ["PAST_DUE", "SUSPENDED"] }, firstPaidAt: { not: null } },
     include: { tenant: { select: { id: true, slug: true, name: true } } },
     orderBy: { currentPeriodEnd: "asc" },
   });
@@ -358,6 +384,9 @@ export async function markInvoicePaidManually(
   });
   if (invoice.status === "PAID" || existingAudit) {
     return { alreadyProcessed: true };
+  }
+  if (invoice.status === "VOID") {
+    throw new DomainError("INVALID_STATE", "Fatura anulada (teste não convertido). Para liberar a empresa, use Reativar.");
   }
 
   const result = await applyInvoicePayment(invoiceId, now);

@@ -44,6 +44,8 @@ export type BillingTickSummary = {
   remindersSent: number;
   statusChanges: number;
   suspensionEmailsSent: number;
+  /** Faturas de teste não convertido anuladas (`VOID`) por a conta ter sido cancelada. */
+  invoicesVoided: number;
 };
 
 export async function runBillingTick(now: Date = new Date(), gateway?: MercadoPagoGateway): Promise<BillingTickSummary> {
@@ -54,6 +56,7 @@ export async function runBillingTick(now: Date = new Date(), gateway?: MercadoPa
     remindersSent: 0,
     statusChanges: 0,
     suspensionEmailsSent: 0,
+    invoicesVoided: 0,
   };
 
   // Resolve o gateway do MP uma vez só (evita reler PlatformSettings a cada fatura/Pix). Se não
@@ -93,7 +96,13 @@ async function generateUpcomingInvoices(
 ) {
   const leadWindow = addDays(now, INVOICE_LEAD_DAYS);
   const subscriptions = await prisma.subscription.findMany({
-    where: { status: { in: ["ACTIVE", "PAST_DUE"] }, currentPeriodEnd: { lte: leadWindow } },
+    where: {
+      status: { in: ["ACTIVE", "PAST_DUE"] },
+      currentPeriodEnd: { lte: leadWindow },
+      // Teste ainda não convertido: a fatura do trial É a cobrança. Sem esta guarda, o PAST_DUE
+      // pós-trial geraria uma 2ª fatura (mês seguinte) que voltaria a contar como "vencida".
+      invoices: { none: { isTrialConversion: true, status: "OPEN" } },
+    },
     include: { plan: true, pendingPlan: true, tenant: true },
   });
 
@@ -271,10 +280,26 @@ async function reconcileStatuses(prisma: ReturnType<typeof getPrisma>, now: Date
     if (next === "SUSPENDED" && !subscription.suspendedEmailSentAt) {
       const payerEmail = await findBillingRecipientEmail(subscription.tenantId);
       if (payerEmail) {
-        await sendSubscriptionSuspendedEmail({ toEmail: payerEmail, tenantName: subscription.tenant.name, tenantSlug: subscription.tenant.slug });
+        await sendSubscriptionSuspendedEmail({
+          toEmail: payerEmail,
+          tenantName: subscription.tenant.name,
+          tenantSlug: subscription.tenant.slug,
+          trialNotConverted: subscription.firstPaidAt === null,
+        });
         await prisma.subscription.update({ where: { id: subscription.id }, data: { suspendedEmailSentAt: now } });
         summary.suspensionEmailsSent += 1;
       }
     }
   }
+
+  // Teste não convertido cancelado (por aqui, pelo dono da empresa ou pelo admin): a fatura do
+  // trial vira VOID e sai de qualquer conta de inadimplência (decisão do dono, 2026-09-29).
+  // É uma varredura (não parte da transição) para se auto-curar: se o tick cair entre gravar
+  // `CANCELED` e anular, a próxima rodada anula. Idempotente e segura em corrida: só toca fatura
+  // ainda `OPEN` (um pagamento concorrente que a marcou `PAID` não é sobrescrito).
+  const voided = await prisma.invoice.updateMany({
+    where: { status: "OPEN", isTrialConversion: true, subscription: { status: "CANCELED", firstPaidAt: null } },
+    data: { status: "VOID" },
+  });
+  summary.invoicesVoided += voided.count;
 }

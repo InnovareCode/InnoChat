@@ -13,4 +13,6 @@ export type SubscriptionSnapshot = {
   status: SubscriptionStatus;
   trialEndsAt: Date | null;
   currentPeriodEnd: Date;
+  /** `null` = nunca pagou (teste não convertido); ausente = desconhecido (trata como já pagante). */
+  firstPaidAt?: Date | null;
 };
