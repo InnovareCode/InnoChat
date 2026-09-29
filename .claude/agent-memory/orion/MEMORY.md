@@ -4,3 +4,4 @@
 - [Padrão de mascaramento de segredos](secrets_masking_pattern.md) — referência PlatformSettings, dívida de cifragem em repouso ainda proposta, não implementada
 - [Injeção de fórmula CSV via pushName](csv_injection_pushname.md) — achado Importante 2026-09-29, exportContactsCsvAction, não corrigido
 - [Ordem do lock ProviderEvent](provider_event_lock_ordering.md) — achado Médio 2026-09-29, markInvoicePaidManually inverteu a ordem do padrão do webhook
+- [Revisão fase 2](fase2_revisao_2026-09-29.md) — sem CRÍTICO; padrões: log de erro Prisma com body, RMW recentOutbound, default true em envio proativo
