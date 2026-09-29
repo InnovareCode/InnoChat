@@ -21,3 +21,4 @@
 - [Sistema de espera padronizado](sistema-de-espera-padronizado.md) — barra de topo, loading.tsx por seção, Spinner/loadingText, PageTransition só CSS; rate limit de login no E2E.
 - [Central de notificações e refresh ao vivo](central-de-notificacoes-e-refresh-ao-vivo.md) — provider único, polling 15/30 s, refresh sem F5 nas telas client-side, Prisma stale no dev, substring no E2E.
 - [E-mails transacionais](emails-transacionais-layout.md) — layout.ts + ctx, recibo em applyInvoicePayment, preview via tsx.
+- [Padrão de diálogos: selo + botões com ícone](padrao-dialogos-selo-e-botoes-com-icone.md) — DialogHeader/tone, Button icon, mapa de ícones, Início com saudação, Fechar 44px.

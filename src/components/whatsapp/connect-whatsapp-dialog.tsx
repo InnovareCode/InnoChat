@@ -1,10 +1,11 @@
 "use client";
 
+import { navIconFor } from "@/components/shell/nav-items";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Smartphone } from "lucide-react";
+import { Check, CheckCircle2, CircleCheck, QrCode, RefreshCw, Smartphone, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
@@ -295,8 +296,10 @@ export function ConnectWhatsappDialog({
       <DialogContent>
         {step === "label" ? (
           <>
-            <DialogTitle>Conectar número de WhatsApp</DialogTitle>
-            <DialogDescription>Dê um nome para identificar este número — ele aparece na lista de conexões.</DialogDescription>
+            <DialogHeader icon={navIconFor("whatsapp")}>
+              <DialogTitle>Conectar número de WhatsApp</DialogTitle>
+              <DialogDescription>Dê um nome para identificar este número — ele aparece na lista de conexões.</DialogDescription>
+            </DialogHeader>
             <form onSubmit={handleSubmitLabel} className="mt-4 flex flex-col gap-4">
               {createError ? (
                 <Alert variant="danger" title={createError.title}>
@@ -328,10 +331,10 @@ export function ConnectWhatsappDialog({
                 )}
               </Field>
               <DialogFooter>
-                <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+                <Button icon={X} type="button" variant="secondary" onClick={() => setOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" isLoading={isSubmitting} loadingText="Gerando QR…">
+                <Button icon={QrCode} type="submit" isLoading={isSubmitting} loadingText="Gerando QR…">
                   Gerar QR code
                 </Button>
               </DialogFooter>
@@ -341,8 +344,10 @@ export function ConnectWhatsappDialog({
 
         {step === "qr" ? (
           <>
-            <DialogTitle>Escaneie o QR code</DialogTitle>
-            <DialogDescription>Conecte o número &ldquo;{instance?.label}&rdquo; em poucos segundos.</DialogDescription>
+            <DialogHeader icon={QrCode}>
+              <DialogTitle>Escaneie o QR code</DialogTitle>
+              <DialogDescription>Conecte o número &ldquo;{instance?.label}&rdquo; em poucos segundos.</DialogDescription>
+            </DialogHeader>
 
             <div className="mt-4 flex flex-col items-center gap-4">
               <div aria-live="polite" className="sr-only">
@@ -362,7 +367,7 @@ export function ConnectWhatsappDialog({
                   <div className="flex h-[272px] w-[272px] flex-col items-center justify-center gap-2 rounded-hero border border-dashed border-border text-center text-sm text-text-secondary">
                     <p>O QR code expirou.</p>
                   </div>
-                  <Button type="button" onClick={handleGenerateNewQr}>
+                  <Button icon={RefreshCw} type="button" onClick={handleGenerateNewQr}>
                     Gerar novo QR
                   </Button>
                 </>
@@ -391,7 +396,7 @@ export function ConnectWhatsappDialog({
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+              <Button icon={X} type="button" variant="secondary" onClick={() => setOpen(false)}>
                 Fechar
               </Button>
             </DialogFooter>
@@ -400,10 +405,12 @@ export function ConnectWhatsappDialog({
 
         {step === "success" ? (
           <>
-            <DialogTitle>Número conectado</DialogTitle>
-            <DialogDescription aria-live="polite">
-              &ldquo;{instance?.label}&rdquo; está conectado e já pode atender pelo WhatsApp.
-            </DialogDescription>
+            <DialogHeader icon={CircleCheck} tone="success">
+              <DialogTitle>Número conectado</DialogTitle>
+              <DialogDescription aria-live="polite">
+                &ldquo;{instance?.label}&rdquo; está conectado e já pode atender pelo WhatsApp.
+              </DialogDescription>
+            </DialogHeader>
             <div className="mt-6 flex flex-col items-center gap-3 py-2">
               <CheckCircle2
                 className="h-12 w-12 text-success motion-safe:animate-in motion-safe:zoom-in motion-safe:duration-300 motion-reduce:animate-none"
@@ -411,7 +418,7 @@ export function ConnectWhatsappDialog({
               />
             </div>
             <DialogFooter>
-              <Button type="button" onClick={() => setOpen(false)}>
+              <Button icon={Check} type="button" onClick={() => setOpen(false)}>
                 Concluir
               </Button>
             </DialogFooter>

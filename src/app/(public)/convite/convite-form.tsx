@@ -7,7 +7,7 @@ import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { acceptInviteAction } from "@/modules/signup/actions";
-import { Lock } from "lucide-react";
+import { Lock, LogIn } from "lucide-react";
 import { AuthInput } from "@/components/public/auth-input";
 import { AUTH_SUBMIT_CLASS, AuthPanel } from "@/components/public/auth-panel";
 
@@ -87,7 +87,7 @@ export function ConviteForm({ token }: { token: string | null }) {
               />
             )}
           </Field>
-          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Entrando…">
+          <Button icon={LogIn} type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Entrando…">
             Entrar
           </Button>
         </form>

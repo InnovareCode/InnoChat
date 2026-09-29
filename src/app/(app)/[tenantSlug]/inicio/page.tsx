@@ -1,7 +1,7 @@
-import { Suspense } from "react";
+import { cache, Suspense } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { CalendarClock, CalendarPlus, CalendarRange, MessageCircle, Percent, Plus, Scissors, UserX, UserPlus } from "lucide-react";
+import { CalendarClock, CalendarPlus, CalendarRange, MessageCircle, Percent, Scissors, UserX, UserPlus } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -11,9 +11,14 @@ import { CalendarEmptyIllustration } from "@/components/ui/empty-illustration";
 import { cn } from "@/components/lib/cn";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DomainError } from "@/lib/errors";
+import { effectiveStatus } from "@/core/billing";
+import { auth } from "@/lib/auth";
+import { requireTenantMember } from "@/lib/auth/guards";
+import { getSubscriptionSnapshot } from "@/modules/billing/service";
 import { getDashboardView } from "@/modules/dashboard/queries";
 import { UpcomingTodayCard } from "@/components/notifications/upcoming-today-card";
 import { InicioChart } from "./inicio-chart";
+import { InicioHeader, type InicioHeaderProps } from "./inicio-header";
 import { OnboardingChecklistCard } from "@/components/onboarding/onboarding-checklist-card";
 import { getOnboardingStateAction } from "@/modules/onboarding/actions";
 
@@ -31,26 +36,78 @@ export default async function InicioPage({ params }: { params: Promise<{ tenantS
 
   return (
     <div>
-      <PageHeader icon={navIconFor("inicio")}
-        size="hero"
-        title="Início"
-        description="O resumo do seu negócio hoje."
-        action={
-          <Link
-            href={`/${tenantSlug}/agenda`}
-            className="inline-flex h-10 items-center gap-2 rounded-card bg-primary px-4 text-sm font-medium text-white transition-transform duration-150 hover:bg-primary-strong active:scale-[0.98] motion-reduce:transition-none motion-reduce:active:scale-100"
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Novo agendamento
-          </Link>
-        }
-      />
+      <Suspense fallback={<InicioHeaderSkeleton />}>
+        <InicioHeaderLoader tenantSlug={tenantSlug} />
+      </Suspense>
       <Suspense fallback={null}>
         <InicioChecklist tenantSlug={tenantSlug} />
       </Suspense>
       <Suspense fallback={<InicioSkeleton />}>
         <InicioContent tenantSlug={tenantSlug} />
       </Suspense>
+    </div>
+  );
+}
+
+/** Uma leitura só por requisição: cabeçalho e conteúdo compartilham o resultado (`cache` do React). */
+const loadDashboard = cache((tenantSlug: string) => getDashboardView(tenantSlug));
+
+/**
+ * Cabeçalho com saudação e chips. Se a leitura falhar, cai no título simples "Início" — o erro em
+ * si é mostrado por `InicioContent`; o cabeçalho nunca derruba a página.
+ */
+async function InicioHeaderLoader({ tenantSlug }: { tenantSlug: string }) {
+  let props: InicioHeaderProps | null = null;
+  try {
+    const [view, session, tenantCtx] = await Promise.all([
+      loadDashboard(tenantSlug),
+      auth(),
+      requireTenantMember(tenantSlug),
+    ]);
+    const now = new Date();
+    // Fim do teste: só quando a assinatura EFETIVA (pura, `effectiveStatus`) ainda é TRIALING.
+    let trialEndsAt: string | null = null;
+    try {
+      const subscription = await getSubscriptionSnapshot(tenantCtx.tenant.id);
+      if (effectiveStatus(subscription, now) === "TRIALING" && subscription.trialEndsAt) {
+        trialEndsAt = subscription.trialEndsAt.toISOString();
+      }
+    } catch {
+      trialEndsAt = null;
+    }
+    const next = view.upcoming[0];
+    props = {
+      tenantSlug,
+      timezone: view.timezone,
+      userEmail: session?.user?.email ?? null,
+      appointmentsToday: view.appointmentsToday,
+      nextAppointment: next ? { startsAt: next.startsAt, contactName: next.contactName, serviceName: next.serviceName } : null,
+      connectedWhatsappCount: view.connectedWhatsappCount,
+      totalWhatsappCount: view.totalWhatsappCount,
+      trialEndsAt,
+      now,
+    };
+  } catch {
+    props = null;
+  }
+  if (!props) {
+    return <PageHeader icon={navIconFor("inicio")} size="hero" title="Início" description="O resumo do seu negócio hoje." />;
+  }
+  return <InicioHeader {...props} />;
+}
+
+function InicioHeaderSkeleton() {
+  return (
+    <div className="mb-6 flex items-start gap-3.5" aria-hidden="true">
+      <Skeleton className="hidden h-14 w-14 rounded-card sm:block" />
+      <div className="flex-1">
+        <Skeleton className="h-10 w-72 max-w-full" />
+        <Skeleton className="mt-3 h-4 w-48" />
+        <div className="mt-3 flex gap-2">
+          <Skeleton className="h-7 w-32 rounded-full" />
+          <Skeleton className="h-7 w-44 rounded-full" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -68,7 +125,7 @@ async function InicioChecklist({ tenantSlug }: { tenantSlug: string }) {
 async function InicioContent({ tenantSlug }: { tenantSlug: string }) {
   let view;
   try {
-    view = await getDashboardView(tenantSlug);
+    view = await loadDashboard(tenantSlug);
   } catch (error) {
     if (error instanceof DomainError && error.code === "NOT_FOUND") {
       notFound();

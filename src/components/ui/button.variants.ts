@@ -20,6 +20,9 @@ export const buttonVariants = cva(
         outline: "border border-border bg-transparent text-text hover:bg-bg",
         ghost: "bg-transparent text-text hover:bg-bg",
         danger: "bg-danger text-white hover:opacity-90",
+        success: "bg-success text-white hover:opacity-90",
+        // Tintado (não sólido): texto branco sobre âmbar não passa AA em todos os temas.
+        warning: "border border-warning/30 bg-warning-bg text-warning hover:bg-warning/15",
         link: "bg-transparent text-primary underline-offset-4 hover:underline p-0 h-auto",
       },
       size: {

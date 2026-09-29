@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, Users2, MessageCircle } from "lucide-react";
+import { Check, MessageCircle, Pencil, Users2, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
@@ -165,8 +165,10 @@ export function AdminPlanosClient({ initialPlans }: { initialPlans: PlanRow[] })
 
       <Dialog open={!!editing} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent>
-          <DialogTitle>Editar plano</DialogTitle>
-          <DialogDescription>Alterações valem para novas cobranças a partir de agora.</DialogDescription>
+          <DialogHeader icon={navIconFor("admin/planos")}>
+            <DialogTitle>Editar plano</DialogTitle>
+            <DialogDescription>Alterações valem para novas cobranças a partir de agora.</DialogDescription>
+          </DialogHeader>
           {form ? (
             <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
               {formError ? <Alert variant="danger">{formError}</Alert> : null}
@@ -252,10 +254,10 @@ export function AdminPlanosClient({ initialPlans }: { initialPlans: PlanRow[] })
               </Field>
 
               <DialogFooter>
-                <Button type="button" variant="secondary" onClick={closeEdit}>
+                <Button icon={X} type="button" variant="secondary" onClick={closeEdit}>
                   Cancelar
                 </Button>
-                <Button type="submit" isLoading={isPending} loadingText="Salvando…">
+                <Button icon={Check} type="submit" isLoading={isPending} loadingText="Salvando…">
                   Salvar
                 </Button>
               </DialogFooter>

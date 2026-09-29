@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { MailCheck } from "lucide-react";
+import { MailCheck, Send } from "lucide-react";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
@@ -71,7 +71,7 @@ export function RecuperarSenhaForm() {
               />
             )}
           </Field>
-          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Enviando…">
+          <Button icon={Send} type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Enviando…">
             Enviar link
           </Button>
           <p className="text-center text-sm text-text-secondary">

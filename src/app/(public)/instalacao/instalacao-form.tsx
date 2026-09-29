@@ -6,7 +6,7 @@ import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { installPlatformAdminAction } from "@/modules/platform/install-actions";
-import { KeyRound, Lock, Mail, User } from "lucide-react";
+import { Check, KeyRound, Lock, Mail, User } from "lucide-react";
 import { AuthInput } from "@/components/public/auth-input";
 import { AUTH_SUBMIT_CLASS, AuthPanel } from "@/components/public/auth-panel";
 
@@ -154,7 +154,7 @@ export function InstalacaoForm() {
             </Field>
           </div>
 
-          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Concluindo…">
+          <Button icon={Check} type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Concluindo…">
             Concluir instalação
           </Button>
         </form>

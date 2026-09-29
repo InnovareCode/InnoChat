@@ -1,8 +1,9 @@
 "use client";
 
+import { navIconFor } from "@/components/shell/nav-items";
 import { useEffect, useState, useTransition } from "react";
-import { Pause, Pencil, Play, Trash2 } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { CalendarPlus, Pause, Pencil, Play, Trash2, X } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
@@ -182,8 +183,10 @@ export function ContactDetailDialog({
     <>
       <Dialog open={open} onOpenChange={(next) => !next && close()}>
         <DialogContent className="w-[min(38rem,calc(100vw-2rem))]">
-          <DialogTitle>Cliente</DialogTitle>
-          <DialogDescription>Dados, histórico de agendamentos e controle do bot.</DialogDescription>
+          <DialogHeader icon={navIconFor("clientes")}>
+            <DialogTitle>Cliente</DialogTitle>
+            <DialogDescription>Dados, histórico de agendamentos e controle do bot.</DialogDescription>
+          </DialogHeader>
 
           {loading ? (
             <div className="mt-4 flex flex-col gap-3">
@@ -291,6 +294,7 @@ export function ContactDetailDialog({
                         Pausar por 1h
                       </Button>
                       <Button
+                        icon={Pause}
                         variant="secondary"
                         size="sm"
                         onClick={() => pauseBot(true, 24)}
@@ -301,6 +305,7 @@ export function ContactDetailDialog({
                         Pausar por 24h
                       </Button>
                       <Button
+                        icon={Pause}
                         variant="secondary"
                         size="sm"
                         onClick={() => pauseBot(true)}
@@ -362,6 +367,7 @@ export function ContactDetailDialog({
                 <span />
               )}
               <Button
+                icon={CalendarPlus}
                 onClick={() => setScheduleOpen(true)}
                 disabled={writeBlocked}
                 title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}
@@ -403,17 +409,19 @@ export function ContactDetailDialog({
 
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent>
-          <DialogTitle>Excluir cliente</DialogTitle>
-          <DialogDescription>
-            Tem certeza que quer excluir &ldquo;{detail?.displayName}&rdquo;? Clientes sem histórico são excluídos de
-            verdade; clientes com agendamentos são anonimizados — os dados pessoais somem, mas o histórico do
-            atendimento fica preservado nos relatórios. Essa ação não pode ser desfeita.
-          </DialogDescription>
+          <DialogHeader icon={Trash2} tone="danger">
+            <DialogTitle>Excluir cliente</DialogTitle>
+            <DialogDescription>
+              Tem certeza que quer excluir &ldquo;{detail?.displayName}&rdquo;? Clientes sem histórico são excluídos de
+              verdade; clientes com agendamentos são anonimizados — os dados pessoais somem, mas o histórico do
+              atendimento fica preservado nos relatórios. Essa ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setConfirmDelete(false)}>
+            <Button icon={X} type="button" variant="secondary" onClick={() => setConfirmDelete(false)}>
               Cancelar
             </Button>
-            <Button type="button" variant="danger" onClick={handleDelete} isLoading={isDeletePending} loadingText="Excluindo…">
+            <Button icon={Trash2} type="button" variant="danger" onClick={handleDelete} isLoading={isDeletePending} loadingText="Excluindo…">
               Excluir
             </Button>
           </DialogFooter>

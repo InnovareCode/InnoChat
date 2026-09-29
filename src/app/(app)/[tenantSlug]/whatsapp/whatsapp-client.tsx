@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Smartphone } from "lucide-react";
+import { Smartphone, Trash2, Unplug, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
 import { WhatsappEmptyIllustration } from "@/components/ui/empty-illustration";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
@@ -185,16 +185,18 @@ export function WhatsappClient({
 
       <Dialog open={!!confirmDisconnect} onOpenChange={(open) => !open && setConfirmDisconnect(null)}>
         <DialogContent>
-          <DialogTitle>Desconectar número</DialogTitle>
-          <DialogDescription>
-            &ldquo;{confirmDisconnect?.label}&rdquo; para de atender pelo WhatsApp até ser conectado de novo com um QR
-            code novo.
-          </DialogDescription>
+          <DialogHeader icon={Unplug} tone="danger">
+            <DialogTitle>Desconectar número</DialogTitle>
+            <DialogDescription>
+              &ldquo;{confirmDisconnect?.label}&rdquo; para de atender pelo WhatsApp até ser conectado de novo com um QR
+              code novo.
+            </DialogDescription>
+          </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setConfirmDisconnect(null)}>
+            <Button icon={X} type="button" variant="secondary" onClick={() => setConfirmDisconnect(null)}>
               Cancelar
             </Button>
-            <Button type="button" variant="danger" onClick={handleDisconnect} isLoading={isPending} loadingText="Desconectando…">
+            <Button icon={Unplug} type="button" variant="danger" onClick={handleDisconnect} isLoading={isPending} loadingText="Desconectando…">
               Desconectar
             </Button>
           </DialogFooter>
@@ -211,12 +213,14 @@ export function WhatsappClient({
         }}
       >
         <DialogContent>
-          <DialogTitle>Remover número</DialogTitle>
-          <DialogDescription>
-            Isso remove &ldquo;{confirmRemove?.label}&rdquo; de vez, inclusive da Evolution. Para conectar este número
-            de novo depois, será preciso escanear um QR code novo. Digite <strong>{confirmRemove?.label}</strong> para
-            confirmar.
-          </DialogDescription>
+          <DialogHeader icon={Trash2} tone="danger">
+            <DialogTitle>Remover número</DialogTitle>
+            <DialogDescription>
+              Isso remove &ldquo;{confirmRemove?.label}&rdquo; de vez, inclusive da Evolution. Para conectar este número
+              de novo depois, será preciso escanear um QR code novo. Digite <strong>{confirmRemove?.label}</strong> para
+              confirmar.
+            </DialogDescription>
+          </DialogHeader>
           <div className="mt-4">
             <Field label="Rótulo do número" htmlFor="confirm-remove-label">
               {(fieldProps) => (
@@ -225,10 +229,11 @@ export function WhatsappClient({
             </Field>
           </div>
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setConfirmRemove(null)}>
+            <Button icon={X} type="button" variant="secondary" onClick={() => setConfirmRemove(null)}>
               Cancelar
             </Button>
             <Button
+              icon={Trash2}
               type="button"
               variant="danger"
               onClick={handleRemove}

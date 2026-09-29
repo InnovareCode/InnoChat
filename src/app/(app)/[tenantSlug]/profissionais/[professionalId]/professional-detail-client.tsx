@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarOff, Check, Plus, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { Avatar } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import {
   createScheduleExceptionAction,
@@ -235,7 +235,7 @@ export function ProfessionalDetailClient({
               />
               Ativo
             </label>
-            <Button type="submit" isLoading={isPending} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined} loadingText="Salvando…">
+            <Button icon={Check} type="submit" isLoading={isPending} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined} loadingText="Salvando…">
               Salvar
             </Button>
           </form>
@@ -269,6 +269,7 @@ export function ProfessionalDetailClient({
         </CardContent>
         <CardFooter>
           <Button
+            icon={Check}
             onClick={saveServices}
             isLoading={isPending}
             disabled={allServices.length === 0 || writeBlocked}
@@ -343,7 +344,7 @@ export function ProfessionalDetailClient({
           })}
         </CardContent>
         <CardFooter>
-          <Button onClick={saveHours} isLoading={isPending} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined} loadingText="Salvando…">
+          <Button icon={Check} onClick={saveHours} isLoading={isPending} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined} loadingText="Salvando…">
             Salvar expediente
           </Button>
         </CardFooter>
@@ -395,8 +396,10 @@ export function ProfessionalDetailClient({
 
       <Dialog open={blockDialogOpen} onOpenChange={setBlockDialogOpen}>
         <DialogContent>
-          <DialogTitle>Novo bloqueio</DialogTitle>
-          <DialogDescription>Bloqueia agendamentos deste profissional no período informado.</DialogDescription>
+          <DialogHeader icon={CalendarOff}>
+            <DialogTitle>Novo bloqueio</DialogTitle>
+            <DialogDescription>Bloqueia agendamentos deste profissional no período informado.</DialogDescription>
+          </DialogHeader>
           <form onSubmit={handleCreateBlock} className="mt-4 flex flex-col gap-4">
             {blockError ? (
               <p role="alert" className="text-sm text-danger">
@@ -447,10 +450,10 @@ export function ProfessionalDetailClient({
               )}
             </Field>
             <DialogFooter>
-              <Button type="button" variant="secondary" onClick={() => setBlockDialogOpen(false)}>
+              <Button icon={X} type="button" variant="secondary" onClick={() => setBlockDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" isLoading={isPending} loadingText="Criando…">
+              <Button icon={Check} type="submit" isLoading={isPending} loadingText="Criando…">
                 Criar
               </Button>
             </DialogFooter>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { Check, CheckCircle2, XCircle, Zap } from "lucide-react";
 import { cn } from "@/components/lib/cn";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -160,10 +160,10 @@ export function MercadoPagoCredentialsCard({
           ) : null}
         </CardContent>
         <CardFooter className="flex-wrap">
-          <Button type="submit" isLoading={busy} loadingText="Salvando…">
+          <Button icon={Check} type="submit" isLoading={busy} loadingText="Salvando…">
             Salvar credenciais
           </Button>
-          <Button type="button" variant="secondary" onClick={runTest} isLoading={testing} loadingText="Testando…" disabled={busy}>
+          <Button icon={Zap} type="button" variant="secondary" onClick={runTest} isLoading={testing} loadingText="Testando…" disabled={busy}>
             Testar conexão
           </Button>
         </CardFooter>

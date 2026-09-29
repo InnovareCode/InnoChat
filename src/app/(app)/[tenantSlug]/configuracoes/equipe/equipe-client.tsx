@@ -1,13 +1,14 @@
 "use client";
 
+import { navIconFor } from "@/components/shell/nav-items";
 import { useState, useTransition } from "react";
-import { UserPlus } from "lucide-react";
+import { Send, UserPlus, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -122,8 +123,10 @@ export function EquipeClient({
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
-          <DialogTitle>Convidar membro</DialogTitle>
-          <DialogDescription>Enviamos um link por e-mail para essa pessoa definir a senha e entrar.</DialogDescription>
+          <DialogHeader icon={navIconFor("configuracoes")}>
+            <DialogTitle>Convidar membro</DialogTitle>
+            <DialogDescription>Enviamos um link por e-mail para essa pessoa definir a senha e entrar.</DialogDescription>
+          </DialogHeader>
           <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
             {error ? <Alert variant="danger">{error}</Alert> : null}
             <Field label="E-mail" required>
@@ -146,10 +149,10 @@ export function EquipeClient({
               </Select>
             </div>
             <DialogFooter>
-              <Button type="button" variant="secondary" onClick={() => setDialogOpen(false)}>
+              <Button icon={X} type="button" variant="secondary" onClick={() => setDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" isLoading={isPending} loadingText="Enviando…">
+              <Button icon={Send} type="submit" isLoading={isPending} loadingText="Enviando…">
                 Enviar convite
               </Button>
             </DialogFooter>

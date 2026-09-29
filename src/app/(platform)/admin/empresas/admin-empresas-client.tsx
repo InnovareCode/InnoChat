@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Ban, RotateCcw, Timer } from "lucide-react";
+import { Ban, CalendarPlus, ChevronDown, RotateCcw, Timer, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
 import { Card } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
@@ -218,7 +218,7 @@ export function AdminEmpresasClient({
 
       {nextCursor ? (
         <div className="mt-4 flex justify-center">
-          <Button variant="secondary" onClick={loadMore} isLoading={isLoadingMore} loadingText="Carregando…">
+          <Button icon={ChevronDown} variant="secondary" onClick={loadMore} isLoading={isLoadingMore} loadingText="Carregando…">
             Carregar mais
           </Button>
         </div>
@@ -226,17 +226,20 @@ export function AdminEmpresasClient({
 
       <Dialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
         <DialogContent>
-          <DialogTitle>{confirmAction?.type === "suspend" ? "Suspender empresa" : "Reativar empresa"}</DialogTitle>
-          <DialogDescription>
-            {confirmAction?.type === "suspend"
-              ? `Isso deixa o painel de "${confirmAction.company.name}" somente leitura e desliga o bot no WhatsApp imediatamente. Tem certeza?`
-              : `Isso reativa "${confirmAction?.company.name}" com um novo ciclo de 1 mês a partir de hoje. Tem certeza?`}
-          </DialogDescription>
+          <DialogHeader icon={confirmAction?.type === "suspend" ? Ban : RotateCcw} tone={confirmAction?.type === "suspend" ? "danger" : "primary"}>
+            <DialogTitle>{confirmAction?.type === "suspend" ? "Suspender empresa" : "Reativar empresa"}</DialogTitle>
+            <DialogDescription>
+              {confirmAction?.type === "suspend"
+                ? `Isso deixa o painel de "${confirmAction.company.name}" somente leitura e desliga o bot no WhatsApp imediatamente. Tem certeza?`
+                : `Isso reativa "${confirmAction?.company.name}" com um novo ciclo de 1 mês a partir de hoje. Tem certeza?`}
+            </DialogDescription>
+          </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setConfirmAction(null)}>
+            <Button icon={X} type="button" variant="secondary" onClick={() => setConfirmAction(null)}>
               Cancelar
             </Button>
             <Button
+              icon={confirmAction?.type === "suspend" ? Ban : RotateCcw}
               type="button"
               variant={confirmAction?.type === "suspend" ? "danger" : "primary"}
               onClick={handleConfirm}
@@ -250,10 +253,12 @@ export function AdminEmpresasClient({
 
       <Dialog open={!!extendTarget} onOpenChange={(open) => !open && setExtendTarget(null)}>
         <DialogContent>
-          <DialogTitle>Estender trial</DialogTitle>
-          <DialogDescription>
-            Adiciona dias ao teste de &ldquo;{extendTarget?.name}&rdquo;. Só é possível enquanto a empresa ainda está em teste.
-          </DialogDescription>
+          <DialogHeader icon={CalendarPlus}>
+            <DialogTitle>Estender trial</DialogTitle>
+            <DialogDescription>
+              Adiciona dias ao teste de &ldquo;{extendTarget?.name}&rdquo;. Só é possível enquanto a empresa ainda está em teste.
+            </DialogDescription>
+          </DialogHeader>
           <form onSubmit={handleExtend} className="mt-4 flex flex-col gap-4">
             {dialogError ? <Alert variant="danger">{dialogError}</Alert> : null}
             <Field label="Dias extras" required hint="Entre 1 e 30 dias.">
@@ -270,10 +275,10 @@ export function AdminEmpresasClient({
               )}
             </Field>
             <DialogFooter>
-              <Button type="button" variant="secondary" onClick={() => setExtendTarget(null)}>
+              <Button icon={X} type="button" variant="secondary" onClick={() => setExtendTarget(null)}>
                 Cancelar
               </Button>
-              <Button type="submit" isLoading={isPending} loadingText="Estendendo…">
+              <Button icon={CalendarPlus} type="submit" isLoading={isPending} loadingText="Estendendo…">
                 Estender
               </Button>
             </DialogFooter>

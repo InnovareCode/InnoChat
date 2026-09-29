@@ -4,14 +4,14 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
-import { ArrowDown, ArrowUp, Check, Copy, QrCode, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Check, Copy, QrCode, Sparkles, X } from "lucide-react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/components/lib/cn";
 import { formatDateTimeLabel } from "@/components/lib/format-date";
@@ -431,17 +431,19 @@ function PlanosCard({
 
       <Dialog open={!!pendingPlanTarget} onOpenChange={(open) => !open && setPendingPlanTarget(null)}>
         <DialogContent>
-          <DialogTitle>Trocar de plano</DialogTitle>
-          <DialogDescription>
-            {pendingPlanTarget && pendingPlanTarget.sortOrder >= snapshot.planSortOrder
-              ? `Trocar agora para o plano "${pendingPlanTarget?.name}"? A diferença de preço aparece na próxima fatura.`
-              : `Trocar para o plano "${pendingPlanTarget?.name}"? Se o uso atual couber, a troca vale a partir do próximo ciclo.`}
-          </DialogDescription>
+          <DialogHeader icon={navIconFor("assinatura")}>
+            <DialogTitle>Trocar de plano</DialogTitle>
+            <DialogDescription>
+              {pendingPlanTarget && pendingPlanTarget.sortOrder >= snapshot.planSortOrder
+                ? `Trocar agora para o plano "${pendingPlanTarget?.name}"? A diferença de preço aparece na próxima fatura.`
+                : `Trocar para o plano "${pendingPlanTarget?.name}"? Se o uso atual couber, a troca vale a partir do próximo ciclo.`}
+            </DialogDescription>
+          </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setPendingPlanTarget(null)}>
+            <Button icon={X} type="button" variant="secondary" onClick={() => setPendingPlanTarget(null)}>
               Cancelar
             </Button>
-            <Button type="button" onClick={confirmChange} isLoading={isPending} loadingText="Confirmando…">
+            <Button icon={Check} type="button" onClick={confirmChange} isLoading={isPending} loadingText="Confirmando…">
               Confirmar
             </Button>
           </DialogFooter>
@@ -450,18 +452,20 @@ function PlanosCard({
 
       <Dialog open={!!blockedDetails} onOpenChange={(open) => !open && setBlockedDetails(null)}>
         <DialogContent>
-          <DialogTitle>Não é possível fazer esse downgrade ainda</DialogTitle>
-          <DialogDescription>
-            {blockedDetails ? (
-              <>
-                O plano novo permite até <strong>{blockedDetails.limit}</strong> {RULE_LABEL[blockedDetails.rule]}, e a
-                empresa tem <strong>{blockedDetails.current}</strong> hoje. Remova{" "}
-                {blockedDetails.current - blockedDetails.limit} antes de tentar de novo.
-              </>
-            ) : null}
-          </DialogDescription>
+          <DialogHeader icon={AlertTriangle} tone="warning">
+            <DialogTitle>Não é possível fazer esse downgrade ainda</DialogTitle>
+            <DialogDescription>
+              {blockedDetails ? (
+                <>
+                  O plano novo permite até <strong>{blockedDetails.limit}</strong> {RULE_LABEL[blockedDetails.rule]}, e a
+                  empresa tem <strong>{blockedDetails.current}</strong> hoje. Remova{" "}
+                  {blockedDetails.current - blockedDetails.limit} antes de tentar de novo.
+                </>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
           <DialogFooter>
-            <Button type="button" onClick={() => setBlockedDetails(null)}>
+            <Button icon={Check} type="button" onClick={() => setBlockedDetails(null)}>
               Entendi
             </Button>
           </DialogFooter>

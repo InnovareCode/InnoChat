@@ -39,7 +39,7 @@ export function PageHeader({ title, description, action, className, size = "defa
             className={cn(
               "font-display text-text",
               hero
-                ? "text-[2.5rem] font-black leading-none tracking-[-0.02em]"
+                ? "text-[1.75rem] font-black leading-tight tracking-[-0.02em] sm:text-[2.5rem] sm:leading-none"
                 : "text-[1.75rem] font-bold leading-tight",
             )}
           >

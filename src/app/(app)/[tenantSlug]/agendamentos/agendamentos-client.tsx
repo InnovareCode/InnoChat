@@ -169,7 +169,7 @@ export function AgendamentosClient({
           icon={ClipboardList}
           title="Nenhum agendamento neste período"
           description="Ajuste os filtros ou crie um novo agendamento."
-          action={<Button onClick={() => setNovoOpen(true)}>Novo agendamento</Button>}
+          action={<Button icon={Plus} onClick={() => setNovoOpen(true)}>Novo agendamento</Button>}
         />
       ) : (
         <>

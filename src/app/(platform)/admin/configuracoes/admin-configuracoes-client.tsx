@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, CheckCircle2, Copy, KeyRound, Power, PowerOff, RefreshCw, Scale, XCircle } from "lucide-react";
+import { Check, CheckCircle2, Copy, KeyRound, Power, PowerOff, RefreshCw, Scale, X, XCircle, Zap } from "lucide-react";
 import { cn } from "@/components/lib/cn";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { maskCpfCnpj } from "@/components/lib/document-mask";
 import { normalizeDocumentDigits } from "@/core/billing/document";
@@ -50,7 +50,7 @@ function TestConnectionButton({ onTest }: { onTest: () => Promise<TestResult> })
 
   return (
     <div className="flex flex-col gap-2">
-      <Button type="button" variant="secondary" size="sm" onClick={run} isLoading={isPending} loadingText="Testando…" className="self-start">
+      <Button icon={Zap} type="button" variant="secondary" size="sm" onClick={run} isLoading={isPending} loadingText="Testando…" className="self-start">
         Testar conexão
       </Button>
       {result ? (
@@ -452,7 +452,7 @@ export function AdminConfiguracoesClient({
             />
           </CardContent>
           <CardFooter>
-            <Button type="submit" isLoading={isPending} loadingText="Salvando…">
+            <Button icon={Check} type="submit" isLoading={isPending} loadingText="Salvando…">
               Salvar
             </Button>
           </CardFooter>
@@ -518,7 +518,7 @@ export function AdminConfiguracoesClient({
             />
           </CardContent>
           <CardFooter>
-            <Button type="submit" isLoading={isPending} loadingText="Salvando…">
+            <Button icon={Check} type="submit" isLoading={isPending} loadingText="Salvando…">
               Salvar
             </Button>
           </CardFooter>
@@ -643,7 +643,7 @@ export function AdminConfiguracoesClient({
             />
           </CardContent>
           <CardFooter>
-            <Button type="submit" isLoading={isPending} loadingText="Salvando…">
+            <Button icon={Check} type="submit" isLoading={isPending} loadingText="Salvando…">
               Salvar
             </Button>
           </CardFooter>
@@ -796,7 +796,7 @@ export function AdminConfiguracoesClient({
             </div>
           </CardContent>
           <CardFooter>
-            <Button type="submit" isLoading={isPending} loadingText="Salvando…">
+            <Button icon={Check} type="submit" isLoading={isPending} loadingText="Salvando…">
               Salvar
             </Button>
           </CardFooter>
@@ -805,10 +805,12 @@ export function AdminConfiguracoesClient({
 
       <Dialog open={secretDialogOpen} onOpenChange={setSecretDialogOpen}>
         <DialogContent>
-          <DialogTitle>Segredo gerado</DialogTitle>
-          <DialogDescription>
-            Copie agora — por segurança, ele não pode ser mostrado de novo depois que você fechar esta janela.
-          </DialogDescription>
+          <DialogHeader icon={KeyRound}>
+            <DialogTitle>Segredo gerado</DialogTitle>
+            <DialogDescription>
+              Copie agora — por segurança, ele não pode ser mostrado de novo depois que você fechar esta janela.
+            </DialogDescription>
+          </DialogHeader>
           <div className="mt-4 flex items-center gap-2 rounded-card border border-border bg-bg p-3">
             <code className="flex-1 overflow-x-auto whitespace-nowrap text-sm text-text">{newSecret}</code>
             <Button type="button" variant="ghost" size="icon" aria-label="Copiar segredo" onClick={copySecret}>
@@ -816,7 +818,7 @@ export function AdminConfiguracoesClient({
             </Button>
           </div>
           <DialogFooter>
-            <Button type="button" onClick={() => setSecretDialogOpen(false)}>
+            <Button icon={Check} type="button" onClick={() => setSecretDialogOpen(false)}>
               Já copiei, fechar
             </Button>
           </DialogFooter>
@@ -825,17 +827,20 @@ export function AdminConfiguracoesClient({
 
       <Dialog open={!!confirmActivate} onOpenChange={(open) => !open && setConfirmActivate(null)}>
         <DialogContent>
-          <DialogTitle>{confirmActivate === "on" ? "Ativar o bot" : "Desativar o bot"}</DialogTitle>
-          <DialogDescription>
-            {confirmActivate === "on"
-              ? "O workflow do bot passa a responder no WhatsApp de todas as empresas conectadas. Sincronize o n8n antes, se ainda não sincronizou."
-              : "O workflow do bot deixa de responder no WhatsApp de todas as empresas conectadas."}
-          </DialogDescription>
+          <DialogHeader icon={confirmActivate === "on" ? Power : PowerOff} tone={confirmActivate === "on" ? "primary" : "danger"}>
+            <DialogTitle>{confirmActivate === "on" ? "Ativar o bot" : "Desativar o bot"}</DialogTitle>
+            <DialogDescription>
+              {confirmActivate === "on"
+                ? "O workflow do bot passa a responder no WhatsApp de todas as empresas conectadas. Sincronize o n8n antes, se ainda não sincronizou."
+                : "O workflow do bot deixa de responder no WhatsApp de todas as empresas conectadas."}
+            </DialogDescription>
+          </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setConfirmActivate(null)}>
+            <Button icon={X} type="button" variant="secondary" onClick={() => setConfirmActivate(null)}>
               Cancelar
             </Button>
             <Button
+              icon={confirmActivate === "on" ? Power : PowerOff}
               type="button"
               variant={confirmActivate === "off" ? "danger" : "primary"}
               onClick={() => handleToggleBot(confirmActivate === "on")}

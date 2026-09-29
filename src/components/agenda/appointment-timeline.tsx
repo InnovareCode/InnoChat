@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarClock, CalendarPlus, CalendarX, CheckCircle2, Circle, UserX, type LucideIcon } from "lucide-react";
+import { CalendarClock, CalendarPlus, CalendarX, CheckCircle2, Circle, RotateCcw, UserX, type LucideIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/components/lib/cn";
 import { formatDateTimeShortLabel } from "@/components/lib/format-date";
@@ -23,6 +23,7 @@ const ACTION_VISUAL: Record<string, { icon: LucideIcon; tone: string }> = {
   CANCELED: { icon: CalendarX, tone: "bg-danger-bg text-danger" },
   COMPLETED: { icon: CheckCircle2, tone: "bg-success-bg text-success" },
   NO_SHOW: { icon: UserX, tone: "bg-warning-bg text-warning" },
+  REOPENED: { icon: RotateCcw, tone: "bg-primary/10 text-primary" },
 };
 
 type State =

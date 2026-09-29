@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Check, MessageCircle, Rocket, Scissors, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, MessageCircle, Plus, Rocket, Scissors, UserRound } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -198,13 +198,13 @@ export function OnboardingClient({
                   )}
                 </Field>
               </div>
-              <Button type="submit" isLoading={isPending} loadingText="Adicionando…">
+              <Button icon={Plus} type="submit" isLoading={isPending} loadingText="Adicionando…">
                 Adicionar
               </Button>
             </form>
           </CardContent>
           <CardFooter className="justify-end">
-            <Button onClick={() => setStep(2)} disabled={!hasService}>
+            <Button icon={hasService ? ArrowRight : undefined} onClick={() => setStep(2)} disabled={!hasService}>
               {hasService ? "Avançar" : "Adicione ao menos 1 serviço"}
             </Button>
           </CardFooter>
@@ -246,16 +246,16 @@ export function OnboardingClient({
                   )}
                 </Field>
               </div>
-              <Button type="submit" isLoading={isPending} loadingText="Adicionando…">
+              <Button icon={Plus} type="submit" isLoading={isPending} loadingText="Adicionando…">
                 Adicionar
               </Button>
             </form>
           </CardContent>
           <CardFooter className="justify-between">
-            <Button variant="ghost" onClick={() => setStep(1)}>
+            <Button icon={ArrowLeft} variant="ghost" onClick={() => setStep(1)}>
               Voltar
             </Button>
-            <Button onClick={() => setStep(3)} disabled={!hasProfessionalWithHours}>
+            <Button icon={hasProfessionalWithHours ? ArrowRight : undefined} onClick={() => setStep(3)} disabled={!hasProfessionalWithHours}>
               {hasProfessionalWithHours ? "Avançar" : "Adicione ao menos 1 profissional"}
             </Button>
           </CardFooter>
@@ -282,10 +282,10 @@ export function OnboardingClient({
             </div>
           </CardContent>
           <CardFooter className="justify-between">
-            <Button variant="ghost" onClick={() => setStep(2)}>
+            <Button icon={ArrowLeft} variant="ghost" onClick={() => setStep(2)}>
               Voltar
             </Button>
-            <Button onClick={() => setStep(4)}>Avançar</Button>
+            <Button icon={ArrowRight} onClick={() => setStep(4)}>Avançar</Button>
           </CardFooter>
         </Card>
       ) : null}
@@ -301,7 +301,7 @@ export function OnboardingClient({
             <p>✓ {professionals.length} profissional(is) cadastrado(s)</p>
           </CardContent>
           <CardFooter className="justify-between">
-            <Button variant="ghost" onClick={() => setStep(3)}>
+            <Button icon={ArrowLeft} variant="ghost" onClick={() => setStep(3)}>
               Voltar
             </Button>
             <Button asChild>

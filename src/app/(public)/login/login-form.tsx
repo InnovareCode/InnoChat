@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Lock, Mail } from "lucide-react";
+import { Lock, LogIn, Mail } from "lucide-react";
 import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
@@ -47,7 +47,7 @@ export function LoginForm({ forgotLink }: { forgotLink: React.ReactNode }) {
         )}
       </Field>
 
-      <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Entrando…">
+      <Button icon={LogIn} type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Entrando…">
         Entrar
       </Button>
       <AuthTrust />

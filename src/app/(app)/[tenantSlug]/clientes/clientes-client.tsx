@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Download, Plus, Search, Users } from "lucide-react";
+import { ChevronDown, Download, Plus, Search, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -291,7 +291,7 @@ export function ClientesClient({
           }
           action={
             !debouncedSearch && filter === "all" ? (
-              <Button onClick={() => setCreateOpen(true)} disabled={writeBlocked}>
+              <Button icon={Plus} onClick={() => setCreateOpen(true)} disabled={writeBlocked}>
                 Novo cliente
               </Button>
             ) : undefined
@@ -374,7 +374,7 @@ export function ClientesClient({
 
           {nextCursor ? (
             <div className="mt-4 flex justify-center">
-              <Button variant="secondary" onClick={loadMore} isLoading={loadingMore} loadingText="Carregando…">
+              <Button icon={ChevronDown} variant="secondary" onClick={loadMore} isLoading={loadingMore} loadingText="Carregando…">
                 Carregar mais
               </Button>
             </div>

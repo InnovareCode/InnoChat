@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Plus, Trash2, UserRound } from "lucide-react";
+import { Check, Plus, Trash2, UserRound, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { Avatar } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
@@ -142,7 +142,7 @@ export function ProfissionaisClient({
           title="Nenhum profissional cadastrado ainda"
           description="Crie o primeiro profissional para definir expediente e serviços."
           action={
-            <Button onClick={openCreate} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}>
+            <Button icon={Plus} onClick={openCreate} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}>
               Novo profissional
             </Button>
           }
@@ -269,8 +269,10 @@ export function ProfissionaisClient({
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
-          <DialogTitle>Novo profissional</DialogTitle>
-          <DialogDescription>Depois de criar, defina os serviços e o expediente dele.</DialogDescription>
+          <DialogHeader icon={navIconFor("profissionais")}>
+            <DialogTitle>Novo profissional</DialogTitle>
+            <DialogDescription>Depois de criar, defina os serviços e o expediente dele.</DialogDescription>
+          </DialogHeader>
           <form onSubmit={handleCreate} className="mt-4 flex flex-col gap-4">
             {formError ? (
               <p role="alert" className="text-sm text-danger">
@@ -283,10 +285,10 @@ export function ProfissionaisClient({
               )}
             </Field>
             <DialogFooter>
-              <Button type="button" variant="secondary" onClick={() => setDialogOpen(false)}>
+              <Button icon={X} type="button" variant="secondary" onClick={() => setDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" isLoading={isPending} loadingText="Criando…">
+              <Button icon={Check} type="submit" isLoading={isPending} loadingText="Criando…">
                 Criar
               </Button>
             </DialogFooter>
@@ -296,15 +298,17 @@ export function ProfissionaisClient({
 
       <Dialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>
         <DialogContent>
-          <DialogTitle>Excluir profissional</DialogTitle>
-          <DialogDescription>
-            Tem certeza que quer excluir &ldquo;{confirmDelete?.name}&rdquo;? Essa ação não pode ser desfeita.
-          </DialogDescription>
+          <DialogHeader icon={Trash2} tone="danger">
+            <DialogTitle>Excluir profissional</DialogTitle>
+            <DialogDescription>
+              Tem certeza que quer excluir &ldquo;{confirmDelete?.name}&rdquo;? Essa ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setConfirmDelete(null)}>
+            <Button icon={X} type="button" variant="secondary" onClick={() => setConfirmDelete(null)}>
               Cancelar
             </Button>
-            <Button type="button" variant="danger" onClick={handleDelete} isLoading={isPending} loadingText="Excluindo…">
+            <Button icon={Trash2} type="button" variant="danger" onClick={handleDelete} isLoading={isPending} loadingText="Excluindo…">
               Excluir
             </Button>
           </DialogFooter>

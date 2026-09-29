@@ -2,14 +2,14 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { CheckCheck, RotateCcw } from "lucide-react";
+import { Check, CheckCheck, Pencil, RotateCcw, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
 import { STAGGER_DELAY_S } from "@/components/lib/motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import { BOT_TEXT_VARIABLES, DEFAULT_BOT_TEXTS, renderTemplate, type BotTextKeyLiteral } from "@/core/bot/texts";
 import { resetBotTextAction, upsertBotTextAction } from "@/modules/bot-texts/bot-text-actions";
@@ -216,7 +216,7 @@ export function MensagensBotClient({ tenantSlug, initialTexts }: { tenantSlug: s
                             <RotateCcw className="h-4 w-4" aria-hidden="true" />
                           </Button>
                         ) : null}
-                        <Button variant="secondary" size="sm" onClick={() => setEditingKey(key)}>
+                        <Button icon={Pencil} variant="secondary" size="sm" onClick={() => setEditingKey(key)}>
                           Editar
                         </Button>
                       </div>
@@ -240,15 +240,17 @@ export function MensagensBotClient({ tenantSlug, initialTexts }: { tenantSlug: s
 
       <Dialog open={!!confirmReset} onOpenChange={(open) => !open && setConfirmReset(null)}>
         <DialogContent>
-          <DialogTitle>Restaurar padrão</DialogTitle>
-          <DialogDescription>
-            Isso substitui o texto personalizado pelo texto padrão do InnoChat para esta mensagem. Não pode ser desfeito.
-          </DialogDescription>
+          <DialogHeader icon={RotateCcw} tone="danger">
+            <DialogTitle>Restaurar padrão</DialogTitle>
+            <DialogDescription>
+              Isso substitui o texto personalizado pelo texto padrão do InnoChat para esta mensagem. Não pode ser desfeito.
+            </DialogDescription>
+          </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setConfirmReset(null)}>
+            <Button icon={X} type="button" variant="secondary" onClick={() => setConfirmReset(null)}>
               Cancelar
             </Button>
-            <Button type="button" variant="danger" onClick={handleReset} isLoading={isPending} loadingText="Restaurando…">
+            <Button icon={RotateCcw} type="button" variant="danger" onClick={handleReset} isLoading={isPending} loadingText="Restaurando…">
               Restaurar
             </Button>
           </DialogFooter>
@@ -279,8 +281,10 @@ function EditDialogController({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-lg">
-        <DialogTitle>Editar mensagem</DialogTitle>
-        <DialogDescription>{KEY_DESCRIPTION[row.key]}</DialogDescription>
+        <DialogHeader icon={navIconFor("mensagens-bot")}>
+          <DialogTitle>Editar mensagem</DialogTitle>
+          <DialogDescription>{KEY_DESCRIPTION[row.key]}</DialogDescription>
+        </DialogHeader>
 
         <div className="mt-4 flex flex-col gap-4">
           <div>
@@ -321,10 +325,10 @@ function EditDialogController({
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button icon={X} type="button" variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
-          <Button type="button" isLoading={isPending} onClick={() => onSave(text)} loadingText="Salvando…">
+          <Button icon={Check} type="button" isLoading={isPending} onClick={() => onSave(text)} loadingText="Salvando…">
             Salvar
           </Button>
         </DialogFooter>

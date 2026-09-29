@@ -1,7 +1,9 @@
 "use client";
 
+import { navIconFor } from "@/components/shell/nav-items";
+import { CalendarPlus, X } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -173,8 +175,10 @@ export function NovoAgendamentoDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogTitle>Novo agendamento</DialogTitle>
-        <DialogDescription>Escolha o serviço, o profissional e um horário livre.</DialogDescription>
+        <DialogHeader icon={navIconFor("agenda")}>
+          <DialogTitle>Novo agendamento</DialogTitle>
+          <DialogDescription>Escolha o serviço, o profissional e um horário livre.</DialogDescription>
+        </DialogHeader>
 
         <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
           {error ? <Alert variant="danger">{error}</Alert> : null}
@@ -286,10 +290,10 @@ export function NovoAgendamentoDialog({
           </fieldset>
 
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+            <Button icon={X} type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" isLoading={isPending} disabled={disabled} loadingText="Agendando…">
+            <Button icon={CalendarPlus} type="submit" isLoading={isPending} disabled={disabled} loadingText="Agendando…">
               Agendar
             </Button>
           </DialogFooter>

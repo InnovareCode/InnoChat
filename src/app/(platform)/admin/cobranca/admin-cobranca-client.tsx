@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { AlertTriangle, Banknote, Check, FlaskConical, QrCode, ReceiptText, RefreshCw, TrendingUp } from "lucide-react";
+import { AlertTriangle, Banknote, Check, ChevronDown, Filter, FlaskConical, QrCode, ReceiptText, RefreshCw, TrendingUp, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -333,7 +333,7 @@ export function AdminCobrancaClient({
               />
             )}
           </Field>
-          <Button type="button" variant="secondary" onClick={applyFilters} isLoading={isPending && !isLoadingMore} className="w-full sm:col-span-2 lg:col-span-1 lg:w-auto" loadingText="Filtrando…">
+          <Button icon={Filter} type="button" variant="secondary" onClick={applyFilters} isLoading={isPending && !isLoadingMore} className="w-full sm:col-span-2 lg:col-span-1 lg:w-auto" loadingText="Filtrando…">
               Filtrar
             </Button>
           </div>
@@ -440,7 +440,7 @@ export function AdminCobrancaClient({
 
       {nextCursor ? (
         <div className="flex justify-center">
-          <Button variant="secondary" onClick={loadMore} isLoading={isLoadingMore} loadingText="Carregando…">
+          <Button icon={ChevronDown} variant="secondary" onClick={loadMore} isLoading={isLoadingMore} loadingText="Carregando…">
             Carregar mais
           </Button>
         </div>
@@ -448,12 +448,14 @@ export function AdminCobrancaClient({
 
       <Dialog open={!!markPaidTarget} onOpenChange={(open) => !open && setMarkPaidTarget(null)}>
         <DialogContent>
-          <DialogTitle>Marcar fatura como paga manualmente</DialogTitle>
-          <DialogDescription>
-            Isso marca a fatura de &ldquo;{markPaidTarget?.invoice.tenantName}&rdquo; ({markPaidTarget ? formatCentsBRL(markPaidTarget.invoice.amountCents) : ""})
-            como paga, avança o ciclo de cobrança e reativa a assinatura se estiver suspensa. Esta ação fica registrada com seu usuário e o
-            motivo abaixo — use só para pagamentos confirmados fora do Pix.
-          </DialogDescription>
+          <DialogHeader icon={navIconFor("admin/cobranca")} tone="warning">
+            <DialogTitle>Marcar fatura como paga manualmente</DialogTitle>
+            <DialogDescription>
+              Isso marca a fatura de &ldquo;{markPaidTarget?.invoice.tenantName}&rdquo; ({markPaidTarget ? formatCentsBRL(markPaidTarget.invoice.amountCents) : ""})
+              como paga, avança o ciclo de cobrança e reativa a assinatura se estiver suspensa. Esta ação fica registrada com seu usuário e o
+              motivo abaixo — use só para pagamentos confirmados fora do Pix.
+            </DialogDescription>
+          </DialogHeader>
           <form onSubmit={handleMarkPaid} className="mt-4 flex flex-col gap-4">
             {dialogError ? <Alert variant="danger">{dialogError}</Alert> : null}
             <Field label="Motivo da baixa manual" required hint="Explique como o pagamento foi confirmado (ex.: transferência, depósito).">
@@ -470,10 +472,10 @@ export function AdminCobrancaClient({
               )}
             </Field>
             <DialogFooter>
-              <Button type="button" variant="secondary" onClick={() => setMarkPaidTarget(null)}>
+              <Button icon={X} type="button" variant="secondary" onClick={() => setMarkPaidTarget(null)}>
                 Cancelar
               </Button>
-              <Button type="submit" variant="danger" isLoading={isPending} loadingText="Confirmando…">
+              <Button icon={Check} type="submit" variant="danger" isLoading={isPending} loadingText="Confirmando…">
                 Confirmar baixa manual
               </Button>
             </DialogFooter>

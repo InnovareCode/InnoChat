@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Pencil, Plus, Scissors, Trash2 } from "lucide-react";
+import { Check, Pencil, Plus, Scissors, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { navIconFor } from "@/components/shell/nav-items";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -11,13 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
@@ -204,7 +198,7 @@ export function ServicosClient({
           title="Nenhum serviço cadastrado ainda"
           description="Crie o primeiro serviço para começar a montar a agenda."
           action={
-            <Button onClick={openCreate} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}>
+            <Button icon={Plus} onClick={openCreate} disabled={writeBlocked} title={writeBlocked ? WRITE_BLOCKED_HINT : undefined}>
               Novo serviço
             </Button>
           }
@@ -328,8 +322,10 @@ export function ServicosClient({
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
-          <DialogTitle>{editing ? "Editar serviço" : "Novo serviço"}</DialogTitle>
-          <DialogDescription>Duração e intervalo entram no cálculo dos horários livres.</DialogDescription>
+          <DialogHeader icon={navIconFor("servicos")}>
+            <DialogTitle>{editing ? "Editar serviço" : "Novo serviço"}</DialogTitle>
+            <DialogDescription>Duração e intervalo entram no cálculo dos horários livres.</DialogDescription>
+          </DialogHeader>
 
           <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
             {formError ? (
@@ -413,10 +409,10 @@ export function ServicosClient({
             </label>
 
             <DialogFooter>
-              <Button type="button" variant="secondary" onClick={() => setDialogOpen(false)}>
+              <Button icon={X} type="button" variant="secondary" onClick={() => setDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" isLoading={isPending}>
+              <Button icon={Check} type="submit" isLoading={isPending}>
                 {editing ? "Salvar" : "Criar"}
               </Button>
             </DialogFooter>
@@ -426,15 +422,17 @@ export function ServicosClient({
 
       <Dialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>
         <DialogContent>
-          <DialogTitle>Excluir serviço</DialogTitle>
-          <DialogDescription>
-            Tem certeza que quer excluir &ldquo;{confirmDelete?.name}&rdquo;? Essa ação não pode ser desfeita.
-          </DialogDescription>
+          <DialogHeader icon={Trash2} tone="danger">
+            <DialogTitle>Excluir serviço</DialogTitle>
+            <DialogDescription>
+              Tem certeza que quer excluir &ldquo;{confirmDelete?.name}&rdquo;? Essa ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setConfirmDelete(null)}>
+            <Button icon={X} type="button" variant="secondary" onClick={() => setConfirmDelete(null)}>
               Cancelar
             </Button>
-            <Button type="button" variant="danger" onClick={handleDelete} isLoading={isPending} loadingText="Excluindo…">
+            <Button icon={Trash2} type="button" variant="danger" onClick={handleDelete} isLoading={isPending} loadingText="Excluindo…">
               Excluir
             </Button>
           </DialogFooter>

@@ -1,7 +1,9 @@
 "use client";
 
+import { navIconFor } from "@/components/shell/nav-items";
+import { Check, X } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
@@ -108,10 +110,12 @@ export function ContactFormDialog({ tenantSlug, open, onOpenChange, contact = nu
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogTitle>{editing ? "Editar cliente" : "Novo cliente"}</DialogTitle>
-        <DialogDescription>
-          {editing ? "Atualize os dados do cliente." : "Cadastre um cliente para agendar por ele."}
-        </DialogDescription>
+        <DialogHeader icon={navIconFor("clientes")}>
+          <DialogTitle>{editing ? "Editar cliente" : "Novo cliente"}</DialogTitle>
+          <DialogDescription>
+            {editing ? "Atualize os dados do cliente." : "Cadastre um cliente para agendar por ele."}
+          </DialogDescription>
+        </DialogHeader>
 
         <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
           {error ? (
@@ -172,10 +176,10 @@ export function ContactFormDialog({ tenantSlug, open, onOpenChange, contact = nu
           </Field>
 
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
+            <Button icon={X} type="button" variant="secondary" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" isLoading={isPending}>
+            <Button icon={Check} type="submit" isLoading={isPending}>
               {editing ? "Salvar" : "Criar"}
             </Button>
           </DialogFooter>

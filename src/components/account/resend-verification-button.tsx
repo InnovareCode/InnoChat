@@ -1,5 +1,6 @@
 "use client";
 
+import { Send } from "lucide-react";
 import { useState, useTransition } from "react";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
@@ -59,7 +60,7 @@ export function ResendVerificationButton({
   }
 
   return (
-    <Button type="button" variant={variant} size={size} onClick={handleClick} isLoading={isPending} className={className}>
+    <Button icon={Send} type="button" variant={variant} size={size} onClick={handleClick} isLoading={isPending} className={className}>
       Reenviar e-mail de confirmação
     </Button>
   );

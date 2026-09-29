@@ -7,7 +7,7 @@ import { Field } from "@/components/ui/field";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { resetPasswordAction } from "@/modules/signup/actions";
-import { Lock } from "lucide-react";
+import { Check, Lock } from "lucide-react";
 import { AuthInput } from "@/components/public/auth-input";
 import { AUTH_SUBMIT_CLASS, AuthPanel } from "@/components/public/auth-panel";
 
@@ -99,7 +99,7 @@ export function RedefinirSenhaForm({ token }: { token: string | null }) {
               />
             )}
           </Field>
-          <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Salvando…">
+          <Button icon={Check} type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Salvando…">
             Salvar nova senha
           </Button>
         </form>

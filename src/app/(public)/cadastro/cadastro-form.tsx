@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
-import { Building2, IdCard, Link2, Lock, Mail, MailCheck, Tag, User } from "lucide-react";
+import { Building2, IdCard, Link2, Lock, Mail, MailCheck, RefreshCw, Tag, User, UserPlus } from "lucide-react";
 import { Field } from "@/components/ui/field";
 import { AuthInput } from "@/components/public/auth-input";
 import { AUTH_SUBMIT_CLASS, AuthPanel, AuthTrust } from "@/components/public/auth-panel";
@@ -191,7 +191,7 @@ export function CadastroForm() {
             <Alert variant="warning" title="Os termos foram atualizados">
               <div className="flex flex-col gap-2">
                 <span>A página que você abriu ficou com uma versão antiga dos termos. Recarregue e confirme de novo.</span>
-                <Button type="button" variant="secondary" size="sm" className="w-fit" onClick={() => window.location.reload()}>
+                <Button type="button" variant="secondary" size="sm" icon={RefreshCw} className="w-fit" onClick={() => window.location.reload()}>
                   Recarregar página
                 </Button>
               </div>
@@ -368,7 +368,7 @@ export function CadastroForm() {
           </div>
 
           <div>
-            <Button type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Criando conta…">
+            <Button icon={UserPlus} type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Criando conta…">
               Criar conta
             </Button>
             <AuthTrust trial />

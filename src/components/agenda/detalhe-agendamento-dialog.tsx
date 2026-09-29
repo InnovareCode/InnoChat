@@ -1,14 +1,23 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { useEffect, useState, useTransition } from "react";
+import { ArrowLeft, CalendarClock, CalendarX, CircleCheck, RotateCcw, UserX } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { navIconFor } from "@/components/shell/nav-items";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
-import { AppointmentSourceBadge, AppointmentStatusBadge, type AppointmentSource } from "./appointment-status";
+import { AppointmentSourceBadge, AppointmentStatusBadge, type AppointmentSource, type AppointmentStatus } from "./appointment-status";
 import { AppointmentTimeline } from "./appointment-timeline";
 import { Alert } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { cancelAppointmentAction, rescheduleAppointmentAction } from "@/modules/agenda/appointment-actions";
+import {
+  cancelAppointmentAction,
+  completeAppointmentAction,
+  markNoShowAppointmentAction,
+  reopenAppointmentAction,
+  rescheduleAppointmentAction,
+} from "@/modules/agenda/appointment-actions";
 import { formatDateTimeLabel, formatTimeLabel } from "@/components/lib/format-date";
 
 export type AppointmentDetail = {
@@ -53,10 +62,35 @@ export function DetalheAgendamentoDialog({
   const [cancelNote, setCancelNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Status vindo da ação (concluir/faltou) — o pai só recarrega a lista, então o diálogo aberto
+  // precisa refletir o novo estado sozinho. Amarrado ao id: outro agendamento nunca herda o override.
+  const [override, setOverride] = useState<{ id: string; status: AppointmentStatus } | null>(null);
+  const [timelineKey, setTimelineKey] = useState(0);
+  const [pendingAction, setPendingAction] = useState<"complete" | "noshow" | "reopen" | null>(null);
+  // "Agora" em estado (não Date.now() no render): reavalia a cada 30 s enquanto o diálogo está aberto,
+  // para "Concluir/Faltou" habilitarem sozinhos quando o horário de início chega.
+  const [now, setNow] = useState(0);
+  const { notify } = useToast();
+
+  const appointmentId = appointment?.id;
+  useEffect(() => {
+    if (!appointmentId) return;
+    const tick = () => setNow(Date.now());
+    const first = setTimeout(tick, 0);
+    const interval = setInterval(tick, 30_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(interval);
+    };
+  }, [appointmentId]);
 
   if (!appointment) return null;
 
+  const status: AppointmentStatus = override?.id === appointment.id ? override.status : appointment.status;
+  const hasStarted = now > 0 && new Date(appointment.startsAt).getTime() <= now;
+
   function close() {
+    setOverride(null);
     setMode("view");
     setError(null);
     onOpenChange(false);
@@ -73,6 +107,41 @@ export function DetalheAgendamentoDialog({
       }
       onUpdated(result.data);
       close();
+    });
+  }
+
+  function handleFinish(kind: "complete" | "noshow" | "reopen") {
+    if (!appointment) return;
+    setError(null);
+    setPendingAction(kind);
+    startTransition(async () => {
+      const input = { tenantSlug, appointmentId: appointment.id };
+      const result =
+        kind === "complete"
+          ? await completeAppointmentAction(input)
+          : kind === "noshow"
+            ? await markNoShowAppointmentAction(input)
+            : await reopenAppointmentAction(input);
+      setPendingAction(null);
+      if (!result.ok) {
+        setError(
+          result.error.code === "APPOINTMENT_NOT_STARTED"
+            ? "O atendimento ainda não começou. Tente de novo a partir do horário de início."
+            : result.error.message,
+        );
+        return;
+      }
+      setOverride({
+        id: appointment.id,
+        status: kind === "complete" ? "COMPLETED" : kind === "noshow" ? "NO_SHOW" : "SCHEDULED",
+      });
+      setTimelineKey((k) => k + 1);
+      notify({
+        variant: "success",
+        title:
+          kind === "complete" ? "Atendimento concluído." : kind === "noshow" ? "Falta registrada." : "Agendamento reaberto.",
+      });
+      onUpdated(result.data);
     });
   }
 
@@ -104,17 +173,19 @@ export function DetalheAgendamentoDialog({
   return (
     <Dialog open={!!appointment} onOpenChange={(open) => !open && close()}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto">
-        <DialogTitle>Agendamento</DialogTitle>
-        <DialogDescription>
-          {appointment.service.name} com {appointment.professional.name}
-        </DialogDescription>
+        <DialogHeader icon={navIconFor("agenda")}>
+          <DialogTitle>Agendamento</DialogTitle>
+          <DialogDescription>
+            {appointment.service.name} com {appointment.professional.name}
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="mt-4 flex flex-col gap-3">
           {error ? <Alert variant="danger">{error}</Alert> : null}
 
           <div className="flex items-center justify-between">
             <p className="text-sm text-text-secondary">Status</p>
-            <AppointmentStatusBadge status={appointment.status} />
+            <AppointmentStatusBadge status={status} />
           </div>
           {appointment.source ? (
             <div className="flex items-center justify-between">
@@ -150,10 +221,10 @@ export function DetalheAgendamentoDialog({
                 required
               />
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="secondary" onClick={() => setMode("view")}>
+                <Button type="button" variant="secondary" icon={ArrowLeft} onClick={() => setMode("view")}>
                   Voltar
                 </Button>
-                <Button type="submit" isLoading={isPending} loadingText="Remarcando…">
+                <Button type="submit" icon={CalendarClock} isLoading={isPending} loadingText="Remarcando…">
                   Confirmar remarcação
                 </Button>
               </div>
@@ -166,10 +237,10 @@ export function DetalheAgendamentoDialog({
               <Input id="cancel-note" value={cancelNote} onChange={(e) => setCancelNote(e.target.value)} />
               <p className="text-sm text-text-secondary">Tem certeza que quer cancelar este agendamento?</p>
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="secondary" onClick={() => setMode("view")}>
+                <Button type="button" variant="secondary" icon={ArrowLeft} onClick={() => setMode("view")}>
                   Voltar
                 </Button>
-                <Button type="button" variant="danger" onClick={handleCancel} isLoading={isPending} loadingText="Cancelando…">
+                <Button type="button" variant="danger" icon={CalendarX} onClick={handleCancel} isLoading={isPending} loadingText="Cancelando…">
                   Confirmar cancelamento
                 </Button>
               </div>
@@ -178,31 +249,93 @@ export function DetalheAgendamentoDialog({
         </div>
 
         <div className="mt-4">
-          <AppointmentTimeline tenantSlug={tenantSlug} appointmentId={appointment.id} timezone={timezone} />
+          <AppointmentTimeline tenantSlug={tenantSlug} appointmentId={appointment.id} timezone={timezone} refreshKey={timelineKey} />
         </div>
 
-        {mode === "view" && appointment.status === "SCHEDULED" ? (
-          <DialogFooter>
+        {mode === "view" && status === "SCHEDULED" ? (
+          <div className="mt-6 flex flex-col gap-2">
             {disabled ? (
-              <p className="text-sm text-danger">Assinatura suspensa — remarcação e cancelamento bloqueados até o pagamento.</p>
+              <p className="text-sm text-danger">
+                Assinatura suspensa — remarcação e cancelamento bloqueados até o pagamento.
+              </p>
             ) : (
               <>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    setNewStartsAt(toDateTimeLocal(appointment.startsAt));
-                    setMode("reschedule");
-                  }}
-                >
-                  Remarcar
-                </Button>
-                <Button type="button" variant="danger" onClick={() => setMode("cancel")}>
-                  Cancelar agendamento
-                </Button>
+                {/* Grade de 2 colunas em qualquer largura: as ações do dia (concluir/faltou) primeiro,
+                    as de mudança de horário depois; rótulos longos ocupam a linha inteira. */}
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="success"
+                    icon={CircleCheck}
+                    className="col-span-2"
+                    disabled={!hasStarted || isPending}
+                    isLoading={pendingAction === "complete"}
+                    loadingText="Concluindo…"
+                    aria-describedby={hasStarted ? undefined : "finish-hint"}
+                    onClick={() => handleFinish("complete")}
+                  >
+                    Concluir atendimento
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="warning"
+                    icon={UserX}
+                    disabled={!hasStarted || isPending}
+                    isLoading={pendingAction === "noshow"}
+                    loadingText="Registrando…"
+                    aria-describedby={hasStarted ? undefined : "finish-hint"}
+                    onClick={() => handleFinish("noshow")}
+                  >
+                    Cliente faltou
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    icon={CalendarClock}
+                    disabled={isPending}
+                    onClick={() => {
+                      setNewStartsAt(toDateTimeLocal(appointment.startsAt));
+                      setMode("reschedule");
+                    }}
+                  >
+                    Remarcar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    icon={CalendarX}
+                    className="col-span-2 border-danger/40 text-danger hover:bg-danger-bg"
+                    disabled={isPending}
+                    onClick={() => setMode("cancel")}
+                  >
+                    Cancelar agendamento
+                  </Button>
+                </div>
+                {hasStarted ? null : (
+                  <p id="finish-hint" className="text-xs text-text-secondary">
+                    Concluir e registrar falta ficam disponíveis a partir das {formatTimeLabel(appointment.startsAt, timezone)}.
+                  </p>
+                )}
               </>
             )}
-          </DialogFooter>
+          </div>
+        ) : null}
+        {mode === "view" && !disabled && (status === "COMPLETED" || status === "NO_SHOW") ? (
+          <div className="mt-4 flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              icon={RotateCcw}
+              className="text-text-secondary"
+              disabled={isPending}
+              isLoading={pendingAction === "reopen"}
+              loadingText="Reabrindo…"
+              onClick={() => handleFinish("reopen")}
+            >
+              Reabrir agendamento
+            </Button>
+          </div>
         ) : null}
       </DialogContent>
     </Dialog>

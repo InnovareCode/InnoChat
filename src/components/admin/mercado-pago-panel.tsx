@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, FlaskConical, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Check, Copy, FlaskConical, RefreshCw, ShieldAlert, ShieldCheck, Trash2, X } from "lucide-react";
 import { cn } from "@/components/lib/cn";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
 import {
   getMercadoPagoConfigAction,
@@ -181,7 +181,7 @@ export function MercadoPagoPanel({
           <Alert variant="danger" className="w-full">
             {loadError ?? "Não deu para carregar a configuração do Mercado Pago."}
           </Alert>
-          <Button type="button" variant="secondary" onClick={reload} isLoading={busy === "reload"}>
+          <Button icon={RefreshCw} type="button" variant="secondary" onClick={reload} isLoading={busy === "reload"}>
             Tentar de novo
           </Button>
         </CardContent>
@@ -367,25 +367,30 @@ export function MercadoPagoPanel({
       {/* Sempre montado: nunca dentro de condicional que a própria ação desmonta. */}
       <Dialog open={pending !== null} onOpenChange={(open) => !open && busy === null && setPending(null)}>
         <DialogContent>
-          <DialogTitle>
-            {pending?.kind === "remove"
-              ? `Remover ${FIELD_LABEL[pending.field]}?`
-              : pending?.kind === "sandbox"
-                ? "Mudar para o ambiente de teste?"
-                : "Ativar cobranças em produção?"}
-          </DialogTitle>
-          <DialogDescription>
-            {pending?.kind === "remove"
-              ? `A credencial salva de ${pending.env === "PRODUCTION" ? "produção" : "teste"} será apagada do servidor. Sem ela, esse ambiente deixa de funcionar até você cadastrar outra.`
-              : pending?.kind === "sandbox"
-                ? "As faturas passam a gerar Pix simulado e as notificações de pagamentos reais deixam de ser aceitas até voltar para produção."
-                : "A partir de agora as faturas vão gerar Pix reais pelo Mercado Pago — o dinheiro é cobrado de verdade. Só confirme se as credenciais de produção já estiverem certas."}
-          </DialogDescription>
+          <DialogHeader
+            icon={pending?.kind === "remove" ? Trash2 : pending?.kind === "sandbox" ? FlaskConical : AlertTriangle}
+            tone={pending?.kind === "remove" ? "danger" : pending?.kind === "sandbox" ? "primary" : "warning"}
+          >
+            <DialogTitle>
+              {pending?.kind === "remove"
+                ? `Remover ${FIELD_LABEL[pending.field]}?`
+                : pending?.kind === "sandbox"
+                  ? "Mudar para o ambiente de teste?"
+                  : "Ativar cobranças em produção?"}
+            </DialogTitle>
+            <DialogDescription>
+              {pending?.kind === "remove"
+                ? `A credencial salva de ${pending.env === "PRODUCTION" ? "produção" : "teste"} será apagada do servidor. Sem ela, esse ambiente deixa de funcionar até você cadastrar outra.`
+                : pending?.kind === "sandbox"
+                  ? "As faturas passam a gerar Pix simulado e as notificações de pagamentos reais deixam de ser aceitas até voltar para produção."
+                  : "A partir de agora as faturas vão gerar Pix reais pelo Mercado Pago — o dinheiro é cobrado de verdade. Só confirme se as credenciais de produção já estiverem certas."}
+            </DialogDescription>
+          </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="secondary" onClick={() => setPending(null)} disabled={busy !== null}>
+            <Button icon={X} type="button" variant="secondary" onClick={() => setPending(null)} disabled={busy !== null}>
               Cancelar
             </Button>
-            <Button type="button" variant={pending?.kind === "sandbox" ? "primary" : "danger"} onClick={confirmPending} isLoading={busy === "env" || busy === "remove"}>
+            <Button icon={pending?.kind === "remove" ? Trash2 : pending?.kind === "sandbox" ? FlaskConical : ShieldCheck} type="button" variant={pending?.kind === "sandbox" ? "primary" : "danger"} onClick={confirmPending} isLoading={busy === "env" || busy === "remove"}>
               {pending?.kind === "remove" ? "Sim, remover" : pending?.kind === "sandbox" ? "Sim, usar teste" : "Sim, ativar produção"}
             </Button>
           </DialogFooter>
