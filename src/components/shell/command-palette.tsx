@@ -77,6 +77,7 @@ export function CommandPalette({
       <RadixDialog.Trigger asChild>
         <button
           type="button"
+          data-tour="topbar-search"
           aria-label="Buscar ou ir para uma tela (Ctrl K)"
           className={cn(
             "flex h-9 w-9 items-center justify-center gap-2 rounded-full border border-border bg-surface/60 text-text-secondary",

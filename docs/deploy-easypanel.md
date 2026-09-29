@@ -93,25 +93,21 @@ banco, editável pela tela de admin, nunca em texto solto no painel de infraestr
 
 ## 6. Migration do banco (passo manual, sempre antes de qualquer schema novo)
 
-O InnoChat **nunca** roda migration automaticamente no boot do container — é proposital
-(docs/arquitetura.md §14, lição de um incidente real no InnoAtendente: se a migration rodasse no
-boot, subir várias cópias do serviço ao mesmo tempo rodaria a mesma migration em paralelo, e
-reverter para uma imagem anterior não desfaria uma migration que já tinha rodado). Por isso, você
-(ou quem estiver cuidando do deploy) precisa rodar a migration manualmente, sempre depois do
-deploy da imagem e antes de considerar o deploy "pronto":
+**Desde 2026-09-29 as migrations rodam sozinhas** no início do container
+(`CMD` do `Dockerfile`: `prisma migrate deploy && node server.js`). Não é preciso rodar nada no
+Console a cada deploy. O comando manual continua disponível para diagnóstico:
 
 1. No serviço `innochat-painel`, abra a aba **Console** (ou "Terminal").
 2. Rode:
    ```
    npx prisma migrate deploy
    ```
-3. Espere a mensagem confirmando que as migrations foram aplicadas (ou "No pending migrations"
-   se já estava tudo em dia).
+3. A resposta esperada é "No pending migrations" (o boot já aplicou tudo).
 
-**Quando repetir este passo:** toda vez que um deploy novo incluir mudança no banco (schema do
-Prisma). Combinado com a squad: eles avisam quando um push para `main` inclui migration nova, e
-você roda este passo **antes** de considerar aquele deploy fechado (o auto-deploy do Easypanel já
-builda e sobe a imagem nova a cada push — só a migration fica manual).
+**Por que mudou:** o comando pelo Console roda dentro do container já publicado, que só conhece as
+migrations da versão anterior, então "migrar antes do push" era impossível e o site ficava com
+erro até alguém rodar o comando depois do deploy. Se a migration falhar no boot, o container novo
+não sobe (a versão anterior continua no ar) e o log do serviço mostra o erro do Prisma.
 
 **Se der erro no meio da migration:** não rode de novo automaticamente — chame a squad
 (Cronos/Vega) para investigar. O Prisma marca cada migration como aplicada só depois que ela
@@ -305,7 +301,7 @@ isso sozinho.
 | Variáveis de ambiente do App | `DATABASE_URL`, `AUTH_SECRET` — só essas duas |
 | Tudo o mais (Evolution, n8n, MP, SMTP) | Admin → Configurações, dentro do painel |
 | Código de instalação do 1º admin | Log do container, no boot, até existir um admin |
-| Migration | Console do serviço → `npx prisma migrate deploy` — manual, sempre |
+| Migration | Automática no boot do container (`Dockerfile`); Console só para diagnóstico |
 | Health check | `GET /api/health` |
 | Webhook do Mercado Pago | `https://<domínio>/api/webhooks/mercadopago` |
 | `billing/tick` (cobrança diária) | `POST /api/internal/v1/billing/tick`, Bearer — via workflow agendado no n8n (a montar, Fase 5) |

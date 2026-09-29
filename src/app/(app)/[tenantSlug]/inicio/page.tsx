@@ -15,6 +15,8 @@ import { formatDateTimeLabel } from "@/components/lib/format-date";
 import { DomainError } from "@/lib/errors";
 import { getDashboardView } from "@/modules/dashboard/queries";
 import { InicioChart } from "./inicio-chart";
+import { OnboardingChecklistCard } from "@/components/onboarding/onboarding-checklist-card";
+import { getOnboardingStateAction } from "@/modules/onboarding/actions";
 
 /**
  * Página "Início" (docs/design/premium-spec.md §10) — a leitura de dados vem inteira de
@@ -44,11 +46,24 @@ export default async function InicioPage({ params }: { params: Promise<{ tenantS
           </Link>
         }
       />
+      <Suspense fallback={null}>
+        <InicioChecklist tenantSlug={tenantSlug} />
+      </Suspense>
       <Suspense fallback={<InicioSkeleton />}>
         <InicioContent tenantSlug={tenantSlug} />
       </Suspense>
     </div>
   );
+}
+
+/**
+ * Card "Primeiros passos" do Inno. Some (renderiza nada) se o checklist foi escondido ou se a
+ * leitura falhar — é um extra de onboarding, nunca pode derrubar nem atrasar o resumo do dia.
+ */
+async function InicioChecklist({ tenantSlug }: { tenantSlug: string }) {
+  const result = await getOnboardingStateAction(tenantSlug);
+  if (!result.ok || result.data.checklistDismissedAt) return null;
+  return <OnboardingChecklistCard tenantSlug={tenantSlug} state={result.data} />;
 }
 
 async function InicioContent({ tenantSlug }: { tenantSlug: string }) {

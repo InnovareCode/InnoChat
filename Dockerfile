@@ -7,15 +7,17 @@
 # Build local/CI:
 #   docker build -t innochat-painel -f Dockerfile .
 #
-# IMPORTANTE — migration NÃO roda aqui dentro (nem no entrypoint, nem no
-# CMD). `npx prisma migrate deploy` é um passo MANUAL, pelo Console do
-# serviço no Easypanel, disparado ANTES do push que passa a depender do
-# schema novo (docs/deploy-easypanel.md). Motivo (lição do InnoAtendente,
-# docs/arquitetura.md §14): se a migration entrasse no boot, várias réplicas
-# subindo juntas rodariam a migration em paralelo, e um rollback de imagem
-# não desfaria uma migration que já rodou com a versão anterior. O runtime
-# ganha a CLI do Prisma (abaixo) só para esse comando manual — não para rodar
-# sozinho em nenhum momento do ciclo de vida do container.
+# Migrations rodam SOZINHAS no boot do container (CMD abaixo), antes do
+# `server.js` abrir a porta — decisão do dono, 2026-09-29. Motivo: o comando
+# manual pelo Console roda dentro do container JÁ PUBLICADO, que só conhece as
+# migrations da versão anterior; "migrar antes do push" era impossível e todo
+# deploy com schema novo ficava com erro 500 até alguém rodar o comando depois.
+# Salvaguardas: (1) as migrations da equipe são sempre ADITIVAS (seguras com a
+# versão anterior ainda rodando); (2) `prisma migrate deploy` usa advisory lock
+# no Postgres — duas réplicas subindo juntas não aplicam a mesma migration duas
+# vezes; (3) se a migration falhar, o container não sobe (o `&&` impede o
+# server.js) e o healthcheck mantém a versão anterior no ar. O comando manual
+# pelo Console continua disponível para diagnóstico.
 #
 # Prisma + Alpine (musl): build e runtime usam a MESMA imagem base
 # (node:${NODE_VERSION}, alpine/musl) — `prisma generate` roda dentro do
@@ -108,11 +110,11 @@ EXPOSE 3000
 # do Easypanel já divergiram do que parecia óbvio de fora).
 # `wget` vem do busybox da imagem alpine (sem instalar nada extra); start-period dá tempo do
 # Next.js standalone terminar de subir antes da primeira checagem contar como falha.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD wget --quiet --spider --tries=1 "http://127.0.0.1:${PORT:-3000}/api/health" || exit 1
 
 # server.js é o entrypoint gerado pelo Next standalone. Sem `npm run start`:
 # evita o processo intermediário do npm e deixa o Node receber SIGTERM direto
 # do orquestrador (Easypanel) para desligar de forma graciosa.
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "server.js"]
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && exec node server.js"]

@@ -17,6 +17,7 @@ export function WhatsappStatusChip({ status }: { status: WhatsappTopbarStatus })
   const config = STATUS_CONFIG[status];
   return (
     <span
+      data-tour="topbar-status"
       className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface/70 px-2.5 py-1 text-xs font-medium"
       title={config.label}
     >

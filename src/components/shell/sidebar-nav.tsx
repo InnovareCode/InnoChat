@@ -7,6 +7,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/components/lib/cn";
 import { NAV_HOVER_SPRING } from "@/components/lib/motion";
+import { useTour } from "@/components/onboarding/onboarding-tour";
 import {
   adminNavGroups,
   tenantNavGroups,
@@ -40,6 +41,7 @@ function NavRow({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }
     <motion.div whileHover={reduceMotion ? undefined : { scale: 1.02 }} whileTap={reduceMotion ? undefined : { scale: 0.98 }} transition={NAV_HOVER_SPRING}>
       <Link
         href={item.href}
+        data-tour={`nav-${item.href.split("/").pop()}`}
         onClick={onNavigate}
         aria-current={active ? "page" : undefined}
         className={cn(
@@ -80,7 +82,9 @@ function NavGroupSection({
 }) {
   const pathname = usePathname();
   const reduceMotion = useReducedMotion();
-  const open = openGroups.includes(group.id);
+  // Durante o tour todos os grupos ficam abertos: o Inno precisa apontar para cada item.
+  const tourActive = useTour()?.active ?? false;
+  const open = tourActive || openGroups.includes(group.id);
   const hasActive = group.items.some((item) => isItemActive(item, pathname));
 
   return (

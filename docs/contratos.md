@@ -1693,3 +1693,37 @@ Cliente em teste não é "a receber" nem inadimplente. Implementação:
   (Admin → Empresas → Reativar) e, se o cliente pagou, estorna/confere no Mercado Pago.
 - **Reativação manual** (`reactivateCompanyManually`) anula a fatura de teste `OPEN` (a conta foi
   liberada sem cobrança) e não preenche `firstPaidAt`.
+
+## Onboarding — tour do Inno + checklist "Primeiros passos" (2026-09-29, decisão do dono)
+
+Server Actions em `src/modules/onboarding/actions.ts`. Todas devolvem `Result<OnboardingState>`:
+
+```ts
+type OnboardingState = {
+  tourCompletedAt: string | null;        // ISO; por USUÁRIO (User.onboardingTourCompletedAt)
+  checklistDismissedAt: string | null;   // ISO; por EMPRESA (Tenant.onboardingChecklistDismissedAt)
+  steps: Array<{ key: "services" | "professionals" | "hours" | "whatsapp" | "botTest"; done: boolean }>;
+  allDone: boolean;
+};
+```
+
+- `getOnboardingStateAction(tenantSlug?)` — lê o estado.
+- `completeOnboardingTourAction(tenantSlug?)` — concluir OU pular (mesmo efeito); idempotente, preserva a 1ª data.
+- `restartOnboardingTourAction(tenantSlug?)` — zera `tourCompletedAt` (rever pelo menu).
+- `dismissOnboardingChecklistAction(tenantSlug?)` — esconde o checklist para a empresa; idempotente.
+
+`tenantSlug` é opcional (o contrato original não tinha argumento): sem ele, usa a empresa mais antiga
+do usuário; com ele, aplica `requireTenantMember` (`NOT_FOUND` se não for membro). Recomendado passar
+o slug da rota. Erros: `UNAUTHENTICATED`, `NOT_FOUND`. Não exige `assertTenantCanWrite` (é preferência
+de UX; funciona com conta suspensa). Steps sempre derivados dos dados (nunca marcados à mão), ordem fixa:
+
+| key | done quando |
+|---|---|
+| `services` | ≥1 `Service` com `active = true` |
+| `professionals` | ≥1 `Professional` com `active = true` |
+| `hours` | ≥1 `Professional` ativo com ≥1 `WorkingHour` (não existe horário de funcionamento da empresa) |
+| `whatsapp` | ≥1 `WhatsappInstance` com `status = CONNECTED`, `deletedAt = null`, `sandbox = false` |
+| `botTest` | ≥1 `Appointment` com `source = WHATSAPP` (origem gravada só pelo bot; painel grava `PANEL`), em qualquer status |
+
+Escolha do `botTest`: `Appointment.source` em vez de `ChatSession` (sem `tenantId`; "concluída" é string do n8n).
+Migration `20260929200000_onboarding_state`: 2 colunas nulas, aditiva.

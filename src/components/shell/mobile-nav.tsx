@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Menu } from "lucide-react";
 import * as RadixDialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -31,10 +31,18 @@ export function MobileNav(props: MobileNavProps) {
   const [open, setOpen] = useState(false);
   const reduceMotion = useReducedMotion();
 
+  // O tour do Inno ("Rever tour" no rodapé da gaveta) precisa da gaveta fechada: o diálogo modal
+  // do Radix prende o foco e brigaria com o balão.
+  useEffect(() => {
+    const close = () => setOpen(false);
+    document.addEventListener("innochat:close-mobile-nav", close);
+    return () => document.removeEventListener("innochat:close-mobile-nav", close);
+  }, []);
+
   return (
     <RadixDialog.Root open={open} onOpenChange={setOpen}>
       <RadixDialog.Trigger asChild>
-        <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Abrir menu">
+        <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Abrir menu" data-tour="menu-button">
           <Menu className="h-5 w-5" aria-hidden="true" />
         </Button>
       </RadixDialog.Trigger>

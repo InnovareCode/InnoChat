@@ -7,6 +7,7 @@ import { getPrisma } from "@/lib/db/prisma";
 import { effectiveStatus } from "@/core/billing";
 import { ToastProvider } from "@/components/ui/toast";
 import { PanelShell } from "@/components/shell/panel-shell";
+import { getOnboardingStateAction } from "@/modules/onboarding/actions";
 
 export const metadata: Metadata = { title: "InnoChat — Painel" };
 
@@ -67,7 +68,7 @@ export default async function TenantLayout({
   // Onboarding (docs/arquitetura.md §13): incompleto enquanto não houver nenhum serviço OU
   // nenhum profissional com expediente cadastrado — o link "Primeiros passos" some da sidebar
   // assim que os dois existirem (WhatsApp fica de fora da checagem: ainda não tem tela).
-  const [serviceCount, professionalWithHoursCount, disconnectedWhatsappCount, connectedWhatsappCount, totalWhatsappCount, sessionUserRecord] =
+  const [serviceCount, professionalWithHoursCount, disconnectedWhatsappCount, connectedWhatsappCount, totalWhatsappCount, sessionUserRecord, onboardingStateResult] =
     await Promise.all([
       getPrisma().service.count({ where: { tenantId: membership.tenant.id } }),
       getPrisma().professional.count({
@@ -88,7 +89,11 @@ export default async function TenantLayout({
       // do banco, para o banner discreto de "confirme seu e-mail" (mesma regra de
       // `requireVerifiedEmail`, src/lib/auth/guards.ts).
       getPrisma().user.findUnique({ where: { id: session.user.id }, select: { emailVerifiedAt: true } }),
+      // Tour guiado do Inno: abre sozinho só no 1º acesso deste usuário (`tourCompletedAt` nulo).
+      // Falha ao ler o estado NÃO abre o tour (melhor não mostrar do que repetir a cada página).
+      getOnboardingStateAction(tenantSlug),
     ]);
+  const tourAutoStart = onboardingStateResult.ok && onboardingStateResult.data.tourCompletedAt === null;
   const onboardingIncomplete = serviceCount === 0 || professionalWithHoursCount === 0;
   // Ponto de alerta discreto na sidebar (mission): só para instância que já esteve conectada e
   // caiu — uma instância recém-criada nasce em `QRCODE` (esperando o primeiro scan), o que NÃO é
@@ -112,6 +117,7 @@ export default async function TenantLayout({
             whatsappNeedsAttention={whatsappNeedsAttention}
             whatsappStatus={whatsappStatus}
             emailVerified={emailVerified}
+            tourAutoStart={tourAutoStart}
           >
             {children}
           </PanelShell>

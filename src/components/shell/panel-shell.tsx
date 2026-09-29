@@ -8,6 +8,7 @@ import { BackgroundGlow } from "./background-glow";
 import { CommandPalette } from "./command-palette";
 import { WhatsappStatusChip, type WhatsappTopbarStatus } from "./whatsapp-status-chip";
 import { PageTransition } from "./page-transition";
+import { OnboardingTourProvider, TourReplayButton } from "@/components/onboarding/onboarding-tour";
 import { ResendVerificationButton } from "@/components/account/resend-verification-button";
 
 type SubscriptionStatus = "TRIALING" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "CANCELED" | null;
@@ -26,6 +27,8 @@ type PanelShellProps = {
   /** `User.emailVerifiedAt` do dono da sessão, já resolvido como booleano pelo layout do tenant
    * (nunca lido daqui — o layout relê do banco, mesma regra de `requireVerifiedEmail`). */
   emailVerified?: boolean;
+  /** 1º acesso deste usuário (`tourCompletedAt` nulo): o tour do Inno abre sozinho. */
+  tourAutoStart?: boolean;
   children: React.ReactNode;
 };
 
@@ -142,12 +145,14 @@ export function PanelShell({
   whatsappNeedsAttention = false,
   whatsappStatus = "none",
   emailVerified = true,
+  tourAutoStart = false,
   children,
 }: PanelShellProps) {
   return (
+    <OnboardingTourProvider tenantSlug={tenantSlug} autoStart={tourAutoStart}>
     <div className="relative flex min-h-screen">
       <BackgroundGlow />
-      <aside className="relative z-10 hidden w-64 shrink-0 flex-col panel-sidebar-surface px-4 py-6 lg:flex">
+      <aside data-tour="sidebar" className="relative z-10 hidden w-64 shrink-0 flex-col panel-sidebar-surface px-4 py-6 lg:flex">
         <div className="mb-8 px-2">
           <Brand tenantName={tenantName} />
         </div>
@@ -160,6 +165,7 @@ export function PanelShell({
         </div>
         <div className="mt-4 border-t border-white/10 pt-4">
           <UserBlock userEmail={userEmail} />
+          <TourReplayButton />
         </div>
       </aside>
 
@@ -172,7 +178,12 @@ export function PanelShell({
               onboardingIncomplete={onboardingIncomplete}
               whatsappNeedsAttention={whatsappNeedsAttention}
               brand={<Brand tenantName={tenantName} />}
-              footer={<UserBlock userEmail={userEmail} />}
+              footer={
+                <>
+                  <UserBlock userEmail={userEmail} />
+                  <TourReplayButton />
+                </>
+              }
             />
             <span className="truncate font-display text-sm font-bold text-text lg:hidden">{tenantName}</span>
             <TenantSectionLabel tenantSlug={tenantSlug} />
@@ -192,5 +203,6 @@ export function PanelShell({
         </main>
       </div>
     </div>
+    </OnboardingTourProvider>
   );
 }

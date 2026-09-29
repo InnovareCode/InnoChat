@@ -14,3 +14,4 @@
 - [Onda premium — checklist de página de lista](onda-premium-paginas-lista.md) — avatar/skeleton/rounded-hero/mobile-card/empty-highlight, o que copiar na próxima onda de telas.
 - [Página pública lendo banco vira estática no build](static-optimization-trava-dado-de-banco.md) — sem `revalidate`/`dynamic`, o dado congela até o próximo deploy.
 - [Painel Mercado Pago + armadilha do banco local](painel-mercado-pago-e-dev-db.md) — ações imediatas, diálogo único; dev quebra sem migration aplicada.
+- [Tour/checklist do Inno](tour-onboarding-inno.md) — spotlight próprio com data-tour, geometria pura testável, armadilhas de scroll/foco/overflow medidas.
