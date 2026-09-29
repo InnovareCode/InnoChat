@@ -26,3 +26,9 @@ banco/config em vez de só texto estático, rodar `npm run build` e olhar a colu
 tabela de rotas — `○` para uma página cujo conteúdo pode mudar em runtime é o sinal de alerta.
 `ƒ` (dynamic) ou `revalidate` explícito são as duas saídas válidas; qual delas depende de quanto
 a leitura pesa e quão fresco o dado precisa estar.
+
+**Correção (Atlas, 2026-09-29, no primeiro deploy real):** `export const revalidate = 60` NÃO serve
+neste projeto. Com ele a página continua sendo pré-renderizada NO BUILD, e o build de produção
+(Easypanel/Docker) roda sem banco, então quebrou com "Environment variable not found: DATABASE_URL"
+em `/termos`. Página que lê o banco usa `export const dynamic = "force-dynamic"`. Para conferir
+localmente: `DATABASE_URL="postgresql://x:x@127.0.0.1:1/x" npm run build` tem que passar.
