@@ -14,6 +14,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { ConnectWhatsappDialog } from "@/components/whatsapp/connect-whatsapp-dialog";
+import { AddNumberCard } from "@/components/whatsapp/add-number-card";
 import { WhatsappInstanceCard } from "@/components/whatsapp/whatsapp-instance-card";
 import {
   disconnectWhatsappAction,
@@ -146,10 +147,12 @@ export function WhatsappClient({
           action={isOwner ? renderConnectTrigger() : undefined}
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {instances.map((instance) => (
             <WhatsappInstanceCard
               key={instance.id}
+              tenantSlug={tenantSlug}
+              onStatusChange={upsertInstance}
               instance={instance}
               timezone={timezone}
               isOwner={isOwner}
@@ -161,6 +164,13 @@ export function WhatsappClient({
               onRemove={() => setConfirmRemove(instance)}
             />
           ))}
+          {isOwner ? (
+            <AddNumberCard
+              onClick={() => setConnectOpen(true)}
+              disabled={writeBlocked}
+              disabledHint={WRITE_BLOCKED_HINT}
+            />
+          ) : null}
         </div>
       )}
 

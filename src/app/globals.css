@@ -423,3 +423,23 @@ body {
     transform: translateY(-8px);
   }
 }
+
+/* Mockup de celular da tela WhatsApp (`components/whatsapp/phone-mockup.tsx`): balões entram em
+   escada (240ms, sem bounce) e uma linha de "leitura" percorre o QR. Ambos só com movimento
+   permitido; com `prefers-reduced-motion` os elementos aparecem já no estado final. */
+@media (prefers-reduced-motion: no-preference) {
+  .wa-bubble-in {
+    animation: wa-bubble-in 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .wa-scan-line {
+    animation: wa-scan 2400ms ease-in-out infinite alternate;
+  }
+}
+@keyframes wa-bubble-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes wa-scan {
+  from { transform: translateY(0); }
+  to { transform: translateY(150px); }
+}

@@ -17,3 +17,4 @@
 - [Tour/checklist do Inno](tour-onboarding-inno.md) — spotlight próprio com data-tour, geometria pura testável, armadilhas de scroll/foco/overflow medidas.
 - [PageHeader com selo do menu](page-header-selo-icone-do-menu.md) — icon via navIconFor (fonte única); regra p/ páginas novas.
 - [Selo InnovareCode + auth premium](selo-innovarecode-e-auth-premium.md) — AA do selo, toast acima dele, getByLabel x botão de senha, env do next.config.
+- [Mockup de celular do WhatsApp](whatsapp-phone-mockup.md) — acoplamentos do E2E (rounded-card, rótulo único), escala mobile 44px, como medir.
