@@ -325,4 +325,15 @@ describe("exportContactsCsv", () => {
     expect(lines.some((l) => l.startsWith("Exportado Um;"))).toBe(true);
     expect(lines.some((l) => l.startsWith("Exportado Dois;"))).toBe(true);
   });
+
+  it("neutraliza injeção de fórmula vinda do nome do perfil do WhatsApp", async () => {
+    const tenant = await makeTenant("csv-formula");
+    const { id } = await createContact(tenant.id, { name: "Temporário", phone: "84999000055" });
+    await prisma.contact.update({ where: { id }, data: { name: null, pushName: '=HYPERLINK("http://x.test","clique")' } });
+
+    const { csv } = await exportContactsCsv(tenant.id);
+    const row = csv.slice(1).split("\r\n").find((l) => l.includes("HYPERLINK"));
+    expect(row).toBeDefined();
+    expect(row!.startsWith(`"'=HYPERLINK`)).toBe(true);
+  });
 });

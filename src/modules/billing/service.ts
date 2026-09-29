@@ -328,7 +328,16 @@ export async function applyInvoicePayment(invoiceId: string, paidAt: Date): Prom
     if (!invoice) {
       throw new DomainError("NOT_FOUND", "Fatura não encontrada.");
     }
-    if (invoice.status === "PAID") {
+
+    // Baixa CONDICIONAL antes de mexer na assinatura: duas chamadas concorrentes (webhook +
+    // baixa manual, ou duplo clique no admin) leem `OPEN` ao mesmo tempo em READ COMMITTED; só
+    // uma consegue o UPDATE com `status != PAID` (o Postgres serializa a linha), a outra vê
+    // `count === 0` e sai sem somar um segundo mês (revisão do Órion, 2026-09-29).
+    const claimed = await tx.invoice.updateMany({
+      where: { id: invoice.id, status: { not: "PAID" } },
+      data: { status: "PAID", paidAt },
+    });
+    if (claimed.count === 0) {
       return { alreadyProcessed: true };
     }
 
@@ -342,7 +351,6 @@ export async function applyInvoicePayment(invoiceId: string, paidAt: Date): Prom
     const nextPeriodEnd = new Date(anchor);
     nextPeriodEnd.setMonth(nextPeriodEnd.getMonth() + 1);
 
-    await tx.invoice.update({ where: { id: invoice.id }, data: { status: "PAID", paidAt } });
     await tx.subscription.update({
       where: { id: subscription.id },
       data: {

@@ -216,6 +216,23 @@ describe("markInvoicePaidManually", () => {
     expect(auditCount).toBe(1);
   });
 
+  it("concorrente (duplo clique / duas abas): só uma baixa avança o ciclo", async () => {
+    const { invoice, subscription } = await makeTenantWithSubscriptionAndInvoice({ label: "manual-pay-race", invoiceStatus: "OPEN" });
+    const before = await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } });
+
+    const results = await Promise.all([
+      markInvoicePaidManually(invoice.id, "admin-1", "Clique 1"),
+      markInvoicePaidManually(invoice.id, "admin-1", "Clique 2"),
+      markInvoicePaidManually(invoice.id, "admin-2", "Outra aba"),
+    ]);
+    expect(results.filter((r) => !r.alreadyProcessed)).toHaveLength(1);
+
+    const after = await prisma.subscription.findUniqueOrThrow({ where: { id: subscription.id } });
+    const expected = new Date(before.currentPeriodEnd);
+    expected.setMonth(expected.getMonth() + 1);
+    expect(after.currentPeriodEnd.getTime()).toBe(expected.getTime());
+  });
+
   it("NOT_FOUND para fatura inexistente", async () => {
     await expect(markInvoicePaidManually("invoice-inexistente", "admin-1", "motivo qualquer")).rejects.toMatchObject({ code: "NOT_FOUND" });
   });

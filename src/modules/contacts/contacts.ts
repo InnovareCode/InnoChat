@@ -367,8 +367,15 @@ export async function deleteContact(tenantId: string, id: string): Promise<{ mod
 
 const CSV_EXPORT_LIMIT = 5000;
 
-function csvEscape(value: string): string {
-  if (/[";\n]/.test(value)) {
+/**
+ * Escapa um campo do CSV e neutraliza injeção de fórmula (revisão do Órion, 2026-09-29): o
+ * `pushName` vem do perfil de WhatsApp de qualquer pessoa, sem validação. Um nome como
+ * `=HYPERLINK(...)` viraria fórmula ao abrir no Excel. Prefixar com apóstrofo faz a planilha
+ * tratar o valor como texto.
+ */
+function csvEscape(raw: string): string {
+  const value = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  if (/[";\n\r]/.test(value)) {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
