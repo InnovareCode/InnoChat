@@ -4,7 +4,10 @@ import { forwardRef } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/components/lib/cn";
 import { Button } from "@/components/ui/button";
-import { InnoAvatar, InnoFull } from "./inno-mascot";
+import { InnoAnimated } from "./inno-animated";
+import { expressionForPhase } from "./inno-face";
+import { InnoSpeechText } from "./inno-speech-text";
+import { useInnoSpeech } from "./use-inno-speech";
 import { TOUR_UI, type TourStepContent } from "./inno-script";
 import type { Side } from "./tour-geometry";
 
@@ -47,6 +50,10 @@ export const TourBalloon = forwardRef<HTMLDivElement, Props>(function TourBalloo
   ref,
 ) {
   const reduceMotion = useReducedMotion();
+  // Cada passo é uma fala nova: "digitando…" → máquina de escrever. O texto completo fica no DOM
+  // para leitores de tela desde o início; "Próximo" nunca espera a animação.
+  const speech = useInnoSpeech(body);
+  const face = expressionForPhase(speech.phase, step.mood);
   const isFirst = position === 1;
   const isLast = position === total;
   const big = step.kind !== "step";
@@ -86,9 +93,15 @@ export const TourBalloon = forwardRef<HTMLDivElement, Props>(function TourBalloo
 
       <div aria-live="polite" aria-atomic="true" className={cn("flex min-h-0 gap-4 overflow-y-auto p-5", big && layout.kind !== "sheet" ? "sm:items-center" : "")}>
         {big ? (
-          <InnoFull className={cn("shrink-0", layout.kind === "sheet" ? "w-16" : "w-24 sm:w-40")} priority={step.kind === "welcome"} />
+          <InnoAnimated
+            variant="full"
+            expression={face.expression}
+            talking={face.talking}
+            className={cn("shrink-0", layout.kind === "sheet" ? "w-16" : "w-24 sm:w-40")}
+            priority={step.kind === "welcome"}
+          />
         ) : (
-          <InnoAvatar size={44} />
+          <InnoAnimated variant="avatar" size={44} expression={face.expression} talking={face.talking} />
         )}
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold tabular-nums text-text-secondary">
@@ -97,7 +110,7 @@ export const TourBalloon = forwardRef<HTMLDivElement, Props>(function TourBalloo
           <h2 id={titleId} className={cn("mt-0.5 font-display font-bold text-text", big ? "text-xl" : "text-base")}>
             {step.title}
           </h2>
-          <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">{body}</p>
+          <InnoSpeechText text={body} speech={speech} className="mt-1.5" />
         </div>
       </div>
 

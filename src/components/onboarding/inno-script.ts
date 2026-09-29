@@ -19,6 +19,8 @@ export type TourStepContent = {
   /** Alvo alternativo quando a tela é estreita (< 1024px). */
   targetMobile?: string;
   desktopOnly?: boolean;
+  /** `happy`: o Inno fica com olhos "^ ^" (comemoração). */
+  mood?: "happy";
   title: string;
   body: string;
   /** Texto alternativo para telas estreitas (mesmo passo, outra redação). */
@@ -32,9 +34,7 @@ export const TOUR_STEPS: TourStepContent[] = [
     id: "welcome",
     kind: "welcome",
     title: "Oi! Eu sou o Inno 👋",
-    body:
-      "Vou te mostrar o painel em poucos passos, sem pressa. Depois é só seguir o checklist " +
-      "de Primeiros passos, e o seu bot já sai agendando sozinho.",
+    body: "Vou te mostrar o painel rapidinho. Depois é só seguir o checklist e o seu bot já sai agendando sozinho.",
   },
   {
     id: "menu",
@@ -42,12 +42,9 @@ export const TOUR_STEPS: TourStepContent[] = [
     target: "sidebar",
     targetMobile: "menu-button",
     title: "Este é o seu menu",
-    body:
-      "Aqui ficam todas as áreas do painel, agrupadas por assunto. É por ele que você vai " +
-      "para qualquer lugar.",
+    body: "Cada área do painel fica aqui, agrupada por assunto.",
     bodyMobile:
-      "No celular, o menu fica neste botão. Nele você encontra Início, Agenda, Agendamentos, " +
-      "Clientes, Serviços, Profissionais, WhatsApp, Mensagens do bot, Configurações e Assinatura.",
+      "No celular o menu fica neste botão: Início, Agenda, Clientes, WhatsApp, Configurações, Minha conta e o resto.",
   },
   {
     id: "inicio",
@@ -55,7 +52,7 @@ export const TOUR_STEPS: TourStepContent[] = [
     target: "nav-inicio",
     desktopOnly: true,
     title: "Início",
-    body: "Meu lugar favorito! Aqui você vê o resumo do dia, os próximos agendamentos e o checklist de Primeiros passos.",
+    body: "Ao entrar, eu te dou bom dia com o resumo do dia, os próximos agendamentos e o checklist.",
   },
   {
     id: "agenda",
@@ -63,7 +60,9 @@ export const TOUR_STEPS: TourStepContent[] = [
     target: "nav-agenda",
     desktopOnly: true,
     title: "Agenda",
-    body: "A agenda por dia ou por semana. Você marca, remarca e bloqueia horários por aqui.",
+    body:
+      "O dia ou a semana num só lugar. Clique num agendamento para concluir o atendimento, " +
+      "marcar que o cliente faltou, remarcar ou cancelar.",
   },
   {
     id: "agendamentos",
@@ -71,7 +70,7 @@ export const TOUR_STEPS: TourStepContent[] = [
     target: "nav-agendamentos",
     desktopOnly: true,
     title: "Agendamentos",
-    body: "A lista de todos os agendamentos, com filtros. Aqui você confirma, cancela e acompanha quem faltou.",
+    body: "A lista completa, com filtros. Boa para achar quem faltou ou cancelou.",
   },
   {
     id: "clientes",
@@ -79,17 +78,15 @@ export const TOUR_STEPS: TourStepContent[] = [
     target: "nav-clientes",
     desktopOnly: true,
     title: "Clientes",
-    body: "Quem já falou com o seu bot vira cliente aqui, com o histórico de cada um.",
+    body: "Quem fala com o bot vira cliente. Na ficha, a aba Conversa guarda o histórico do WhatsApp por 90 dias.",
   },
   {
     id: "catalogo",
     kind: "step",
     target: "nav-servicos",
     desktopOnly: true,
-    title: "Catálogo",
-    body:
-      "Cadastre seus serviços, os profissionais que atendem e os horários de cada um. " +
-      "É com isso que eu sei o que oferecer e quando.",
+    title: "Serviços e equipe",
+    body: "Cadastre serviços, profissionais e horários. É com isso que eu sei o que oferecer e quando.",
   },
   {
     id: "whatsapp",
@@ -97,7 +94,7 @@ export const TOUR_STEPS: TourStepContent[] = [
     target: "nav-whatsapp",
     desktopOnly: true,
     title: "WhatsApp",
-    body: "Conecte o número da empresa lendo um QR code. Sem isso eu não consigo conversar com os seus clientes.",
+    body: "Leia o QR code para conectar o número. Aqui você vê o celular com o status da conexão e o limite do plano.",
   },
   {
     id: "mensagens-bot",
@@ -105,7 +102,7 @@ export const TOUR_STEPS: TourStepContent[] = [
     target: "nav-mensagens-bot",
     desktopOnly: true,
     title: "Mensagens do bot",
-    body: "Aqui você ajusta o que eu digo: boas-vindas, confirmações e lembretes. Deixe com a cara da sua empresa.",
+    body: "O que eu digo: boas-vindas, confirmações e lembretes. Deixe com a cara da sua empresa.",
   },
   {
     id: "configuracoes",
@@ -113,7 +110,7 @@ export const TOUR_STEPS: TourStepContent[] = [
     target: "nav-configuracoes",
     desktopOnly: true,
     title: "Configurações",
-    body: "Aparência do painel, equipe, bloqueios e feriados. Dá para escolher o tema visual da sua empresa em Aparência.",
+    body: "Ligue o lembrete automático: eu aviso seus clientes na véspera do horário. Tem também tema, equipe e bloqueios.",
   },
   {
     id: "assinatura",
@@ -121,30 +118,44 @@ export const TOUR_STEPS: TourStepContent[] = [
     target: "nav-assinatura",
     desktopOnly: true,
     title: "Assinatura",
-    body: "Seu plano, suas faturas e o pagamento por Pix ficam aqui.",
+    body: "Plano, faturas e pagamento por Pix.",
   },
   {
     id: "status",
     kind: "step",
     target: "topbar-status",
     title: "Status do WhatsApp",
-    body: "Este indicador mostra se o bot está ativo. Se o número cair, você vê aqui na hora.",
+    body: "Mostra se o bot está no ar. Se o número cair, você vê na hora.",
+  },
+  {
+    id: "notificacoes",
+    kind: "step",
+    target: "topbar-notifications",
+    title: "Sino de avisos",
+    body: "Novos agendamentos, remarcações e cancelamentos chegam aqui, e as telas se atualizam sozinhas, sem F5.",
   },
   {
     id: "busca",
     kind: "step",
     target: "topbar-search",
     title: "Busca rápida",
-    body: "Aperte Ctrl K (ou Cmd K) e digite para ir a qualquer tela ou criar algo sem tirar a mão do teclado.",
-    bodyMobile: "Toque na lupa para ir a qualquer tela ou criar algo rapidinho.",
+    body: "Aperte Ctrl K (ou Cmd K) e digite para ir a qualquer tela sem tirar a mão do teclado.",
+    bodyMobile: "Toque na lupa para ir a qualquer tela rapidinho.",
+  },
+  {
+    id: "conta",
+    kind: "step",
+    target: "user-block",
+    desktopOnly: true,
+    title: "Minha conta",
+    body: "Toque no seu nome aqui embaixo para ajustar seus dados. O botão ao lado é o Sair.",
   },
   {
     id: "fim",
     kind: "finish",
+    mood: "happy",
     title: "Pronto! Agora é com a gente 🚀",
-    body:
-      "Vamos deixar tudo pronto para o seu bot agendar sozinho? Siga o checklist de Primeiros " +
-      "passos no Início. Se quiser rever este tour, é só pedir no menu.",
+    body: "Siga o checklist de Primeiros passos no Início e deixe tudo pronto. Para rever o tour, é só pedir no menu.",
   },
 ];
 
@@ -207,6 +218,17 @@ export const CHECKLIST_STEPS: {
   },
 ];
 
+/**
+ * Dica opcional do checklist: NÃO faz parte de `OnboardingState.steps` (contrato do backend) e por
+ * isso nunca conta para `allDone` nem para o "X de 5". É só um atalho, sem estado de "feito".
+ */
+export const CHECKLIST_OPTIONAL_TIP = {
+  title: "Ativar o lembrete automático",
+  description: "Eu aviso seus clientes na véspera do horário.",
+  path: "configuracoes",
+  cta: "Ativar",
+} as const;
+
 export const CHECKLIST_UI = {
   title: "Primeiros passos",
   intro: "Vamos deixar tudo pronto para o seu bot agendar sozinho.",
@@ -214,6 +236,7 @@ export const CHECKLIST_UI = {
   done: "Feito",
   hide: "Esconder",
   hideLabel: "Esconder o checklist de Primeiros passos",
+  optionalLabel: "Opcional",
   doneTitle: "Parabéns, está tudo pronto! 🎉",
   doneBody: "O seu bot já pode agendar sozinho. Se precisar de mim, é só chamar pelo menu.",
   close: "Fechar",

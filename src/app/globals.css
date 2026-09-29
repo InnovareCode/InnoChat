@@ -562,3 +562,32 @@ body {
   60% { box-shadow: 0 0 0 2px var(--color-primary), 0 0 0 10px color-mix(in oklab, var(--color-primary) 0%, transparent); }
   100% { box-shadow: 0 0 0 2px var(--color-primary), 0 0 0 0 transparent; }
 }
+
+/* Inno animado: respiração (sobe/desce ~2,5 px em 3 s) e pontinhos de "digitando…".
+   Só rodam com movimento permitido; com prefers-reduced-motion o Inno fica parado. */
+@media (prefers-reduced-motion: no-preference) {
+  .inno-breathe {
+    animation: inno-breathe 3s ease-in-out infinite;
+  }
+  .inno-breathe-avatar {
+    animation: inno-breathe-avatar 3s ease-in-out infinite;
+  }
+  .inno-dot {
+    animation: inno-dot 900ms ease-in-out infinite;
+  }
+}
+.inno-breathe-avatar {
+  transform: scale(1.03);
+}
+@keyframes inno-breathe {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2.5px); }
+}
+@keyframes inno-breathe-avatar {
+  0%, 100% { transform: scale(1.03); }
+  50% { transform: scale(1.055); }
+}
+@keyframes inno-dot {
+  0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}

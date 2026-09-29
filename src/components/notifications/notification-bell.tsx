@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import Image from "next/image";
+import { InnoAnimated } from "@/components/onboarding/inno-animated";
 import { createPortal } from "react-dom";
 import { Bell, CheckCheck, Loader2 } from "lucide-react";
 import { cn } from "@/components/lib/cn";
@@ -133,6 +133,7 @@ export function NotificationBell({
         type="button"
         onClick={() => changeOpen(!open)}
         aria-label={unreadAriaLabel(unreadCount)}
+        data-tour="topbar-notifications"
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
@@ -273,7 +274,7 @@ export function NotificationBell({
 function EmptyNotifications({ filter, hint }: { filter: Filter; hint: string }) {
   return (
     <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
-      <Image src="/mascote/inno-avatar.webp" alt="" width={72} height={72} className="h-[72px] w-[72px] rounded-full" />
+      <InnoAnimated variant="avatar" size={72} />
       <div>
         <p className="font-display text-base font-bold text-text">Tudo em dia por aqui</p>
         <p className="mt-1 text-sm text-text-secondary">

@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CheckCheck, Loader2, MessageCircle, RefreshCw, ShieldCheck } from "lucide-react";
+import { CheckCheck, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { cn } from "@/components/lib/cn";
+import { InnoAnimated } from "@/components/onboarding/inno-animated";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { formatTimeLabel } from "@/components/lib/format-date";
@@ -138,9 +139,7 @@ export function ContactConversation({
             </div>
           ) : items.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
-              <span aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-[#54656F]">
-                <MessageCircle className="h-6 w-6" />
-              </span>
+              <InnoAnimated variant="avatar" size={56} />
               <p className="rounded-card bg-white/90 px-3 py-1.5 text-sm font-medium text-[#111B21]">
                 Nenhuma mensagem nos últimos 90 dias
               </p>

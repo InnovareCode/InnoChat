@@ -17,7 +17,7 @@ export function UserBlock({
 }) {
   const label = userName?.trim() || userEmail;
   return (
-    <div className="flex items-center gap-1 rounded-card border border-white/10 bg-white/5 p-1">
+    <div data-tour="user-block" className="flex items-center gap-1 rounded-card border border-white/10 bg-white/5 p-1">
       <Link
         href={accountHref}
         aria-label={`Minha conta — ${label}`}
