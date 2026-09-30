@@ -14,3 +14,4 @@
 - [Mercado Pago não tem servidor fake possível (API_BASE fixo)](mercadopago_no_fake_server.md) — RATE_LIMITED é E2E real; MISSING_DOCUMENT só em integração (gateway injetado).
 - [Achados da rodada C1 (2026-09-29)](bugs_found_log_round3.md) — nav dot invisível com grupo colapsado, `/termos` sem `revalidatePath`, pollution de dados antiga limpa.
 - [Achados da rodada 2026-09-29 (notificações + espera)](bugs_found_log_round4.md) — tour intercepta clique, loading.tsx => 200 no notFound, sync n8n exige nó Webhook, drag flaky por autoscroll, overflow 360px.
+- [Auditoria do bot 2026-09-30](bot_audit_2026_09_30.md) — simulador scripts/bot-sim, 17 bugs, armadilhas de ambiente
