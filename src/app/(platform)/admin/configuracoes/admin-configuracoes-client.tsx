@@ -26,6 +26,7 @@ import {
   updatePlatformLegalInfoAction,
   updatePlatformSettingsAction,
 } from "@/modules/platform/actions";
+import { GoogleLoginCard, type GoogleAuthConfig } from "@/components/admin/google-login-card";
 import { MercadoPagoPanel } from "@/components/admin/mercado-pago-panel";
 import type { MercadoPagoConfig } from "@/components/admin/mercado-pago-types";
 import type { N8nSyncSummary } from "@/modules/platform/n8n-sync";
@@ -160,10 +161,12 @@ export function AdminConfiguracoesClient({
   initialSettings,
   initialLegal,
   initialMercadoPago,
+  initialGoogle,
 }: {
   initialSettings: PlatformSettingsView;
   initialLegal: PlatformLegalInfo | null;
   initialMercadoPago: MercadoPagoConfig | null;
+  initialGoogle: GoogleAuthConfig | null;
 }) {
   const { notify } = useToast();
   const [settings, setSettings] = useState(initialSettings);
@@ -568,6 +571,8 @@ export function AdminConfiguracoesClient({
           </Button>
         </CardFooter>
       </Card>
+
+      <GoogleLoginCard initial={initialGoogle} />
 
       <MercadoPagoPanel initial={initialMercadoPago} publicBaseUrl={settings.publicBaseUrl} onConfigChange={setMpConfig} />
 

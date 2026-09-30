@@ -6,6 +6,7 @@ import { Building2, IdCard, Link2, Lock, Mail, MailCheck, RefreshCw, Tag, User, 
 import { Field } from "@/components/ui/field";
 import { AuthInput } from "@/components/public/auth-input";
 import { AUTH_SUBMIT_CLASS, AuthPanel, AuthTrust } from "@/components/public/auth-panel";
+import { FormSection, TermsCheckbox } from "@/components/public/signup-shared";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -48,36 +49,7 @@ const EMPTY_FORM: FormState = {
   acceptedTerms: false,
 };
 
-/** Seção visual do formulário (só agrupamento — a submissão e a validação seguem um formulário único). */
-function FormSection({
-  step,
-  title,
-  id,
-  children,
-}: {
-  step: number;
-  title: string;
-  id: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section aria-labelledby={id} className="flex flex-col gap-4">
-      <h2 id={id} className="flex items-center gap-2.5 font-display text-sm font-bold text-text">
-        <span
-          aria-hidden="true"
-          className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold tabular-nums text-primary ring-1 ring-primary/25"
-        >
-          {step}
-        </span>
-        {title}
-        <span aria-hidden="true" className="h-px flex-1 bg-border" />
-      </h2>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">{children}</div>
-    </section>
-  );
-}
-
-export function CadastroForm() {
+export function CadastroForm({ top }: { top?: React.ReactNode }) {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -187,6 +159,7 @@ export function CadastroForm() {
       title="Crie sua conta em 2 minutos"
       description="3 dias de teste grátis. Sem cartão de crédito para começar."
     >
+        {top ? <div className="mb-6 flex flex-col gap-4">{top}</div> : null}
         <form onSubmit={handleSubmit} className="flex flex-col gap-6" noValidate>
           {termsOutdated ? (
             <Alert variant="warning" title="Os termos foram atualizados">
@@ -339,34 +312,11 @@ export function CadastroForm() {
             </Field>
           </FormSection>
 
-          <div>
-            <label className="flex items-start gap-3 rounded-card bg-bg/70 p-3 text-sm text-text ring-1 ring-border">
-              <input
-                type="checkbox"
-                checked={form.acceptedTerms}
-                onChange={(e) => setForm((f) => ({ ...f, acceptedTerms: e.target.checked }))}
-                aria-invalid={!!fieldErrors.acceptedTerms || undefined}
-                aria-describedby={fieldErrors.acceptedTerms ? "acceptedTerms-error" : undefined}
-                className="mt-0.5 h-5 w-5 shrink-0 rounded border-border accent-primary"
-              />
-              <span>
-                Li e aceito os{" "}
-                <Link href="/termos" target="_blank" className="text-primary hover:underline">
-                  Termos de uso
-                </Link>{" "}
-                e a{" "}
-                <Link href="/privacidade" target="_blank" className="text-primary hover:underline">
-                  Política de privacidade
-                </Link>
-                .
-              </span>
-            </label>
-            {fieldErrors.acceptedTerms ? (
-              <p id="acceptedTerms-error" role="alert" className="mt-1.5 text-xs text-danger">
-                {fieldErrors.acceptedTerms}
-              </p>
-            ) : null}
-          </div>
+          <TermsCheckbox
+            checked={form.acceptedTerms}
+            onChange={(checked) => setForm((f) => ({ ...f, acceptedTerms: checked }))}
+            error={fieldErrors.acceptedTerms}
+          />
 
           <div>
             <Button icon={UserPlus} type="submit" size="lg" isLoading={isPending} className={AUTH_SUBMIT_CLASS} loadingText="Criando conta…">

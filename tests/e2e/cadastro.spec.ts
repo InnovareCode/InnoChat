@@ -208,7 +208,7 @@ test.describe("Cadastro público (/cadastro) ponta a ponta", () => {
       // A senha nova de fato passa a valer.
       await page.getByLabel("E-mail").fill(email);
       await page.getByLabel("Senha").fill("senha-e2e-nova-2026");
-      await page.getByRole("button", { name: "Entrar" }).click();
+      await page.getByRole("button", { name: "Entrar", exact: true }).click();
       await expect(page).toHaveURL(new RegExp(`/${slug}(/|$)`), { timeout: 10_000 });
     } finally {
       await fakeSmtp.close();

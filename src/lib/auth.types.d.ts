@@ -14,5 +14,7 @@ declare module "next-auth" {
 declare module "@auth/core/jwt" {
   interface JWT {
     userId?: string;
+    /** `User.sessionVersion` no login; conferido contra o banco (ver src/modules/auth/session-version.ts). */
+    sv?: number;
   }
 }

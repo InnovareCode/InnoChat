@@ -19,6 +19,9 @@ import type { NextConfig } from "next";
  * de scripts externos — `script-src 'self'` já bloqueia qualquer <script src> de terceiro), mas
  * é a opção documentada e sem regressão.
  *
+ * `form-action` inclui `https://accounts.google.com`: o botão "Entrar com Google" é um formulário cuja
+ * resposta redireciona para o Google (navegadores aplicam `form-action` também ao redirecionamento).
+ *
  * `img-src` inclui `data:` porque o QR code do Pix (Mercado Pago) e o QR da Evolution vêm como
  * imagem base64 embutida, nunca por URL externa. Fontes são `next/font` (self-hosted, sem
  * domínio externo) — `font-src 'self'` já cobre.
@@ -34,7 +37,7 @@ const cspHeader = `
   connect-src 'self';
   object-src 'none';
   base-uri 'self';
-  form-action 'self';
+  form-action 'self' https://accounts.google.com;
   frame-ancestors 'none';
   upgrade-insecure-requests;
 `
@@ -46,6 +49,10 @@ const cspHeader = `
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8")) as { version: string };
 
 const nextConfig: NextConfig = {
+  // Permite buildar/servir em outra pasta (`NEXT_DIST_DIR=.next-x`) sem pisar num `next start`/dev
+  // rodando em `.next` — usado nas verificações paralelas da equipe. Padrão inalterado.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
+
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
     NEXT_PUBLIC_BUILD_DATE: new Date().toISOString().slice(0, 10),

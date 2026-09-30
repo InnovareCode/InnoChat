@@ -258,6 +258,29 @@ Feito no painel (sem afetar produção):
 5. O valor é guardado **cifrado** no banco (`enc:v1:`, AES-256-GCM; hash SHA-256 para o segredo interno) e mascarado na UI. Segredos antigos em texto puro são cifrados sozinhos na primeira leitura/gravação após o deploy.
 6. Se for a chave da Evolution, reaplique para o n8n: **"Sincronizar n8n"**.
 
+### Login com Google: criar o OAuth Client no Google Cloud Console
+
+O botão "Entrar com Google" só aparece depois de você cadastrar as credenciais em **Admin →
+Configurações → Login com Google**. Nada vai em variável de ambiente nem no chat.
+
+1. Acesse <https://console.cloud.google.com/> e escolha (ou crie) um projeto para o InnoChat.
+2. **APIs e serviços → Tela de consentimento OAuth**: tipo **Externo**, nome do app "InnoChat", e-mail de suporte, logo opcional. Escopos: só os básicos (`openid`, `email`, `profile`; não exigem verificação). Publique o app ("Em produção") — em "Teste" só entram os e-mails listados como usuários de teste.
+3. **APIs e serviços → Credenciais → Criar credenciais → ID do cliente OAuth**:
+   - Tipo de aplicativo: **Aplicativo da Web**.
+   - **Origens JavaScript autorizadas:** `https://innochat.innovarecode.com.br`
+   - **URIs de redirecionamento autorizados:** `https://innochat.innovarecode.com.br/api/auth/callback/google` (exatamente assim, sem barra no fim; o mesmo endereço aparece pronto para copiar na tela de Configurações).
+4. Copie o **ID do cliente** (termina em `.apps.googleusercontent.com`) e a **chave secreta do cliente**.
+5. No painel: **Admin → Configurações → Login com Google** → cole o Client ID e o Client Secret → marque **ligado** → **Salvar**. O secret é guardado cifrado e nunca mais é mostrado ("credencial salva").
+6. **Testar configuração** confere só o formato do ID e se o secret foi salvo/lido corretamente — **não fala com o Google**. O teste de verdade: abra `/login` numa janela anônima e clique em "Entrar com Google".
+
+Comportamento a saber:
+- E-mail do Google **não verificado**, ou conta de **administrador da plataforma**, é recusado (admin entra só com e-mail e senha, de propósito).
+- Quem já tem conta com o mesmo e-mail é **vinculado** ao Google na primeira entrada. Quem não tem conta é levado a `/cadastro/google` para informar a empresa (nada é criado antes disso).
+- Contas criadas pelo Google não têm senha; "Esqueci minha senha" permite definir uma.
+- Erro `redirect_uri_mismatch` no Google: a URI cadastrada no passo 3 difere da mostrada em Configurações (confira `https`, domínio e a ausência de barra final).
+- Trocar o `AUTH_SECRET` faz o Client Secret deixar de decifrar: o botão some sozinho até você recadastrar o secret (ver "Trocar o `AUTH_SECRET` apaga os segredos salvos").
+- Para desligar: desmarque "ligado" (ou "Remover credencial salva"); o login por e-mail e senha não é afetado.
+
 ### Mercado Pago: trocar de ambiente (produção ↔ teste)
 
 O Mercado Pago tem **dois pares** de credenciais (Access Token + Webhook Secret, mais a Public Key):

@@ -24,3 +24,4 @@
 - [Padrão de diálogos: selo + botões com ícone](padrao-dialogos-selo-e-botoes-com-icone.md) — DialogHeader/tone, Button icon, mapa de ícones, Início com saudação, Fechar 44px.
 - [Fase 2 UI: nome, lembrete, conversa, sino admin](fase2-ui-nome-lembrete-conversa-sino.md) — sino por adapter, aba Conversa (log/sem sticky), Switch, build compartilhado, hidratação no E2E.
 - [Inno animado / rosto LED](inno-animado-rosto-led.md) — InnoAnimated: SVG sobre o PNG (coords medidas), máquina de escrever, hook com onceKey, armadilhas.
+- [Login com Google - UI](login-google-ui.md) — botao via form action, /cadastro/google, card admin; min-w-0, asChild sem icon, rate limit do dev@.

@@ -9,7 +9,7 @@ import { N8nApiError } from "./n8n-client";
 import { runAction, type Result } from "@/lib/result";
 import { parseSender } from "@/lib/email/sender";
 import { DomainError } from "@/lib/errors";
-import { ensurePublicBaseUrlFromCurrentRequest } from "@/lib/public-url";
+import { ensurePublicBaseUrlFromCurrentRequest, setPublicBaseUrl } from "@/lib/public-url";
 import { isValidCnpj, normalizeDocumentDigits } from "@/core/billing";
 import {
   getMaskedPlatformSettings,
@@ -38,6 +38,14 @@ import { activateBotWorkflow, deactivateBotWorkflow, syncN8n, type N8nSyncSummar
 import { getPlatformLegalInfo, updatePlatformLegalInfo } from "./legal-service";
 import type { PlatformLegalInfo } from "@/core/legal/placeholders";
 import { getPlatformHealth, type PlatformHealth } from "./health-service";
+import {
+  getGoogleAuthConfig,
+  removeGoogleClientSecret,
+  saveGoogleAuthConfig,
+  testGoogleAuthConfig,
+  type GoogleAuthConfigView,
+  type GoogleAuthTestResult,
+} from "@/modules/google-auth/config";
 
 /**
  * Server Actions do admin da plataforma (docs/contratos.md). Guardadas por
@@ -75,6 +83,22 @@ export async function updatePlatformSettingsAction(input: unknown): Promise<Resu
     // requisição (nunca sobrescreve se já tiver um valor — ver `src/lib/public-url.ts`).
     await ensurePublicBaseUrlFromCurrentRequest();
     return updatePlatformSettings(data, admin.id);
+  });
+}
+
+/**
+ * Troca EXPLÍCITA do endereço público do painel (links de e-mail, redirect do Google, n8n). É o
+ * único caminho que altera `publicBaseUrl` depois da primeira gravação — a requisição do admin
+ * sozinha não muda mais (ver `src/lib/public-url.ts`, revisão do Órion I3). Sem tela ainda: a
+ * Lyra pode ligar a um campo em Admin > Configurações. Erro: `INVALID_PAYLOAD`.
+ */
+export async function setPublicBaseUrlAction(input: unknown): Promise<Result<{ publicBaseUrl: string }>> {
+  return runAction(async () => {
+    const admin = await requirePlatformAdmin();
+    const data = z.object({ baseUrl: z.string().trim().min(1).max(300) }).parse(input);
+    const publicBaseUrl = await setPublicBaseUrl(data.baseUrl);
+    logger.info("platform.public_base_url.changed", { adminId: admin.id });
+    return { publicBaseUrl };
   });
 }
 
@@ -328,5 +352,48 @@ export async function getPlatformHealthAction(): Promise<Result<PlatformHealth>>
   return runAction(async () => {
     await requirePlatformAdmin();
     return getPlatformHealth();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Login com Google (Admin > Configurações). NUNCA devolvem o Client Secret — só `clientSecretSaved`.
+// ---------------------------------------------------------------------------
+
+export async function getGoogleAuthConfigAction(): Promise<Result<GoogleAuthConfigView>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    return getGoogleAuthConfig();
+  });
+}
+
+const saveGoogleAuthConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  clientId: z.string().max(200).optional(),
+  clientSecret: z.string().max(500).optional(),
+});
+
+/** Secret vazio mantém o atual; não deixa ligar sem Client ID e secret salvos. */
+export async function saveGoogleAuthConfigAction(input: unknown): Promise<Result<GoogleAuthConfigView>> {
+  return runAction(async () => {
+    const admin = await requirePlatformAdmin();
+    const data = saveGoogleAuthConfigSchema.parse(input);
+    await ensurePublicBaseUrlFromCurrentRequest();
+    return saveGoogleAuthConfig(data, admin.id);
+  });
+}
+
+/** Remove o secret e desliga o login com Google (não dá para ficar ligado sem ele). */
+export async function removeGoogleClientSecretAction(): Promise<Result<GoogleAuthConfigView>> {
+  return runAction(async () => {
+    const admin = await requirePlatformAdmin();
+    return removeGoogleClientSecret(admin.id);
+  });
+}
+
+/** Só confere formato do ID e se o secret decifra — validar contra o Google exige o fluxo OAuth real. */
+export async function testGoogleAuthConfigAction(): Promise<Result<GoogleAuthTestResult>> {
+  return runAction(async () => {
+    await requirePlatformAdmin();
+    return testGoogleAuthConfig();
   });
 }

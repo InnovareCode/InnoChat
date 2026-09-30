@@ -6,7 +6,7 @@ export async function login(page: Page, email: string, password: string) {
   await page.goto("/login");
   await page.getByLabel("E-mail").fill(email);
   await page.getByLabel("Senha").fill(password);
-  await page.getByRole("button", { name: "Entrar" }).click();
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
 }
 
 export async function loginAndWaitForPanel(page: Page, email: string, password: string, tenantSlug: string) {

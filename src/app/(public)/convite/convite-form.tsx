@@ -11,7 +11,7 @@ import { Lock, LogIn, User } from "lucide-react";
 import { AuthInput } from "@/components/public/auth-input";
 import { AUTH_SUBMIT_CLASS, AuthPanel } from "@/components/public/auth-panel";
 
-export function ConviteForm({ token }: { token: string | null }) {
+export function ConviteForm({ token, top }: { token: string | null; top?: React.ReactNode }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
@@ -63,6 +63,7 @@ export function ConviteForm({ token }: { token: string | null }) {
 
   return (
     <AuthPanel title="Aceitar convite" description="Diga como quer ser chamado e defina sua senha para entrar no painel da empresa que te convidou.">
+        {top}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           {error ? <Alert variant="danger">{error}</Alert> : null}
           <Field label="Seu nome" htmlFor="name" required error={nameError}>

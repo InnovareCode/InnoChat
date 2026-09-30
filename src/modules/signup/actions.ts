@@ -8,6 +8,9 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { clientIp } from "@/lib/http/client-ip";
 import { userNameSchema } from "@/lib/validation/user-name";
 import { assertCurrentTermsVersion, TERMS_VERSION } from "@/lib/legal";
+import { getGoogleSignUpPrefill, completeGoogleSignUp } from "@/modules/google-auth/signup";
+import { signGoogleToken, verifyGoogleToken } from "@/modules/google-auth/tokens";
+import { assertGoogleSignupCookie, clearGoogleSignupCookie } from "@/modules/google-auth/signup-cookie";
 import { acceptInvite, inviteTeamMember, requestPasswordReset, resendVerificationEmail, resetPassword, signUp, verifyEmail } from "./service";
 
 /**
@@ -161,5 +164,71 @@ export async function currentUserIdAction(): Promise<Result<{ userId: string }>>
   return runAction(async () => {
     const user = await requireSessionUser();
     return { userId: user.id };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Cadastro depois do Google (`/cadastro/google?t=...`) — docs/contratos.md "Login com Google"
+// ---------------------------------------------------------------------------
+
+/** Dados para pré-preencher a tela. Erros: `TOKEN_INVALID`, `TOKEN_EXPIRED`, `ALREADY_REGISTERED`. */
+export async function getGoogleSignUpPrefillAction(input: unknown): Promise<Result<{ email: string; name: string }>> {
+  return runAction(async () => {
+    const data = z.object({ token: z.string().min(1).max(2000) }).parse(input);
+    // O token na URL não basta: o cookie httpOnly do mesmo navegador precisa bater (S1).
+    await assertGoogleSignupCookie(data.token);
+    return getGoogleSignUpPrefill(data.token);
+  });
+}
+
+const completeGoogleSignUpSchema = z.object({
+  token: z.string().min(1).max(2000),
+  tenantName: z.string().trim().min(2).max(120),
+  document: z.string().trim().min(1, "Informe o CPF ou CNPJ da empresa."),
+  phone: z
+    .string()
+    .trim()
+    .max(30)
+    .refine((v) => v === "" || /^\d{10,13}$/.test(v.replace(/\D/g, "")), "Informe o telefone com DDD.")
+    .optional(),
+  planCode: z.string().trim().max(60).optional(),
+  acceptTerms: z.boolean().refine((v) => v === true, { message: "É preciso aceitar os termos." }),
+});
+
+const GOOGLE_SIGNUP_LIMIT = 5;
+const GOOGLE_SIGNUP_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Cria empresa + usuário (sem senha, e-mail verificado) + trial — a MESMA lógica de `signUp`
+ * (`createAccount`) — e abre a sessão. `phone` é validado mas ainda não tem coluna (o cadastro por
+ * senha também não pede telefone).
+ */
+export async function completeGoogleSignUpAction(input: unknown): Promise<Result<{ redirectTo: string }>> {
+  return runAction(async () => {
+    const ip = await clientIp();
+    assertRateLimit("google-signup", ip, GOOGLE_SIGNUP_LIMIT, GOOGLE_SIGNUP_WINDOW_MS);
+
+    const data = completeGoogleSignUpSchema.parse(input);
+    await assertGoogleSignupCookie(data.token);
+    // Limite também por conta Google (sub): IPs rotativos não liberam tentativas em série.
+    const claims = verifyGoogleToken<{ sub: string }>("google-signup", data.token);
+    assertRateLimit("google-signup-sub", claims.sub, GOOGLE_SIGNUP_LIMIT, GOOGLE_SIGNUP_WINDOW_MS);
+
+    const created = await completeGoogleSignUp({
+      token: data.token,
+      tenantName: data.tenantName,
+      document: data.document,
+      planCode: data.planCode || undefined,
+      termsVersion: TERMS_VERSION,
+    });
+
+    // Prova de 60 s gerada AQUI e consumida AQUI (nunca vai ao cliente) — abre a sessão sem senha.
+    const proof = signGoogleToken("google-login", { userId: created.userId }, 60_000);
+    // Import dinâmico: `@/lib/auth` (Auth.js) só é carregado quando este caminho roda — os demais
+    // fluxos deste arquivo (e os testes de integração que os importam) não dependem do Auth.js.
+    const { signIn } = await import("@/lib/auth");
+    await signIn("google-signup", { proof, redirect: false });
+    await clearGoogleSignupCookie();
+    return { redirectTo: "/pos-login" };
   });
 }

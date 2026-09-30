@@ -1861,3 +1861,54 @@ Para remarcar ou cancelar, responda *menu*.` — "menu" foi conferido no workflo
 `getWhatsappPageExtrasAction({ tenantSlug })` (`src/modules/whatsapp/actions.ts`, qualquer membro) -> `{ maxNumbers: number | null, usedNumbers: number, welcomePreview: { greeting: string, menu: string } }`.
 - `maxNumbers`: override da empresa > limite do plano; `null` = ilimitado (na prática, só empresa sem assinatura). `usedNumbers`: instâncias com `deletedAt` nulo.
 - `welcomePreview`: `GREETING` e `MAIN_MENU` da empresa (ou padrão) com `{nome}` = "Maria" e `{empresa}` = nome da empresa.
+
+## Login com Google (2026-09-30, pedido do dono)
+
+**Regra fixa do dono:** nenhuma credencial em env var nem no chat. O Client ID e o Client Secret do Google são cadastrados em **Admin → Configurações**; o secret fica cifrado (`enc:v1:`, `src/lib/crypto.ts`), igual ao Mercado Pago. No Easypanel continuam só `DATABASE_URL` e `AUTH_SECRET`.
+
+### Schema (migration aditiva `20261001000000_login_google`)
+- `PlatformSettings`: `googleAuthEnabled Boolean @default(false)`, `googleClientId String?`, `googleClientSecretEnc String?`.
+- `User.googleSub String? @unique` (`sub` estável do Google).
+- `User.passwordHash` passou a **opcional** (`DROP NOT NULL`, compatível com a versão antiga no ar): conta criada só pelo Google não tem senha. `null` nunca vira string vazia.
+
+### Auth.js (`src/lib/auth.ts`) — forma lazy
+`NextAuth(async () => config)`: o provedor Google é montado a cada requisição a partir do banco (cache de 30 s em `getGoogleRuntimeCredentials`, invalidado ao salvar). Só entra com `googleAuthEnabled` ligado + Client ID + secret que **decifram** (fail-closed; falha de banco = só e-mail/senha). Sessão JWT e token `{ userId }` idênticos aos de antes. `trustHost: true`; o retorno é `<origem pública>/api/auth/callback/google` (mesma origem de `getPublicBaseUrl()`, via `x-forwarded-*`). `checks: ["pkce","state","nonce"]` **explícitos** (o padrão do Auth.js para este provedor é só PKCE). `pages.error = "/login"`: recusas voltam como `/login?error=AccessDenied`.
+
+### Callback `signIn` (`src/modules/google-auth/signin.ts#resolveGoogleSignIn`)
+1. `email_verified` precisa ser `true`; senão recusa (`AccessDenied`).
+2. Busca por `googleSub`; senão por e-mail — e nesse caso **vincula** (`googleSub`, `emailVerifiedAt` se nulo, nome se vazio). Se o e-mail estava **não verificado**, a senha da conta é descartada (defesa contra pre-hijacking: alguém cadastra o e-mail da vítima com senha própria). E-mail ligado a **outra** conta Google: recusa.
+3. **`isPlatformAdmin` nunca entra pelo Google** (por `sub` ou por e-mail): recusa (`AccessDenied`). Decisão de segurança: o admin controla todas as empresas, então fica só com e-mail+senha. Reverter só por pedido explícito do dono.
+4. Sem usuário nenhum: **não cria nada**; assina um token (HMAC-SHA256 com chave derivada do `AUTH_SECRET` + finalidade, 15 min, `{ email, name, sub }`) e redireciona para `/cadastro/google?t=<token>`.
+5. `jwt`: para o Google, o `userId` sai de `User.googleSub` (o `user.id` do provedor é o `sub`, não o nosso id).
+
+Código que a tela de login recebe em `?error=`: `AccessDenied` (e-mail não verificado, admin, conta Google diferente, convite com e-mail diferente) e os genéricos do Auth.js.
+
+### Login por senha de conta só-Google
+`verifyCredentials` lança `DomainError("GOOGLE_ONLY_ACCOUNT")` (só depois dos dois tetos de rate limit e sem bcrypt); `authorize()` converte em `CredentialsSignin` com `code = "google_account"`; `loginAction` responde **"Esta conta usa login com Google. Entre com o Google, ou use “Esqueci minha senha” para definir uma senha."**. "Esqueci a senha" → `resetPassword` grava `passwordHash` (a conta passa a ter os dois modos; `googleSub` permanece).
+
+### Server Actions
+Públicas (`src/modules/signup/actions.ts`):
+- `getGoogleSignUpPrefillAction({ token })` → `Result<{ email, name }>`. Erros: `TOKEN_INVALID`, `TOKEN_EXPIRED`, `ALREADY_REGISTERED` (já existe conta com esse Google/e-mail: a tela manda entrar com o Google).
+- `completeGoogleSignUpAction({ token, tenantName, document, phone?, planCode?, acceptTerms })` → `Result<{ redirectTo: "/pos-login" }>`. Cria empresa + usuário (sem senha, e-mail **já verificado**, sem e-mail de verificação) + Membership OWNER + trial + 1ª fatura pelo **mesmo** `createAccount` do `signUp` (`src/modules/signup/service.ts`); o endereço (slug) é derivado do nome da empresa (sufixo `-2`, `-3`… se já existir). `planCode` é **opcional**: sem ele vale `getDefaultSignupPlan` (igual ao cadastro normal); com ele precisa ser um plano **ativo** (`INVALID_PLAN`). `phone` é validado (10–13 dígitos) mas **ainda não é gravado** (não há coluna; o cadastro por senha também não pede). Termos: grava `TERMS_VERSION` do servidor. Depois autentica com o provedor interno `google-signup` (prova assinada de 60 s gerada e consumida na própria action; nunca vai ao cliente). Erros: `TOKEN_INVALID`, `TOKEN_EXPIRED`, `ALREADY_REGISTERED`, `INVALID_DOCUMENT`, `INVALID_PLAN`, `INVALID_PAYLOAD`, `RATE_LIMITED` (5/h por IP **e** 5/h por `sub`).
+- **Uso único do token:** amarrado ao `sub`. Depois do cadastro o `googleSub` existe, então repetir o token cai em `ALREADY_REGISTERED`; corrida entre duas requisições cai na unicidade do banco (uma só conta). O token **nunca** abre sessão por si (só o cadastro recém-feito, na mesma action).
+- `getPublicAuthOptions()` (`src/modules/auth/public-options.ts`, função de servidor, sem login) → `{ google: boolean }`.
+
+Admin (`src/modules/platform/actions.ts`, `requirePlatformAdmin`; **nunca** devolvem o secret):
+- `getGoogleAuthConfigAction()` → `{ enabled, clientId: string|null, clientSecretSaved, redirectUri, origin }` (`redirectUri` = `<origem>/api/auth/callback/google`; `clientSecretSaved` só é `true` se o secret **decifra**).
+- `saveGoogleAuthConfigAction({ enabled?, clientId?, clientSecret? })` → mesma view. Secret/ID vazio = mantém o atual. Erros: `INVALID_GOOGLE_CLIENT_ID` (precisa terminar em `.apps.googleusercontent.com`), `GOOGLE_CONFIG_INCOMPLETE` (ligar sem ID ou sem secret).
+- `removeGoogleClientSecretAction()` → view; apaga o secret **e desliga** o login com Google.
+- `testGoogleAuthConfigAction()` → `{ ok, detalhe, checks: { clientIdFormat, secretDecrypts } }`. **Não valida contra o Google** (só o fluxo OAuth real faz isso): confere o formato do ID e se o secret decifra. O teste real é clicar em "Entrar com Google".
+
+### Convite de equipe com Google (mecânica)
+`startGoogleInviteSignInAction({ token })` (`src/modules/google-auth/actions.ts`): valida o convite **sem consumir**, grava o token num cookie **httpOnly, SameSite=Lax, 15 min** (`innochat_google_invite`) e chama `signIn("google")` (redireciona; só devolve `Result` de erro `TOKEN_INVALID`). No callback `signIn` o cookie é lido e apagado e `acceptInviteWithGoogle` (`signup/service.ts`) exige que o e-mail do Google seja o do convite (`INVITE_EMAIL_MISMATCH` → recusa **sem** consumir o convite), vincula `googleSub`, verifica o e-mail e consome o token (uso único). A conta fica só-Google (a senha provisória do convite é descartada; quem já tinha e-mail verificado mantém a própria). O token nunca passa pelo Google nem pela URL. Sem o cookie, quem entra pelo Google com o e-mail do convite também entra (o vínculo por e-mail vale), só não consome o token (expira sozinho).
+
+### CSP
+`form-action` passou a incluir `https://accounts.google.com` (o botão é um formulário cuja resposta redireciona ao Google).
+
+### Revisão de segurança do login com Google (2026-09-30, correções do Órion)
+- **Revogação de sessão (I1):** `User.sessionVersion Int @default(0)` (migration aditiva `20261001100000_user_session_version`). O JWT carrega `sv`; o callback `jwt` confere com o banco (cache de memória de 5 s; login lê fresco) e devolve `null` (deslogado) se diferir. Incrementa em: vínculo Google por e-mail / convite Google em conta **não verificada**, `resetPassword` e `signOutEverywhere(userId)` (`src/modules/auth/session-version.ts`, sem tela ainda). Token antigo sem `sv` conta como 0. JWT: `maxAge` 30 dias, `updateAge` 24 h. Suposição: em multi-instância a revogação leva até 5 s para valer nas outras.
+- **Convite Google atômico (I2):** claim do convite + `update` do usuário na mesma `$transaction`; `sub` já ligado a outro usuário (checado antes e por P2002) → `GOOGLE_ACCOUNT_MISMATCH` e o convite **não** é consumido.
+- **URL base confiável (I3):** `PlatformSettings.publicBaseUrl` tem prioridade absoluta em `getPublicBaseUrl()` (links de e-mail) e fixa `AUTH_URL` do Auth.js (`redirect_uri`, cookies `__Secure-`). `x-forwarded-*`/`host` só valem como fallback **enquanto não há base gravada** (instalação), validados (host DNS, http/https). `ensurePublicBaseUrlFromCurrentRequest` agora só **preenche se vazia**; se a requisição do admin vier de outro host apenas loga `public_url.host_differs`. Trocar a base: `setPublicBaseUrlAction({ baseUrl })` (admin da plataforma; só origem https; erro `INVALID_PAYLOAD`) — **sem tela ainda**. Um `AUTH_URL` definido pelo operador no processo (dev/E2E) tem prioridade e nunca é sobrescrito. `trustHost` só é ligado na janela de instalação.
+- **Token de cadastro (S1):** TTL 10 min; além do `?t=`, o callback grava o cookie httpOnly `innochat_google_signup` (SHA-256 do token, SameSite=Lax, Secure em produção, 10 min). `getGoogleSignUpPrefillAction` e `completeGoogleSignUpAction` exigem que bata (`TOKEN_INVALID` senão).
+- **Cookie de convite (S2):** apagado em `signInWithGoogleAction` e lido+apagado no callback (sucesso ou falha).
+- **IP do cliente (S4):** `clientIp()` usa o ÚLTIMO valor do `X-Forwarded-For` (1 proxy confiável = Traefik do Easypanel, `TRUSTED_PROXY_HOPS`), valida com `isIP`, fallback `X-Real-IP`, depois `"unknown"`.

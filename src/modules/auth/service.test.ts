@@ -83,3 +83,13 @@ describe("verifyCredentials — não bloqueado, comportamento normal preservado"
     expect(result).toEqual({ id: "u1", email: "ok@example.com", name: "Ok User" });
   });
 });
+
+describe("verifyCredentials — conta só-Google (passwordHash nulo)", () => {
+  it("lança GOOGLE_ONLY_ACCOUNT sem chamar bcrypt", async () => {
+    findUniqueMock.mockResolvedValue({ id: "u1", email: "g@example.com", passwordHash: null, name: null });
+    await expect(verifyCredentials({ email: "g@example.com", password: "qualquer", ip: "198.51.100.1" })).rejects.toMatchObject({
+      code: "GOOGLE_ONLY_ACCOUNT",
+    });
+    expect(compareMock).not.toHaveBeenCalled();
+  });
+});

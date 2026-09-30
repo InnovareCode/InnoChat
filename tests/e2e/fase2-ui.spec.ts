@@ -236,12 +236,12 @@ test.describe("Nome do usuário nos formulários públicos", () => {
     await page.waitForLoadState("networkidle"); // hidratou: preencher antes disso perde o valor
     await page.getByLabel("Senha", { exact: false }).first().fill("uma-senha-boa-123");
     await page.getByLabel("Confirmar senha").fill("uma-senha-boa-123");
-    await page.getByRole("button", { name: "Entrar" }).click();
+    await page.getByRole("button", { name: "Entrar", exact: true }).click();
     await expect(page.getByText("Informe seu nome (pelo menos 2 letras).")).toBeVisible();
 
     // Com nome preenchido, o pedido segue e o servidor recusa o token de teste.
     await page.getByLabel("Seu nome").fill("Fulana de Tal");
-    await page.getByRole("button", { name: "Entrar" }).click();
+    await page.getByRole("button", { name: "Entrar", exact: true }).click();
     await expect(page.getByText("Este convite é inválido, já foi usado ou expirou. Peça um novo.")).toBeVisible();
   });
 

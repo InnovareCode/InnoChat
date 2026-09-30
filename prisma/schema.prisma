@@ -16,8 +16,17 @@ datasource db {
 model User {
   id                String    @id @default(cuid())
   email             String    @unique
-  passwordHash      String
-  emailVerifiedAt   DateTime?
+  // null = conta criada só pelo Google (sem senha). Login por senha responde "esta conta usa
+  // Google"; "esqueci a senha" permite DEFINIR uma. Nunca gravar string vazia.
+  passwordHash      String?
+  // `sub` do Google (id estável da conta Google). Vincula o usuário ao login com Google; @unique
+  // impede duas contas InnoChat no mesmo Google.
+  googleSub         String?   @unique
+  // Versão da sessão: o JWT carrega `sv`; se o banco tiver outro valor a sessão deixa de valer.
+  // Incrementa quando algo deve derrubar sessões abertas (vínculo Google em conta não verificada,
+  // redefinição de senha, "sair de todos os dispositivos").
+  sessionVersion    Int       @default(0)
+  emailVerifiedAt  DateTime?
   isPlatformAdmin   Boolean   @default(false)
   termsAcceptedAt   DateTime?
   termsVersion      String?
@@ -192,6 +201,13 @@ model PlatformSettings {
   // este campo é só o OVERRIDE para contextos sem requisição (tick/cron) — preenchido sozinho
   // na 1ª vez que um admin salva Configurações, nunca editado à mão na v1.
   publicBaseUrl String?
+
+  // Login com Google (OAuth). Client ID/Secret cadastrados em Admin > Configurações — nada em env
+  // var. O secret é cifrado (`enc:v1:`, src/lib/crypto.ts). O provedor só entra no Auth.js quando
+  // `googleAuthEnabled` está ligado com ID e secret que decifram.
+  googleAuthEnabled   Boolean @default(false)
+  googleClientId      String?
+  googleClientSecretEnc String?
 
   evolutionApiUrl String?
   evolutionApiKey String?

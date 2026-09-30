@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { getPrisma } from "@/lib/db/prisma";
+import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -44,6 +45,8 @@ export type AuthorizedUser = {
  * Nunca lança para credencial inválida — devolve `null`, que é o contrato do
  * Auth.js para "não autenticado" (lançar viraria erro 500, não 401).
  *
+ * Única exceção ao "sempre `null`": conta sem senha (só Google) lança `GOOGLE_ONLY_ACCOUNT`.
+ *
  * Mensagem de erro deliberadamente genérica (e-mail OU senha errados) para
  * não confirmar a existência de uma conta por e-mail (enumeration).
  */
@@ -73,6 +76,15 @@ export async function verifyCredentials(input: {
   if (!user) {
     logger.info("auth.login.failed", { reason: "user_not_found" });
     return null;
+  }
+
+  // Conta criada só pelo Google (sem senha): dizer isso ao usuário (decisão do dono) em vez do
+  // "e-mail ou senha inválidos" — e sem gastar bcrypt. Só chega aqui DEPOIS dos dois tetos de rate
+  // limit acima, então não vira um oráculo de enumeração barato. `src/lib/auth.ts` converte isto
+  // em `CredentialsSignin` com `code = "google_account"`.
+  if (!user.passwordHash) {
+    logger.info("auth.login.failed", { reason: "google_only_account", userId: user.id });
+    throw new DomainError("GOOGLE_ONLY_ACCOUNT", "Esta conta usa login com Google.");
   }
 
   const valid = await bcrypt.compare(input.password, user.passwordHash);

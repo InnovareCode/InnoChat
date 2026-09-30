@@ -26,6 +26,9 @@ export default defineConfig({
     // meio de um include. Sequencial evita a corrida; o custo de tempo é aceitável para uma
     // suíte de integração (não faz parte do `npm test` padrão).
     fileParallelism: false,
+    // `next-auth` importa `next/server` sem extensão (ESM estrito do Node não resolve); inline faz o
+    // Vite resolver. Necessário para testar o route handler do Auth.js de verdade.
+    server: { deps: { inline: ["next-auth"] } },
     env: {
       DATABASE_URL: process.env.TEST_DATABASE_URL ?? "",
       // `src/env.ts` valida isto na borda do processo (Fase 7, `src/modules/billing/service.ts`

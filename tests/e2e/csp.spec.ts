@@ -28,7 +28,7 @@ test.describe("CSP (next.config.ts): nenhuma violação nas telas principais", (
     await page.goto("/login");
     await page.getByLabel("E-mail").fill(staffEmail);
     await page.getByLabel("Senha").fill(STAFF_PASSWORD);
-    await page.getByRole("button", { name: "Entrar" }).click();
+    await page.getByRole("button", { name: "Entrar", exact: true }).click();
     await page.waitForURL(/\/(studio-demo|admin)/);
     expect(violations).toEqual([]);
   });

@@ -36,3 +36,6 @@
 - [Bug do histórico sem log + desenho de concluir/faltou/reabrir](timeline_error_masked_no_log_and_finish_actions.md) — causa raiz não reproduzida; log+Result; updateMany condicional, REOPENED.
 - [Envio proativo precisa registrar o eco em recentOutbound](proactive_outbound_must_register_echo.md) — senão o claim pausa o bot do cliente; + flake de bot-api-gaps à noite.
 - [upsert não é atômico + CAS do recentOutbound + logs sem message](prisma_upsert_race_and_echo_cas.md) — lembrete/histórico da Fase 2, correções pré-deploy.
+- [Evolution 2.3.7: botões/lista/enquete](evolution_interactive_messages_2_3_7.md) — formatos lidos do código (não provados em aparelho); eco fromMe pausa o bot.
+- [Login com Google: decisões e armadilhas do Auth.js](google_login_design.md) — checks pkce+state+nonce explícitos, sub != userId, import dinâmico de @/lib/auth, smoke sem Google.
+- [Revogação de sessão + base pública confiável + cookie de cadastro](session_revocation_and_trusted_url.md) — sessionVersion/sv, AUTH_URL fixado, IP por último XFF; armadilhas de teste do Auth.js.

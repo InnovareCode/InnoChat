@@ -3,10 +3,12 @@ import { getPrisma } from "@/lib/db/prisma";
 import { DomainError } from "@/lib/errors";
 import { logger } from "@/lib/logger";
 import { hashPassword } from "@/modules/auth/service";
+import { forgetSessionVersion } from "@/modules/auth/session-version";
+import { isUniqueViolation } from "@/lib/db/prisma-errors";
 import { sendMail, loadEmailContext, verificationEmail, passwordResetEmail, teamInviteEmail } from "@/lib/email";
 import { getPublicBaseUrl } from "@/lib/public-url";
 import type { MembershipRole } from "@/lib/db/types";
-import { validateSlug, type SlugValidationError } from "@/core/signup/slug";
+import { slugify, validateSlug, type SlugValidationError } from "@/core/signup/slug";
 import { validateCpfCnpj } from "@/core/billing";
 import {
   billingUrlFor,
@@ -119,27 +121,42 @@ function slugErrorMessage(error: SlugValidationError): string {
  * rede (Mercado Pago/SMTP) dentro de uma transação de banco arrisca prender a conexão em i/o
  * externo — e se falhar, não deve desfazer o cadastro (a conta existe, o Pix pode ser gerado
  * depois na tela de Assinatura).
+ *
+ * Compartilhado pelos dois cadastros (senha e Google): a única diferença é como o usuário nasce
+ * (`passwordHash` x `googleSub` + e-mail já verificado) — a lógica de empresa/trial/fatura é UMA só.
  */
-export async function signUp(input: SignUpInput, gateway?: MercadoPagoGateway): Promise<SignUpResult> {
-  const email = input.email.trim().toLowerCase();
-  const slug = input.slug.trim().toLowerCase();
+type CreateAccountInput = {
+  email: string;
+  ownerName: string;
+  companyName: string;
+  slug: string;
+  segment: string | null;
+  documentDigits: string;
+  termsVersion: string;
+  /** Cadastro por senha: hash. Cadastro por Google: `null` (conta sem senha). */
+  passwordHash: string | null;
+  /** Cadastro por Google: `sub` da conta Google — já grava o vínculo. */
+  googleSub?: string;
+  /** Google só passa com `email_verified` = true, então a conta já nasce verificada. */
+  emailVerified: boolean;
+  /** Plano escolhido (código de um plano ATIVO). Sem ele, vale o plano padrão de cadastro. */
+  planCode?: string;
+};
 
-  const slugError = validateSlug(slug);
-  if (slugError) {
-    throw new DomainError("INVALID_SLUG", slugErrorMessage(slugError), { rule: slugError });
-  }
+async function resolveSignupPlan(planCode: string | undefined) {
+  if (!planCode) return getDefaultSignupPlan();
+  const plan = await getPrisma().plan.findFirst({ where: { code: planCode, active: true } });
+  if (!plan) throw new DomainError("INVALID_PLAN", "Plano indisponível. Escolha outro plano.");
+  return plan;
+}
 
-  const validatedDocument = validateCpfCnpj(input.document);
-  if (!validatedDocument.valid) {
-    throw new DomainError("INVALID_DOCUMENT", "CPF ou CNPJ inválido — confira os dígitos.");
-  }
-
+async function createAccount(input: CreateAccountInput, gateway?: MercadoPagoGateway): Promise<SignUpResult> {
   const prisma = getPrisma();
   const now = new Date();
   const trialEndsAt = newTrialEndsAt(now);
-  const plan = await getDefaultSignupPlan();
-
-  const passwordHash = await hashPassword(input.password);
+  const plan = await resolveSignupPlan(input.planCode);
+  const email = input.email;
+  const slug = input.slug;
 
   const created = await prisma.$transaction(async (tx) => {
     const existingEmail = await tx.user.findUnique({ where: { email } });
@@ -154,7 +171,9 @@ export async function signUp(input: SignUpInput, gateway?: MercadoPagoGateway): 
     const user = await tx.user.create({
       data: {
         email,
-        passwordHash,
+        passwordHash: input.passwordHash,
+        googleSub: input.googleSub ?? null,
+        emailVerifiedAt: input.emailVerified ? now : null,
         name: input.ownerName.trim(),
         termsAcceptedAt: now,
         termsVersion: input.termsVersion,
@@ -166,7 +185,7 @@ export async function signUp(input: SignUpInput, gateway?: MercadoPagoGateway): 
         slug,
         name: input.companyName.trim(),
         segment: input.segment?.trim() || null,
-        document: validatedDocument.digits,
+        document: input.documentDigits,
         timezone: "America/Sao_Paulo", // único fuso suportado na v1 (docs/arquitetura.md §14)
       },
     });
@@ -214,11 +233,99 @@ export async function signUp(input: SignUpInput, gateway?: MercadoPagoGateway): 
     timezone: created.tenant.timezone,
   });
 
-  await sendVerificationEmail(created.user.id, email);
+  if (!input.emailVerified) await sendVerificationEmail(created.user.id, email);
 
-  logger.info("signup.completed", { tenantId: created.tenant.id });
+  logger.info("signup.completed", { tenantId: created.tenant.id, method: input.googleSub ? "google" : "password" });
 
   return { tenantSlug: created.tenant.slug, userId: created.user.id };
+}
+
+export async function signUp(input: SignUpInput, gateway?: MercadoPagoGateway): Promise<SignUpResult> {
+  const email = input.email.trim().toLowerCase();
+  const slug = input.slug.trim().toLowerCase();
+
+  const slugError = validateSlug(slug);
+  if (slugError) {
+    throw new DomainError("INVALID_SLUG", slugErrorMessage(slugError), { rule: slugError });
+  }
+
+  const validatedDocument = validateCpfCnpj(input.document);
+  if (!validatedDocument.valid) {
+    throw new DomainError("INVALID_DOCUMENT", "CPF ou CNPJ inválido — confira os dígitos.");
+  }
+
+  const passwordHash = await hashPassword(input.password);
+
+  return createAccount(
+    {
+      email,
+      ownerName: input.ownerName,
+      companyName: input.companyName,
+      slug,
+      segment: input.segment,
+      documentDigits: validatedDocument.digits,
+      termsVersion: input.termsVersion,
+      passwordHash,
+      emailVerified: false,
+    },
+    gateway,
+  );
+}
+
+export type GoogleSignUpInput = {
+  email: string;
+  googleSub: string;
+  ownerName: string;
+  companyName: string;
+  document: string;
+  termsVersion: string;
+  planCode?: string;
+};
+
+/**
+ * Cadastro de empresa por conta Google (sem senha, e-mail já verificado). O endereço (slug) é
+ * derivado do nome da empresa — o cadastro por Google não pergunta — e ganha sufixo numérico se
+ * já existir. Quem chama (`src/modules/google-auth/`) prova a conta Google (token assinado).
+ */
+export async function signUpWithGoogle(input: GoogleSignUpInput, gateway?: MercadoPagoGateway): Promise<SignUpResult> {
+  const validatedDocument = validateCpfCnpj(input.document);
+  if (!validatedDocument.valid) {
+    throw new DomainError("INVALID_DOCUMENT", "CPF ou CNPJ inválido — confira os dígitos.");
+  }
+  const email = input.email.trim().toLowerCase();
+  const slug = await pickAvailableSlug(input.companyName);
+
+  return createAccount(
+    {
+      email,
+      ownerName: input.ownerName,
+      companyName: input.companyName,
+      slug,
+      segment: null,
+      documentDigits: validatedDocument.digits,
+      termsVersion: input.termsVersion,
+      passwordHash: null,
+      googleSub: input.googleSub,
+      emailVerified: true,
+      planCode: input.planCode,
+    },
+    gateway,
+  );
+}
+
+/** Slug livre a partir do nome: base, depois base-2, base-3... (a transação ainda confere a corrida). */
+async function pickAvailableSlug(companyName: string): Promise<string> {
+  let base = slugify(companyName);
+  if (base.length < 3) base = `empresa-${base}`.replace(/-$/, "");
+  if (validateSlug(base) === "RESERVED") base = `${base}-clinica`;
+  const prisma = getPrisma();
+  for (let n = 1; n <= 50; n += 1) {
+    const candidate = n === 1 ? base : `${base.slice(0, 55)}-${n}`;
+    if (validateSlug(candidate)) continue;
+    const taken = await prisma.tenant.findUnique({ where: { slug: candidate }, select: { id: true } });
+    if (!taken) return candidate;
+  }
+  throw new DomainError("SLUG_TAKEN", "Não foi possível gerar um endereço para a empresa. Tente outro nome.");
 }
 
 /** Gera um token novo de verificação e envia o e-mail. Falha de SMTP só loga: nunca desfaz o fluxo. */
@@ -282,7 +389,10 @@ export async function requestPasswordReset(email: string): Promise<void> {
 export async function resetPassword(rawToken: string, newPassword: string): Promise<void> {
   const { userId } = await consumeAuthToken(rawToken, "RESET_PASSWORD");
   const passwordHash = await hashPassword(newPassword);
-  await getPrisma().user.update({ where: { id: userId }, data: { passwordHash } });
+  // `sessionVersion` sobe no mesmo update: quem redefine a senha (ex.: por suspeita de invasão)
+  // derruba as sessões que já estavam abertas.
+  await getPrisma().user.update({ where: { id: userId }, data: { passwordHash, sessionVersion: { increment: 1 } } });
+  forgetSessionVersion(userId);
 }
 
 // ---------------------------------------------------------------------------
@@ -330,6 +440,76 @@ export async function acceptInvite(rawToken: string, password: string, name: str
     select: { tenant: { select: { slug: true } } },
   });
   return { tenantSlug: membership?.tenant.slug ?? null };
+}
+
+/**
+ * Aceite de convite de equipe pelo Google. O e-mail da conta Google (já verificado) TEM de ser o
+ * do convite — senão `INVITE_EMAIL_MISMATCH` e o token NÃO é consumido. Vincula o `googleSub`,
+ * marca o e-mail como verificado e consome o convite (uso único, mesma corrida protegida do
+ * `consumeAuthToken`). ATÔMICO (revisão do Órion I2): o claim do convite e o `update` do usuário
+ * rodam na MESMA transação — se o `sub` já é de outro usuário (checado antes e, na corrida, pela
+ * unicidade de `googleSub` -> P2002 -> `GOOGLE_ACCOUNT_MISMATCH`), tudo é desfeito e o convite
+ * continua válido. Conta ainda não verificada perde a senha e ganha `sessionVersion`+1. Não cria senha: a conta passa a ser só-Google (pode definir uma em "esqueci
+ * a senha"). Admin da plataforma nunca entra por aqui.
+ */
+export async function acceptInviteWithGoogle(
+  rawToken: string,
+  google: { sub: string; email: string; name?: string | null },
+): Promise<{ userId: string; tenantSlug: string | null }> {
+  const prisma = getPrisma();
+  const tokenHash = hashToken(rawToken);
+  const token = await prisma.authToken.findUnique({ where: { tokenHash }, include: { user: true } });
+  if (!token || token.type !== "INVITE" || token.usedAt || token.expiresAt < new Date()) {
+    throw new DomainError("TOKEN_INVALID", "Convite inválido ou expirado.");
+  }
+  const user = token.user;
+  if (user.isPlatformAdmin) throw new DomainError("FORBIDDEN", "Contas de administrador da plataforma não entram pelo Google.");
+  if (user.email !== google.email.trim().toLowerCase()) {
+    throw new DomainError("INVITE_EMAIL_MISMATCH", "O e-mail da conta Google não é o do convite.");
+  }
+  if (user.googleSub && user.googleSub !== google.sub) {
+    throw new DomainError("GOOGLE_ACCOUNT_MISMATCH", "Este usuário já está ligado a outra conta Google.");
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const claimed = await tx.authToken.updateMany({ where: { id: token.id, usedAt: null }, data: { usedAt: new Date() } });
+      if (claimed.count === 0) throw new DomainError("TOKEN_INVALID", "Convite inválido ou expirado.");
+
+      const owner = await tx.user.findUnique({ where: { googleSub: google.sub }, select: { id: true } });
+      if (owner && owner.id !== user.id) {
+        throw new DomainError("GOOGLE_ACCOUNT_MISMATCH", "Esta conta Google já está ligada a outro usuário.");
+      }
+
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          googleSub: google.sub,
+          emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+          // Conta ainda NÃO verificada: a senha (provisória do convite ou pré-definida por terceiro)
+          // não prova nada — descarta e derruba sessões já abertas. Quem já verificou o e-mail
+          // mantém a própria senha e as sessões.
+          ...(user.emailVerifiedAt ? {} : { passwordHash: null, sessionVersion: { increment: 1 } }),
+          ...(user.name ? {} : google.name?.trim() ? { name: google.name.trim().slice(0, 80) } : {}),
+        },
+      });
+    });
+  } catch (error) {
+    // Corrida com outro vínculo do mesmo `sub`: a unicidade do banco é a trava final (a transação
+    // já foi desfeita, então o convite NÃO foi consumido).
+    if (isUniqueViolation(error)) {
+      throw new DomainError("GOOGLE_ACCOUNT_MISMATCH", "Esta conta Google já está ligada a outro usuário.");
+    }
+    throw error;
+  }
+  if (!user.emailVerifiedAt) forgetSessionVersion(user.id);
+
+  const membership = await prisma.membership.findFirst({
+    where: { userId: user.id },
+    orderBy: { createdAt: "desc" },
+    select: { tenant: { select: { slug: true } } },
+  });
+  return { userId: user.id, tenantSlug: membership?.tenant.slug ?? null };
 }
 
 export { billingUrlFor, findBillingRecipientEmail };
