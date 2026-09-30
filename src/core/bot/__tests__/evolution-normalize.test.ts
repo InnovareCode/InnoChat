@@ -81,3 +81,114 @@ describe("digitsFromJid", () => {
     expect(digitsFromJid("5511988887777@s.whatsapp.net")).toBe("5511988887777");
   });
 });
+
+/**
+ * Respostas interativas. ⚠️ Payloads montados a partir do código-fonte da Evolution 2.3.7
+ * (whatsapp.baileys.service.ts) e dos protos do Baileys — NÃO capturados de um aparelho real ainda
+ * (ver docs/whatsapp-botoes-listas.md). Se o teste no celular mostrar outro formato, ajustar aqui.
+ */
+function upsertWith(message: Record<string, unknown>, extraData: Record<string, unknown> = {}): unknown {
+  return {
+    event: "messages.upsert",
+    instance: "innochat-x",
+    data: {
+      key: { remoteJid: "5511988887777@s.whatsapp.net", fromMe: false, id: "3EB0INTERACTIVE01" },
+      pushName: "Cliente",
+      messageTimestamp: 1_790_000_000,
+      message,
+      ...extraData,
+    },
+  };
+}
+
+function textOf(payload: unknown): string | null {
+  const result = normalizeEvolutionMessage(payload);
+  if (result.kind !== "message") return null;
+  return result.content.type === "text" ? result.content.text : `media:${result.content.label}`;
+}
+
+describe("normalizeEvolutionMessage — respostas de botões, lista e enquete", () => {
+  it("botão nativo (interactiveResponseMessage/quick_reply) vira o id do botão", () => {
+    const payload = upsertWith({
+      interactiveResponseMessage: {
+        body: { text: "Corte" },
+        nativeFlowResponseMessage: { name: "quick_reply", paramsJson: JSON.stringify({ display_text: "Corte", id: "1" }), version: 3 },
+      },
+    });
+    expect(textOf(payload)).toBe("1");
+  });
+
+  it("botão nativo com id numérico no JSON", () => {
+    const payload = upsertWith({
+      interactiveResponseMessage: { nativeFlowResponseMessage: { paramsJson: '{"id":2,"display_text":"Escova"}' } },
+    });
+    expect(textOf(payload)).toBe("2");
+  });
+
+  it("botão nativo sem id cai para o display_text", () => {
+    const payload = upsertWith({
+      interactiveResponseMessage: { nativeFlowResponseMessage: { paramsJson: '{"display_text":"Coloração"}' } },
+    });
+    expect(textOf(payload)).toBe("Coloração");
+  });
+
+  it("paramsJson malformado usa o texto do corpo; sem nada vira mídia (não fica mudo)", () => {
+    expect(textOf(upsertWith({ interactiveResponseMessage: { body: { text: "Corte" }, nativeFlowResponseMessage: { paramsJson: "{oops" } } }))).toBe("Corte");
+    expect(textOf(upsertWith({ interactiveResponseMessage: { nativeFlowResponseMessage: { paramsJson: "{oops" } } }))).toBe("media:[resposta interativa]");
+  });
+
+  it("botão legado (buttonsResponseMessage) vira selectedButtonId", () => {
+    const payload = upsertWith({ buttonsResponseMessage: { selectedButtonId: "3", selectedDisplayText: "Coloração", type: 1 } });
+    expect(textOf(payload)).toBe("3");
+  });
+
+  it("templateButtonReplyMessage vira selectedId", () => {
+    expect(textOf(upsertWith({ templateButtonReplyMessage: { selectedId: "2", selectedDisplayText: "Escova", selectedIndex: 1 } }))).toBe("2");
+  });
+
+  it("lista (listResponseMessage) vira o rowId", () => {
+    const payload = upsertWith({
+      listResponseMessage: { title: "Escova", listType: 1, singleSelectReply: { selectedRowId: "2" }, description: "R$ 60" },
+    });
+    expect(textOf(payload)).toBe("2");
+  });
+
+  it("enquete decifrada pela Evolution: pollUpdates com voters vira o número do início do nome", () => {
+    const payload = upsertWith(
+      { pollUpdateMessage: { pollCreationMessageKey: { id: "POLL1" }, vote: { selectedOptions: ["1 - Corte"] } } },
+      {
+        pollUpdates: [
+          { name: "1 - Corte", voters: ["5511988887777@s.whatsapp.net"] },
+          { name: "2 - Escova", voters: [] },
+        ],
+      },
+    );
+    expect(textOf(payload)).toBe("1");
+  });
+
+  it("enquete com opção sem número usa o nome da opção", () => {
+    const payload = upsertWith(
+      { pollUpdateMessage: { vote: {} } },
+      { pollUpdates: [{ name: "2 horas de espera", voters: ["x"] }, { name: "Corte", voters: [] }] },
+    );
+    expect(textOf(payload)).toBe("2 horas de espera");
+  });
+
+  it("enquete sem pollUpdates: aceita vote.selectedOptions só se NÃO estiver cifrado", () => {
+    expect(textOf(upsertWith({ pollUpdateMessage: { vote: { selectedOptions: ["3) Coloração"] } } }))).toBe("3");
+    expect(textOf(upsertWith({ pollUpdateMessage: { vote: { encPayload: "AAAA", encIv: "BBBB" } } }))).toBe("media:[resposta interativa]");
+    expect(textOf(upsertWith({ pollUpdateMessage: { vote: { encPayload: "AAAA", selectedOptions: ["qualquerhashbase64="] } } }))).toBe("media:[resposta interativa]");
+  });
+
+  it("voto removido (nenhuma opção marcada) não vira texto", () => {
+    const payload = upsertWith({ pollUpdateMessage: { vote: {} } }, { pollUpdates: [{ name: "1 - Corte", voters: [] }] });
+    expect(textOf(payload)).toBe("media:[resposta interativa]");
+  });
+
+  it("mensagem de conversa temporária (ephemeralMessage) é desembrulhada", () => {
+    expect(textOf(upsertWith({ ephemeralMessage: { message: { conversation: "2" } } }))).toBe("2");
+    expect(
+      textOf(upsertWith({ ephemeralMessage: { message: { listResponseMessage: { singleSelectReply: { selectedRowId: "3" } } } } })),
+    ).toBe("3");
+  });
+});

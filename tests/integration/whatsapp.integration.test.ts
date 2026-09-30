@@ -25,6 +25,9 @@ function createFakeEvolutionClient(overrides: Partial<EvolutionClient> = {}): Ev
     logout: vi.fn(async () => {}),
     deleteInstance: vi.fn(async () => {}),
     sendText: vi.fn(async () => ({ messageId: null })),
+    sendButtons: vi.fn(async () => ({ messageId: null, status: 201, body: null })),
+    sendList: vi.fn(async () => ({ messageId: null, status: 201, body: null })),
+    sendPoll: vi.fn(async () => ({ messageId: null, status: 201, body: null })),
     ...overrides,
   };
 }

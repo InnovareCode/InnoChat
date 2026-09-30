@@ -66,14 +66,111 @@ function normalizeTimestamp(value: unknown): number {
   return Date.now();
 }
 
-function extractContent(message: unknown): NormalizedMessageContent {
-  if (!isRecord(message)) return { type: "media", label: "[mídia]" };
+/** Envelopes que só embrulham a mensagem de verdade (conversa com mensagens temporárias, "ver uma vez"...). */
+const WRAPPER_KEYS = ["ephemeralMessage", "viewOnceMessage", "viewOnceMessageV2", "deviceSentMessage"] as const;
+
+function unwrapMessage(message: Record<string, unknown>): Record<string, unknown> {
+  let current = message;
+  for (let depth = 0; depth < 4; depth++) {
+    const key = WRAPPER_KEYS.find((k) => isRecord(current[k]));
+    const inner = key ? (current[key] as Record<string, unknown>).message : undefined;
+    if (!isRecord(inner)) break;
+    current = inner;
+  }
+  return current;
+}
+
+function nonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+/**
+ * Resposta a mensagem interativa (botão / lista / enquete) → o TEXTO equivalente ao que o cliente
+ * digitaria (o `id` do botão/linha, que o InnoChat monta como o número da opção). Assim o motor do
+ * n8n não muda. `null` = não é resposta interativa. `""` = é, mas não dá para extrair (ex.: voto
+ * de enquete removido/cifrado) — o chamador decide o que fazer.
+ * Formatos (Baileys/Evolution 2.3.x; docs/whatsapp-botoes-listas.md):
+ * - `buttonsResponseMessage.selectedButtonId` (botão legado);
+ * - `templateButtonReplyMessage.selectedId`;
+ * - `listResponseMessage.singleSelectReply.selectedRowId` (lista);
+ * - `interactiveResponseMessage.nativeFlowResponseMessage.paramsJson` (JSON com `id`) — é o que os
+ *   botões `quick_reply` da Evolution 2.3.x devolvem;
+ * - `pollUpdateMessage` (enquete): a Evolution decifra o voto e preenche `data.pollUpdates`
+ *   (`[{name, voters}]`) e `vote.selectedOptions` (nomes). O nome pode começar com o número da
+ *   opção ("1 - Corte"), que é o que vira o texto.
+ */
+function extractInteractiveReply(message: Record<string, unknown>, data: Record<string, unknown>): string | null {
+  const buttons = message.buttonsResponseMessage;
+  if (isRecord(buttons)) return nonEmptyString(buttons.selectedButtonId) ?? nonEmptyString(buttons.selectedDisplayText) ?? "";
+
+  const template = message.templateButtonReplyMessage;
+  if (isRecord(template)) return nonEmptyString(template.selectedId) ?? nonEmptyString(template.selectedDisplayText) ?? "";
+
+  const list = message.listResponseMessage;
+  if (isRecord(list)) {
+    const reply = list.singleSelectReply;
+    const rowId = isRecord(reply) ? nonEmptyString(reply.selectedRowId) : null;
+    return rowId ?? nonEmptyString(list.title) ?? "";
+  }
+
+  const interactive = message.interactiveResponseMessage;
+  if (isRecord(interactive)) {
+    const flow = interactive.nativeFlowResponseMessage;
+    if (isRecord(flow) && typeof flow.paramsJson === "string") {
+      try {
+        const params: unknown = JSON.parse(flow.paramsJson);
+        if (isRecord(params)) {
+          const id = typeof params.id === "number" ? String(params.id) : nonEmptyString(params.id);
+          return id ?? nonEmptyString(params.display_text) ?? nonEmptyString(params.title) ?? "";
+        }
+      } catch {
+        // paramsJson malformado: cai para o texto do corpo, se houver
+      }
+    }
+    const body = interactive.body;
+    return (isRecord(body) ? nonEmptyString(body.text) : null) ?? "";
+  }
+
+  const poll = message.pollUpdateMessage;
+  if (isRecord(poll)) {
+    const names: string[] = [];
+    if (Array.isArray(data.pollUpdates)) {
+      for (const update of data.pollUpdates) {
+        if (isRecord(update) && Array.isArray(update.voters) && update.voters.length > 0) {
+          const name = nonEmptyString(update.name);
+          if (name) names.push(name);
+        }
+      }
+    } else if (isRecord(poll.vote) && !poll.vote.encPayload && Array.isArray(poll.vote.selectedOptions)) {
+      for (const option of poll.vote.selectedOptions) {
+        const name = nonEmptyString(option);
+        if (name) names.push(name);
+      }
+    }
+    const first = names[0];
+    if (!first) return "";
+    const numbered = /^(\d{1,2})\s*(?:[-–.)]|$)/.exec(first);
+    return numbered ? numbered[1]! : first;
+  }
+
+  return null;
+}
+
+function extractContent(rawMessage: unknown, data: Record<string, unknown> = {}): NormalizedMessageContent {
+  if (!isRecord(rawMessage)) return { type: "media", label: "[mídia]" };
+  const message = unwrapMessage(rawMessage);
   if (typeof message.conversation === "string" && message.conversation.length > 0) {
     return { type: "text", text: message.conversation };
   }
   const extended = message.extendedTextMessage;
   if (isRecord(extended) && typeof extended.text === "string" && extended.text.length > 0) {
     return { type: "text", text: extended.text };
+  }
+  const reply = extractInteractiveReply(message, data);
+  if (reply !== null) {
+    // Resposta interativa que não deu para ler (voto removido, enquete sem chave para decifrar):
+    // vira "mídia" para o bot responder o aviso padrão em vez de ficar mudo.
+    return reply ? { type: "text", text: reply } : { type: "media", label: "[resposta interativa]" };
   }
   // Qualquer outro tipo (imageMessage, videoMessage, audioMessage, documentMessage,
   // stickerMessage, ...) vira "media" — o n8n responde com o texto ONLY_TEXT (§2 regra 6).
@@ -116,7 +213,7 @@ export function normalizeEvolutionMessage(payload: unknown): NormalizedEvolution
     altJid: altJidRaw,
     pushName: typeof data.pushName === "string" ? data.pushName : null,
     timestampMs: normalizeTimestamp(data.messageTimestamp),
-    content: extractContent(data.message),
+    content: extractContent(data.message, data),
   };
 }
 

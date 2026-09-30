@@ -166,6 +166,116 @@ describe("createEvolutionClient", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("sendButtons chama POST /message/sendButtons/{instance} com botões reply e devolve status/corpo", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ key: { id: "3EB0BTN" }, status: "PENDING" }, 201));
+    const client = createEvolutionClient(BASE_URL, API_KEY);
+
+    const result = await client.sendButtons("innochat-studio-x7k2", "5511999990000", {
+      title: "Qual serviço você quer?",
+      footer: "Toque em uma opção",
+      buttons: [
+        { type: "reply", displayText: "Corte", id: "1" },
+        { type: "reply", displayText: "Escova", id: "2" },
+        { type: "reply", displayText: "Coloração", id: "3" },
+      ],
+    });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe(`${BASE_URL}/message/sendButtons/innochat-studio-x7k2`);
+    expect(init.method).toBe("POST");
+    expect(init.headers.apikey).toBe(API_KEY);
+    expect(JSON.parse(init.body)).toEqual({
+      number: "5511999990000",
+      title: "Qual serviço você quer?",
+      footer: "Toque em uma opção",
+      buttons: [
+        { type: "reply", displayText: "Corte", id: "1" },
+        { type: "reply", displayText: "Escova", id: "2" },
+        { type: "reply", displayText: "Coloração", id: "3" },
+      ],
+    });
+    expect(result).toEqual({ messageId: "3EB0BTN", status: 201, body: { key: { id: "3EB0BTN" }, status: "PENDING" } });
+  });
+
+  it("sendList chama POST /message/sendList/{instance}; omite description vazia da linha", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ key: { id: "3EB0LST" } }, 201));
+    const client = createEvolutionClient(BASE_URL, API_KEY);
+
+    await client.sendList("innochat-studio-x7k2", "5511999990000", {
+      title: "Qual serviço você quer?",
+      description: "Escolha abaixo",
+      buttonText: "Ver opções",
+      sections: [
+        {
+          title: "Serviços",
+          rows: [
+            { title: "Corte", rowId: "1", description: "R$ 50" },
+            { title: "Escova", rowId: "2", description: "" },
+          ],
+        },
+      ],
+    });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe(`${BASE_URL}/message/sendList/innochat-studio-x7k2`);
+    expect(JSON.parse(init.body)).toEqual({
+      number: "5511999990000",
+      title: "Qual serviço você quer?",
+      description: "Escolha abaixo",
+      buttonText: "Ver opções",
+      sections: [
+        {
+          title: "Serviços",
+          rows: [
+            { title: "Corte", rowId: "1", description: "R$ 50" },
+            { title: "Escova", rowId: "2" },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("sendPoll chama POST /message/sendPoll/{instance} com name/selectableCount/values", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ key: { id: "3EB0POLL" } }, 201));
+    const client = createEvolutionClient(BASE_URL, API_KEY);
+
+    const result = await client.sendPoll("innochat-studio-x7k2", "5511999990000", {
+      name: "Qual serviço você quer?",
+      selectableCount: 1,
+      values: ["1 - Corte", "2 - Escova", "3 - Coloração"],
+    });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe(`${BASE_URL}/message/sendPoll/innochat-studio-x7k2`);
+    expect(JSON.parse(init.body)).toEqual({
+      number: "5511999990000",
+      name: "Qual serviço você quer?",
+      selectableCount: 1,
+      values: ["1 - Corte", "2 - Escova", "3 - Coloração"],
+    });
+    expect(result.messageId).toBe("3EB0POLL");
+  });
+
+  it("envio interativo NÃO retenta em 5xx e guarda o corpo do erro só em responseBody (fora da mensagem)", async () => {
+    fetchMock.mockResolvedValue(new Response('{"response":{"message":["Bad Request"]}}', { status: 400 }));
+    const client = createEvolutionClient(BASE_URL, API_KEY);
+
+    const error = await client
+      .sendButtons("innochat-studio-x7k2", "5511999990000", { title: "x", buttons: [{ type: "reply", displayText: "a", id: "1" }] })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(EvolutionApiError);
+    expect((error as EvolutionApiError).status).toBe(400);
+    expect((error as EvolutionApiError).responseBody).toContain("Bad Request");
+    expect((error as EvolutionApiError).message).not.toContain("Bad Request");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(new Response("boom", { status: 503 }));
+    await expect(client.sendPoll("i", "5511999990000", { name: "x", selectableCount: 1, values: ["a", "b"] })).rejects.toBeInstanceOf(EvolutionApiError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("lança EvolutionApiError em 4xx SEM retentar (erro do nosso lado)", async () => {
     fetchMock.mockResolvedValueOnce(new Response("bad request", { status: 400 }));
     const client = createEvolutionClient(BASE_URL, API_KEY);

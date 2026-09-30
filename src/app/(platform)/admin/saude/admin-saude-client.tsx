@@ -12,6 +12,7 @@ import { cn } from "@/components/lib/cn";
 import { formatRelativeTimeLabel } from "@/components/lib/format-date";
 import { useToast } from "@/components/ui/toast";
 import { getPlatformHealthAction } from "@/modules/platform/actions";
+import { InteractiveTestCard } from "./interactive-test-card";
 import type { IntegrationHealth, MercadoPagoWebhookHealth, PlatformHealth, TickHealth } from "@/modules/platform/health-service";
 
 const WHATSAPP_STATUS_LABEL: Record<string, string> = {
@@ -199,6 +200,8 @@ export function AdminSaudeClient({ initialHealth }: { initialHealth: PlatformHea
       </div>
 
       <MercadoPagoWebhookCard webhook={health.mercadoPagoWebhook} />
+
+      <InteractiveTestCard />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <TickCard title="billing/tick" tick={health.billingTick} />

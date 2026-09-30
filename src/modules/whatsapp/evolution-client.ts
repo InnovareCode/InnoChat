@@ -26,6 +26,8 @@ export class EvolutionApiError extends Error {
     message: string,
     readonly status?: number,
     readonly cause?: unknown,
+    /** Corpo cru da resposta de erro. NUNCA entra em log/mensagem (pode ecoar dado pessoal); só o teste de envio interativo do admin lê. */
+    readonly responseBody?: string,
   ) {
     super(message);
     this.name = "EvolutionApiError";
@@ -39,6 +41,38 @@ export type EvolutionConnectResult = {
 
 /** Estado bruto devolvido por `connectionState` — mapeamento para o enum do domínio fica em `src/core/whatsapp/connection-event.ts` (reaproveitado aqui via `mapConnectionStateValue`). */
 export type EvolutionRawState = "open" | "connecting" | "close" | "closed" | string;
+
+/** Botão de resposta rápida (`type: "reply"`) do `sendButtons` — no máximo 3 (limite da Evolution 2.3.7). */
+export type EvolutionReplyButton = { type: "reply"; displayText: string; id: string };
+
+export type EvolutionListRow = { title: string; description?: string; rowId: string };
+
+export type EvolutionListInput = {
+  title: string;
+  description?: string;
+  footerText?: string;
+  /** Texto do botão que abre a lista (ex.: "Ver opções"). */
+  buttonText: string;
+  sections: { title: string; rows: EvolutionListRow[] }[];
+};
+
+export type EvolutionButtonsInput = {
+  title: string;
+  description?: string;
+  footer?: string;
+  buttons: EvolutionReplyButton[];
+};
+
+export type EvolutionPollInput = {
+  name: string;
+  /** 1 = escolha única (o que o bot usa); 0 = qualquer quantidade. */
+  selectableCount: number;
+  /** 2 a 10 opções únicas. */
+  values: string[];
+};
+
+/** Resultado de envio interativo: além do id, devolve status e corpo da Evolution (para o teste do admin provar o que ela respondeu). */
+export type EvolutionInteractiveSendResult = { messageId: string | null; status: number; body: unknown };
 
 export interface EvolutionClient {
   /** `POST /instance/create` — cria a instância na Evolution. Não configura webhook (passo separado, ver `setWebhook`). */
@@ -62,6 +96,16 @@ export interface EvolutionClient {
    * mensagem no provedor quando a resposta traz (`key.id`), senão `null`.
    */
   sendText(instanceName: string, number: string, text: string): Promise<{ messageId: string | null }>;
+  /**
+   * `POST /message/sendButtons/{instance}` (Evolution 2.3.x: `interactiveMessage`/`nativeFlowMessage`
+   * `quick_reply`). Sem retry. ⚠️ O WhatsApp pode NÃO renderizar em contas não oficiais (Baileys);
+   * ver docs/whatsapp-botoes-listas.md. Validação de limites (≤3 botões) é do chamador e da Evolution.
+   */
+  sendButtons(instanceName: string, number: string, input: EvolutionButtonsInput): Promise<EvolutionInteractiveSendResult>;
+  /** `POST /message/sendList/{instance}` (`listMessage` legado, `listType: 2`). Sem retry. Mesma ressalva de renderização. */
+  sendList(instanceName: string, number: string, input: EvolutionListInput): Promise<EvolutionInteractiveSendResult>;
+  /** `POST /message/sendPoll/{instance}` (enquete). Sem retry. O voto volta no webhook como `pollUpdateMessage`. */
+  sendPoll(instanceName: string, number: string, input: EvolutionPollInput): Promise<EvolutionInteractiveSendResult>;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -106,13 +150,13 @@ async function fetchWithRetry(url: string, init: RequestInit, maxAttempts: numbe
  * InnoAtendente, replicado aqui de propósito): pode ecoar dado pessoal do payload da
  * requisição. Só status + path + um id de correlação.
  */
-async function evolutionRequest(
+async function evolutionRequestFull(
   baseUrl: string,
   apiKey: string,
   path: string,
   init?: RequestInit,
   maxAttempts?: number,
-): Promise<unknown> {
+): Promise<{ status: number; body: unknown }> {
   const url = `${baseUrl}${path}`;
   const response = await fetchWithRetry(
     url,
@@ -128,14 +172,37 @@ async function evolutionRequest(
   );
 
   if (!response.ok) {
-    await response.text().catch(() => "");
+    const errorBody = await response.text().catch(() => "");
     const correlationId = crypto.randomUUID();
     logger.error("evolution: resposta de erro da API", { path, status: response.status, correlationId });
-    throw new EvolutionApiError(`Evolution API respondeu ${response.status} em ${path} (correlationId=${correlationId})`, response.status);
+    throw new EvolutionApiError(
+      `Evolution API respondeu ${response.status} em ${path} (correlationId=${correlationId})`,
+      response.status,
+      undefined,
+      errorBody,
+    );
   }
 
   const text = await response.text();
-  return text ? JSON.parse(text) : null;
+  let body: unknown = null;
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = text;
+    }
+  }
+  return { status: response.status, body };
+}
+
+async function evolutionRequest(
+  baseUrl: string,
+  apiKey: string,
+  path: string,
+  init?: RequestInit,
+  maxAttempts?: number,
+): Promise<unknown> {
+  return (await evolutionRequestFull(baseUrl, apiKey, path, init, maxAttempts)).body;
 }
 
 interface FetchInstancesEntry {
@@ -268,6 +335,44 @@ export function createEvolutionClient(baseUrl: string, apiKey: string): Evolutio
       }
     },
 
+    async sendButtons(instanceName, number, input) {
+      return postInteractive(base, apiKey, "sendButtons", instanceName, {
+        number,
+        title: input.title,
+        ...(input.description ? { description: input.description } : {}),
+        ...(input.footer ? { footer: input.footer } : {}),
+        buttons: input.buttons.map((b) => ({ type: "reply", displayText: b.displayText, id: b.id })),
+      });
+    },
+
+    async sendList(instanceName, number, input) {
+      return postInteractive(base, apiKey, "sendList", instanceName, {
+        number,
+        title: input.title,
+        ...(input.description ? { description: input.description } : {}),
+        ...(input.footerText ? { footerText: input.footerText } : {}),
+        buttonText: input.buttonText,
+        // A Evolution rejeita `description` vazia numa linha: só entra quando preenchida.
+        sections: input.sections.map((section) => ({
+          title: section.title,
+          rows: section.rows.map((row) => ({
+            title: row.title,
+            rowId: row.rowId,
+            ...(row.description ? { description: row.description } : {}),
+          })),
+        })),
+      });
+    },
+
+    async sendPoll(instanceName, number, input) {
+      return postInteractive(base, apiKey, "sendPoll", instanceName, {
+        number,
+        name: input.name,
+        selectableCount: input.selectableCount,
+        values: input.values,
+      });
+    },
+
     async deleteInstance(instanceName) {
       try {
         await evolutionRequest(base, apiKey, `/instance/delete/${instanceName}`, { method: "DELETE" });
@@ -276,6 +381,29 @@ export function createEvolutionClient(baseUrl: string, apiKey: string): Evolutio
       }
     },
   };
+}
+
+/** Envio interativo: UMA tentativa (reenviar após timeout duplicaria a mensagem), devolve status e corpo. */
+async function postInteractive(
+  base: string,
+  apiKey: string,
+  endpoint: "sendButtons" | "sendList" | "sendPoll",
+  instanceName: string,
+  payload: Record<string, unknown>,
+): Promise<EvolutionInteractiveSendResult> {
+  try {
+    const { status, body } = await evolutionRequestFull(
+      base,
+      apiKey,
+      `/message/${endpoint}/${encodeURIComponent(instanceName)}`,
+      { method: "POST", body: JSON.stringify(payload) },
+      1,
+    );
+    const messageId = typeof body === "object" && body !== null ? ((body as { key?: { id?: string } }).key?.id ?? null) : null;
+    return { messageId, status, body };
+  } catch (error) {
+    throw wrapNetworkError(error, `enviar ${endpoint} por ${instanceName}`);
+  }
 }
 
 function wrapNetworkError(error: unknown, action: string): EvolutionApiError {
